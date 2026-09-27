@@ -1,198 +1,176 @@
+@import './hud/gladeTheme.css';
+@import './hud/playerHud.css';
+@import './hud/hudMinimap.css';
+
+/* The Edit / Play switch floats over the viewport in every mode. */
 .view-mode-switcher {
+  position: absolute;
+  z-index: 8;
+  top: 14px;
+  left: 50%;
   display: inline-flex;
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid #3a4a3f;
-  border-radius: 7px;
-  background: #111713;
+  gap: 2px;
+  max-width: calc(100% - 24px);
+  padding: 4px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--glade-paper);
+  box-shadow: var(--glade-shadow);
+  backdrop-filter: var(--glade-blur);
+  font-family: var(--glade-font);
+  pointer-events: auto;
+  user-select: none;
 }
 
 .view-mode-switcher button {
-  min-height: 26px;
-  padding: 4px 8px;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 30px;
+  padding: 0 14px 0 10px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 999px;
   background: transparent;
-  color: #aab8ad;
+  color: var(--glade-ink-soft);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    scale 220ms var(--glade-spring);
+}
+
+.view-mode-switcher button svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.view-mode-switcher button:hover {
+  background: rgb(96 76 52 / 8%);
+  color: var(--glade-ink);
+}
+
+.view-mode-switcher button:active {
+  scale: 0.95;
+}
+
+.view-mode-switcher button:focus-visible {
+  outline: 2px solid var(--glade-accent);
+  outline-offset: 2px;
 }
 
 .view-mode-switcher button.is-active {
-  background: #d4b65e;
-  color: #1b1b12;
-  font-weight: 700;
+  background: var(--glade-ink);
+  box-shadow: 0 2px 6px rgb(62 44 24 / 26%);
+  color: var(--glade-cream);
 }
 
-.player-hud {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-}
+@media (max-width: 560px) {
+  .view-mode-switcher {
+    top: 8px;
+  }
 
-.player-crosshair {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 14px;
-  height: 14px;
-  transform: translate(-50%, -50%);
-}
-
-.player-crosshair::before,
-.player-crosshair::after {
-  position: absolute;
-  content: '';
-  background: rgb(255 255 255 / 82%);
-  box-shadow: 0 0 2px rgb(0 0 0 / 80%);
-}
-
-.player-crosshair::before {
-  top: 6px;
-  left: 1px;
-  width: 12px;
-  height: 2px;
-}
-
-.player-crosshair::after {
-  top: 1px;
-  left: 6px;
-  width: 2px;
-  height: 12px;
-}
-
-.player-help {
-  position: absolute;
-  bottom: 18px;
-  left: 50%;
-  max-width: calc(100% - 32px);
-  transform: translateX(-50%);
-  padding: 7px 10px;
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 7px;
-  background: rgb(18 25 20 / 88%);
-  color: #d7e0d9;
-  font-size: 12px;
-  text-align: center;
-}
-
-[data-view-mode='player'] .sidebar {
-  pointer-events: none;
-}
-
-/* Dim the editing panels, but keep the minimap HUD at full strength. */
-[data-view-mode='player'] .sidebar > *:not(.panel--minimap) {
-  opacity: 0.62;
-}
-
-[data-view-mode='player'] .statusbar,
-[data-view-mode='player'] .toast {
-  display: none;
-}
-
-/* Player mode lifts the minimap out of the sidebar into a top-right HUD. */
-[data-view-mode='player'] .panel--minimap,
-[data-view-mode='player-spawn'] .panel--minimap {
-  position: fixed;
-  z-index: 4;
-  top: 12px;
-  right: 12px;
-  width: 188px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  box-shadow: none;
-  filter: drop-shadow(0 6px 14px rgb(0 0 0 / 28%));
-}
-
-[data-view-mode='player'] .panel--minimap > h2,
-[data-view-mode='player'] .panel--minimap > .panel-note,
-[data-view-mode='player-spawn'] .panel--minimap > h2,
-[data-view-mode='player-spawn'] .panel--minimap > .panel-note {
-  display: none;
-}
-
-[data-view-mode='player'] .panel--minimap .minimap-frame,
-[data-view-mode='player-spawn'] .panel--minimap .minimap-frame {
-  border: 0;
-  border-radius: 50%;
-  background: rgb(13 18 15 / 38%);
-  -webkit-mask-image: radial-gradient(
-    circle,
-    #000 0 84%,
-    rgb(0 0 0 / 94%) 88%,
-    rgb(0 0 0 / 62%) 93%,
-    rgb(0 0 0 / 24%) 97%,
-    transparent 100%
-  );
-  mask-image: radial-gradient(
-    circle,
-    #000 0 84%,
-    rgb(0 0 0 / 94%) 88%,
-    rgb(0 0 0 / 62%) 93%,
-    rgb(0 0 0 / 24%) 97%,
-    transparent 100%
-  );
+  .view-mode-switcher button {
+    height: 32px;
+    padding-inline: 10px;
+  }
 }
 
 /*
- * The bitmap is drawn north-up and turned here, so the player's front is always
- * at the top of the dial. A square covers its own inscribed circle at every
- * angle, so the round frame stays filled without oversizing the canvas.
+ * Walking is a game view: the editing chrome steps aside until Esc pauses into
+ * in-place editing, and picking a start point keeps the view clear as well.
  */
-[data-view-mode='player'] .panel--minimap .minimap-frame canvas,
-[data-view-mode='player-spawn'] .panel--minimap .minimap-frame canvas {
-  transform: rotate(var(--minimap-heading, 0rad));
+[data-view-mode='player']:not([data-player-paused='true']) :is(
+  .natural-top-chrome,
+  .natural-world-menu,
+  .natural-toolbar,
+  .natural-build-strip,
+  .natural-context-toolbar,
+  .natural-wall-context-toolbar,
+  .natural-first-run-hint,
+  .sidebar,
+  .statusbar,
+  .weather-panel
+),
+[data-view-mode='player-spawn'] :is(
+  .natural-top-chrome,
+  .natural-world-menu,
+  .natural-toolbar,
+  .natural-build-strip,
+  .natural-context-toolbar,
+  .natural-wall-context-toolbar,
+  .natural-first-run-hint,
+  .sidebar,
+  .statusbar,
+  .weather-panel
+) {
+  display: none !important;
 }
 
-/* Fixed forward arrow: the map turns under it, this always points up. */
-[data-view-mode='player'] .panel--minimap .minimap-frame::after,
-[data-view-mode='player-spawn'] .panel--minimap .minimap-frame::after {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  transform: translate(-50%, -58%);
-  border-right: 5px solid transparent;
-  border-bottom: 11px solid #f0cf68;
-  border-left: 5px solid transparent;
-  content: '';
-  filter: drop-shadow(0 0 2px rgb(0 0 0 / 75%));
+[data-view-mode='player'] .toast,
+[data-view-mode='player-spawn'] .toast {
+  display: none;
 }
 
 [data-awaiting-spawn='true'] [data-role='viewport'] {
   cursor: crosshair;
 }
 
-[data-view-mode='player-spawn'] .statusbar,
-[data-view-mode='player-spawn'] .toast {
-  display: none;
-}
-
 /*
  * Paused for in-world editing.
  *
  * The sidebar is laid out for the orthographic editor and reads badly over a
- * first-person view, so it stays out of the way behind an explicit toggle. The
- * statusbar comes back unconditionally — it carries the selection readout that
- * editing depends on.
+ * first-person view, so it stays out of the way behind an explicit toggle.
  */
-[data-view-mode='player'][data-player-paused='true'] .statusbar {
-  display: flex;
+[data-view-mode='player'] .sidebar {
+  pointer-events: none;
+}
+
+[data-view-mode='player'] .sidebar > * {
+  opacity: 0.62;
 }
 
 [data-view-mode='player'][data-player-paused='true'][data-player-panels='true'] .sidebar {
   pointer-events: auto;
 }
 
-[data-view-mode='player'][data-player-paused='true'][data-player-panels='true']
-  .sidebar > *:not(.panel--minimap) {
+[data-view-mode='player'][data-player-paused='true'][data-player-panels='true'] .sidebar > * {
   opacity: 1;
 }
 
-[data-view-mode='player'][data-player-paused='true'] .player-hud__hint::after {
-  content: ' — paused for editing';
+.hero-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 3px 3px 8px;
+  border: 1px solid #3a4a3f;
+  border-radius: 7px;
+  background: #111713;
+  color: #aab8ad;
+  font-size: 11px;
+}
+
+.hero-select select {
+  min-height: 26px;
+  max-width: 220px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: #1c251f;
+  color: #e6ecd9;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.hero-select.is-loading select {
+  cursor: progress;
+  opacity: 0.6;
 }

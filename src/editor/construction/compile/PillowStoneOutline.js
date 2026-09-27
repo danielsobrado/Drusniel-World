@@ -1,0 +1,150 @@
+/**
+ * Rounded outlines of one convex stone face, for the pillow-stone mesher.
+ *
+ * The ring at inset `t` is the face quad's *core* — the quad inset by the
+ * corner radius — offset back outward by `cornerRadius − t` with round joins.
+ * That is a rounded rectangle for a rectangular stone and a rounded
+ * parallelogram for a leaning lattice stone, and every ring has the same point
+ * count, so consecutive rings stitch into bands with no topology change. The
+ * outward normal of a ring point is simply its arc direction.
+ *
+ * Pure math, Three.js-free.
+ */
+
+const EPSILON = 1e-9;
+
+function signedArea(ring) {
+  let total = 0;
+  for (let index = 0; index < ring.length; index += 1) {
+    const [x0, y0] = ring[index];
+    const [x1, y1] = ring[(index + 1) % ring.length];
+    total += x0 * y1 - x1 * y0;
+  }
+  return total / 2;
+}
+
+/**
+ * Counter-clockwise copy of a strictly convex quad, or null.
+ *
+ * Lattice faces are convex by construction (`CourseLattice`), and box stones
+ * are rectangles or parallelograms, but a degenerate or folded quad is rejected
+ * here so the caller can fall back rather than mesh inside out.
+ */
+export function normalizeConvexQuad(corners) {
+  if (!Array.isArray(corners) || corners.length !== 4) return null;
+  const ring = corners.map((corner) => [corner[0], corner[1]]);
+  if (!ring.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y))) return null;
+  if (signedArea(ring) < 0) ring.reverse();
+  for (let index = 0; index < 4; index += 1) {
+    const [ax, ay] = ring[index];
+    const [bx, by] = ring[(index + 1) % 4];
+    const [cx, cy] = ring[(index + 2) % 4];
+    const cross = (bx - ax) * (cy - by) - (by - ay) * (cx - bx);
+    if (!(cross > EPSILON)) return null;
+  }
+  return ring;
+}
+
+/** Outward unit normals of a counter-clockwise ring's edges, or null. */
+function edgeNormals(ring) {
+  const normals = [];
+  for (let index = 0; index < ring.length; index += 1) {
+    const [x0, y0] = ring[index];
+    const [x1, y1] = ring[(index + 1) % ring.length];
+    const length = Math.hypot(x1 - x0, y1 - y0);
+    if (!(length > EPSILON)) return null;
+    normals.push([(y1 - y0) / length, -(x1 - x0) / length]);
+  }
+  return normals;
+}
+
+/**
+ * The quad with every edge moved inward by `distance`, or null once an edge
+ * would flip — the inset has swallowed the stone.
+ */
+function insetQuad(ring, normals, distance) {
+  const core = [];
+  for (let index = 0; index < 4; index += 1) {
+    const before = normals[(index + 3) % 4];
+    const after = normals[index];
+    const [x, y] = ring[index];
+    const lineBefore = before[0] * x + before[1] * y - distance;
+    const lineAfter = after[0] * x + after[1] * y - distance;
+    const determinant = before[0] * after[1] - before[1] * after[0];
+    if (!(determinant > EPSILON)) return null;
+    core.push([
+      (lineBefore * after[1] - lineAfter * before[1]) / determinant,
+      (before[0] * lineAfter - after[0] * lineBefore) / determinant,
+    ]);
+  }
+  for (let index = 0; index < 4; index += 1) {
+    const [ax, ay] = core[index];
+    const [bx, by] = core[(index + 1) % 4];
+    const [ox, oy] = ring[index];
+    const [px, py] = ring[(index + 1) % 4];
+    if (!((bx - ax) * (px - ox) + (by - ay) * (py - oy) > EPSILON)) return null;
+  }
+  return core;
+}
+
+/** Points per ring for a given arc resolution: four corner arcs. */
+export function outlinePointCount(arcSegments) {
+  return 4 * (arcSegments + 1);
+}
+
+/**
+ * Build the rounded-outline sampler for one face quad.
+ *
+ * @param ring counter-clockwise convex quad from `normalizeConvexQuad`
+ * @param cornerRadius in-plane corner radius; also the deepest valid inset
+ * @param arcSegments segments per quarter-ish corner arc
+ * @returns null when the corner radius does not fit the quad
+ */
+export function createRoundedOutline(ring, cornerRadius, arcSegments) {
+  if (!(cornerRadius > 0) || !(arcSegments >= 1)) return null;
+  const normals = edgeNormals(ring);
+  if (!normals) return null;
+  const core = insetQuad(ring, normals, cornerRadius);
+  if (!core) return null;
+
+  const pointCount = outlinePointCount(arcSegments);
+  const directionX = new Float64Array(pointCount);
+  const directionY = new Float64Array(pointCount);
+  const coreX = new Float64Array(pointCount);
+  const coreY = new Float64Array(pointCount);
+  let point = 0;
+  for (let corner = 0; corner < 4; corner += 1) {
+    const before = normals[(corner + 3) % 4];
+    const after = normals[corner];
+    const start = Math.atan2(before[1], before[0]);
+    let sweep = Math.atan2(after[1], after[0]) - start;
+    while (sweep <= 0) sweep += Math.PI * 2;
+    for (let step = 0; step <= arcSegments; step += 1) {
+      const angle = start + (sweep * step) / arcSegments;
+      directionX[point] = Math.cos(angle);
+      directionY[point] = Math.sin(angle);
+      coreX[point] = core[corner][0];
+      coreY[point] = core[corner][1];
+      point += 1;
+    }
+  }
+
+  let centroidX = 0;
+  let centroidY = 0;
+  for (const [x, y] of core) {
+    centroidX += x / 4;
+    centroidY += y / 4;
+  }
+
+  return Object.freeze({
+    pointCount,
+    cornerRadius,
+    centroid: Object.freeze([centroidX, centroidY]),
+    /** Outward unit normal of ring point `index` (the same at every inset). */
+    normalX: (index) => directionX[index],
+    normalY: (index) => directionY[index],
+    /** Ring point `index` at inset `inset`, `0 <= inset <= cornerRadius`. */
+    pointX: (index, inset) => coreX[index] + (cornerRadius - inset) * directionX[index],
+    pointY: (index, inset) => coreY[index] + (cornerRadius - inset) * directionY[index],
+  });
+}

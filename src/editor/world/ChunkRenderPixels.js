@@ -7,6 +7,9 @@
 import { TILE_BY_ID, hexToRgbBytes } from '../tileCatalog.js';
 import { halfToFloat } from '../water/WaterField.js';
 
+import { snowAtPoint } from '../materials/SnowAccumulation.js';
+import { terrainBakeMacroSeed } from '../materials/TerrainBakeNoise.js';
+
 const DIST_INF = 1e9;
 const SQRT2 = Math.SQRT2;
 const WATER_FIELD_CHANNELS = 4;
@@ -55,8 +58,21 @@ export function getSurfaceMaskChunkRadius(blendCells, chunkSize) {
   return Math.ceil(getSurfaceMaskSearchRadius(blendCells) / chunkSize);
 }
 
-export function createSurfaceMaskConfig(stylizedConfig) {
+/** Below this snow cover grass still grows; above it the cell is bare. */
+const SNOW_GRASS_LIMIT = 0.5;
+
+/**
+ * @param {object} stylizedConfig
+ * @param {object} [options]
+ * @param {number} [options.tileSize] metres per cell; with the bake's snow
+ *   classification it lets the mask keep grass off snow
+ */
+export function createSurfaceMaskConfig(stylizedConfig, { tileSize = null } = {}) {
+  const bake = stylizedConfig?.materialBake;
   return {
+    snow: bake?.classification && Number.isFinite(tileSize)
+      ? { classification: bake.classification, seedOffset: bake.macro.seedOffset, tileSize }
+      : null,
     blendCells: Math.max(0.5, stylizedConfig?.path?.blendCells ?? 2.5),
     roadTileId: stylizedConfig?.path?.tileId ?? 13,
     waterTileId: stylizedConfig?.water?.tileId ?? 0,
@@ -167,8 +183,42 @@ function buildHaloTiles({
   return { halo, haloSize };
 }
 
+/**
+ * Snow cover per cell of a chunk, from its vertex heights, or null when the
+ * mask has no snow classification. Same evaluation as the terrain bake.
+ */
+function cellSnowCover({ tiles, heights, originX, originZ, chunkSize, snow, worldSeed }) {
+  if (!snow || !(heights instanceof Float32Array) || heights.length !== (chunkSize + 1) ** 2) return null;
+  const { classification, tileSize } = snow;
+  const macroSeed = terrainBakeMacroSeed(snow.seedOffset, worldSeed);
+  const vertexSize = chunkSize + 1;
+  const cover = new Float32Array(chunkSize * chunkSize);
+  for (let z = 0; z < chunkSize; z += 1) {
+    for (let x = 0; x < chunkSize; x += 1) {
+      const topLeft = heights[z * vertexSize + x];
+      const topRight = heights[z * vertexSize + x + 1];
+      const bottomLeft = heights[(z + 1) * vertexSize + x];
+      const bottomRight = heights[(z + 1) * vertexSize + x + 1];
+      const dx = (topRight + bottomRight - topLeft - bottomLeft) / (2 * tileSize);
+      const dz = (bottomLeft + bottomRight - topLeft - topRight) / (2 * tileSize);
+      cover[z * chunkSize + x] = snowAtPoint({
+        height: (topLeft + topRight + bottomLeft + bottomRight) * 0.25,
+        slope: Math.hypot(dx, dz),
+        dx,
+        dz,
+        curvature: 0,
+        tileId: tiles[z * chunkSize + x],
+        worldX: (originX + x + 0.5) * tileSize,
+        worldZ: -(originZ + z + 0.5) * tileSize,
+      }, classification, macroSeed);
+    }
+  }
+  return cover;
+}
+
 export function buildSurfaceMaskPixels({
   tiles,
+  heights = null,
   originX,
   originZ,
   chunkSize,
@@ -197,6 +247,15 @@ export function buildSurfaceMaskPixels({
   });
   const distances = computeRoadDistanceField(halo, haloSize, haloSize, roadTileId);
   const mask = new Uint8Array(chunkSize * chunkSize * 4);
+  const snowCover = cellSnowCover({
+    tiles,
+    heights,
+    originX,
+    originZ,
+    chunkSize,
+    snow: maskConfig.snow,
+    worldSeed: maskConfig.worldSeed,
+  });
 
   for (let localZ = 0; localZ < chunkSize; localZ += 1) {
     for (let localX = 0; localX < chunkSize; localX += 1) {
@@ -213,7 +272,8 @@ export function buildSurfaceMaskPixels({
         ? sampleCellWaterOccupancy(usableWaterField, localX, localZ, waterlineDepth)
         : 0;
       mask[offset] = Math.round(pathInfluence * 255);
-      mask[offset + 1] = grassTileIds.has(tileId) ? 255 : 0;
+      const snowy = snowCover !== null && snowCover[cellIndex] >= SNOW_GRASS_LIMIT;
+      mask[offset + 1] = grassTileIds.has(tileId) && !snowy ? 255 : 0;
       mask[offset + 2] = Math.round(Math.max(tileWater, fieldWater) * 255);
       mask[offset + 3] = 255;
     }
@@ -233,6 +293,7 @@ export function enrichPageRenderPixels(page, sampleTile, maskConfig, tileDefinit
   page.tilePixels = buildTilePixels(page.tiles, tileDefinitions);
   page.surfaceMaskPixels = buildSurfaceMaskPixels({
     tiles: page.tiles,
+    heights: page.heights ?? null,
     originX: page.originX,
     originZ: page.originZ,
     chunkSize,

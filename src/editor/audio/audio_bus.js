@@ -1,6 +1,18 @@
 import { defaultAudioConfig } from "./audio_config.js";
 import { ProceduralAudio } from "./procedural_audio.js";
 import { AudioThrottle } from "./audio_throttle.js";
+import { SampleBank } from "./sample_bank.js";
+
+/** Spread of playback rate between repeats of one recorded sound. */
+const SAMPLE_RATE_JITTER = 0.08;
+
+function siteBaseUrl() {
+  try {
+    return import.meta.env?.BASE_URL ?? "/";
+  } catch {
+    return "/";
+  }
+}
 
 function normalizedVolume(value, fallback) {
   const numeric = Number(value);
@@ -12,6 +24,11 @@ class AudioBus {
   synthManager = new ProceduralAudio();
   throttle = new AudioThrottle();
   config = defaultAudioConfig;
+  samples = new SampleBank({
+    getContext: () => this.synthManager.ctx,
+    getDestination: () => this.synthManager.master,
+    baseUrl: siteBaseUrl(),
+  });
   constructor() {
     this.loadPersistence();
     this.setupLazyInit();
@@ -85,6 +102,7 @@ class AudioBus {
     }
     const eventVol = options?.volume !== void 0 ? options.volume : eventCfg.volume;
     const finalVolume = Math.min(1, Math.max(0, eventVol * categoryScale));
+    if (this.playSample(eventCfg, finalVolume, options)) return;
     this.synthManager.playSynth(
       eventCfg.synth,
       eventCfg,
@@ -93,6 +111,23 @@ class AudioBus {
       options?.variant,
       options?.durationMs
     );
+  }
+  /**
+   * Play one of the event's recordings if it is decoded; otherwise start loading
+   * them all and let the synth stand in this time.
+   */
+  playSample(eventCfg, volume, options) {
+    const samples = eventCfg.samples;
+    if (!samples?.length || !this.synthManager.ctx) return false;
+    const pick = Number.isFinite(options?.variant)
+      ? Math.floor(options.variant * 2) % samples.length
+      : Math.floor(Math.random() * samples.length);
+    const played = this.samples.play(samples[pick], {
+      volume,
+      rate: 1 + (Math.random() - 0.5) * SAMPLE_RATE_JITTER,
+    });
+    if (!played) for (const path of samples) this.samples.load(path);
+    return played;
   }
   setAudioEnabled(enabled) {
     this.synthManager.setEnabled(enabled);

@@ -21,7 +21,7 @@ function riverSample(x, z) {
 }
 
 function flowAt(field, x, z) {
-  const index = (z * field.width + x) * 2;
+  const index = (z * field.width + x) * 4;
   return {
     x: decodeWaterFlowComponent(field.flowPixels[index]),
     z: decodeWaterFlowComponent(field.flowPixels[index + 1]),
@@ -38,7 +38,7 @@ test('flow components round-trip through the compact texture encoding', () => {
 test('water fields preserve current direction and shared chunk edges', () => {
   const left = createWaterField({ originX: 0, originZ: 0, chunkSize: 2, sampleWater: riverSample });
   const right = createWaterField({ originX: 2, originZ: 0, chunkSize: 2, sampleWater: riverSample });
-  assert.equal(left.flowPixels.length, left.width * left.height * 2);
+  assert.equal(left.flowPixels.length, left.width * left.height * 4);
 
   const centre = flowAt(left, 1, 1);
   assert.ok(Math.abs(centre.x - 0.6) <= 1 / 127);
@@ -60,6 +60,20 @@ test('page enrichment creates current fields when an older page has none', () =>
   enrichPageWaterField(page, riverSample);
   assert.equal(page.waterFlowWidth, 3);
   assert.equal(page.waterFlowHeight, 3);
-  assert.equal(page.waterFlowPixels.length, 18);
+  assert.equal(page.waterFlowPixels.length, 36);
   assert.equal(page.waterFieldRevision, 1);
+});
+
+test('fall and plunge ride in the flow texture and carry onto dry edge vertices', () => {
+  // Wet columns x < 2 are a falling face; everything else is dry.
+  const sample = (x) => (x < 2
+    ? { ...riverSample(x, 0), fall: 1, plunge: 0.5 }
+    : { coverage: 0, surfaceHeight: 0, bedHeight: 1, depth: 0, shoreDistance: 0, flowX: 0, flowZ: 0 });
+  const field = createWaterField({ originX: 0, originZ: 0, chunkSize: 3, sampleWater: sample });
+  const texel = (x, z) => field.flowPixels.subarray((z * field.width + x) * 4, (z * field.width + x) * 4 + 4);
+  assert.deepEqual([...texel(1, 1)].slice(2), [255, 128]);
+  // The first dry column borders the face and inherits its whitewater.
+  assert.deepEqual([...texel(2, 1)].slice(2), [255, 128]);
+  // Two columns in, no wet neighbour remains.
+  assert.deepEqual([...texel(3, 1)].slice(2), [0, 0]);
 });

@@ -3,6 +3,7 @@ import {
   WORLD_MAX_SAFE_CELL_COORDINATE,
 } from '../world/worldConstants.js';
 import { createAzgaarCartographySource } from './AzgaarCartographySource.js';
+import { serializeWaterDomainConfig } from '../water/WaterConfig.js';
 import {
   buildAzgaarImportSummary,
   createAzgaarMacroWorldSource,
@@ -219,6 +220,12 @@ export function isAzgaarFullJson(document) {
     && Array.isArray(document?.grid?.cells);
 }
 
+function waterDomainMetadata(config) {
+  if (!config.waterDomain) return {};
+  const waterDomain = serializeWaterDomainConfig(config.waterDomain);
+  return { waterDomainVersion: waterDomain.version, waterDomain };
+}
+
 export function importAzgaarFullJson(document, config, options = {}) {
   assertAzgaarDocument(document);
   const sourceDocument = normalizeBiomeSource(document);
@@ -239,6 +246,9 @@ export function importAzgaarFullJson(document, config, options = {}) {
         version: config.world.generatorVersion,
         heightScale: config.world.heightScale,
         seaLevel: config.world.seaLevel,
+        // A fresh import is generated under the active water domain, so it says
+        // so; the loader refuses a world whose water was built under another.
+        ...waterDomainMetadata(config),
       },
       baseTerrain,
     },

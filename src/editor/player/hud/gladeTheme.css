@@ -1,0 +1,48 @@
+/*
+ * Tiny Glade-style tokens for everything the player sees while walking: the
+ * mode switch, the HUD and the spell dock. Warm paper pills, ink glyphs, soft
+ * shadows and a little spring, kept compact so the world stays the picture.
+ */
+:root {
+  --glade-paper: rgb(253 249 241 / 86%);
+  --glade-paper-strong: rgb(255 252 246 / 97%);
+  --glade-ink: #4a4036;
+  --glade-ink-soft: #74675a;
+  --glade-ink-faint: rgb(74 64 54 / 38%);
+  --glade-line: rgb(96 76 52 / 15%);
+  --glade-cream: #fff9ee;
+  --glade-accent: #e59b52;
+  --glade-leaf: #7fae62;
+  --glade-danger: #d8645a;
+  --glade-shadow: 0 8px 22px rgb(62 44 24 / 17%), 0 1px 3px rgb(62 44 24 / 15%);
+  --glade-shadow-soft: 0 3px 10px rgb(62 44 24 / 14%);
+  --glade-blur: blur(14px) saturate(1.25);
+  --glade-font: "Nunito", "Quicksand", ui-rounded, "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --glade-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes glade-pop-in {
+  from {
+    opacity: 0;
+    scale: 0.92;
+  }
+}
+
+@keyframes glade-rise-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+
+@keyframes glade-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --glade-spring: ease;
+  }
+}

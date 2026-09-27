@@ -1,0 +1,90 @@
+version: 1
+
+# Pillow-stone shaping for styles whose `geometry` is `rounded`
+# (compile/ConstructionPillowStoneMesher.js). Ratios are fractions of a stone's
+# shorter face side. Every value is sampled per stone, and per face where it can
+# differ, from the stone's stable index, so a rebuild reproduces it exactly.
+#
+# Regenerate with: node tools/generate-construction-stone-rounding.mjs
+defaults:
+  # Radius of the rim where the face rolls back into the joint.
+  edgeRadius:
+    ratioMin: 0.13
+    ratioMax: 0.2
+    minimum: 0.03
+    maximum: 0.09
+
+  # In-plane rounding of the face outline's four corners. Never smaller than
+  # the edge radius, so the rim always has room to roll.
+  cornerRadius:
+    ratioMin: 0.2
+    ratioMax: 0.3
+
+  # How far the face centre stands proud of its rolled edge.
+  bulge:
+    ratioMin: 0.03
+    ratioMax: 0.06
+    maximum: 0.03
+
+  # Tilt and twist of the bulge, so no two faces are the same dome.
+  asymmetry: 0.3
+  saddle: 0.1
+
+  # Share of stoneJitter's out-of-plane protrusion a pillow stone keeps. Through
+  # a whole wall's depth it reaches several centimetres, and a pillow stone
+  # pushed back that far sinks into its crevice and reads as a flat slab.
+  protrusionScale: 0.4
+
+  # Dressings keep crisper arrises than field stone (04-…md §8, CLAUDE.md).
+  categories:
+    field: 1
+    coping: 0.75
+    ashlar: 0.4
+    quoin: 0.5
+    voussoir: 0.45
+    merlon: 0.6
+    recess: 0
+
+  # Stones of a footing course (course 0 of a style that declares `footing`).
+  footingScale: 1.1
+
+  # Arris floor: even a scale-0 category keeps a slightly softened edge.
+  minimumEdgeRadius: 0.012
+
+  # Tessellation per LOD band. Near is about 256 triangles per stone, coarse 64.
+  lod:
+    near:
+      arcSegments: 3
+      rimRings: 2
+      faceRings: 1
+    coarse:
+      arcSegments: 1
+      rimRings: 1
+      faceRings: 0
+
+  # Baked per-vertex occlusion (compile/RoundedStoneShading.js). There is no
+  # screen-space pass: this is the only ambient occlusion the stones get.
+  occlusion:
+    # Darkening where a rim has rolled back into its joint.
+    crevice: 0.3
+    # Depth, in multiples of (edge radius + bulge), at which it saturates.
+    creviceReach: 1.2
+    # Thin line under each stone, where the course below shades it.
+    down: 0.12
+    # Downward-facing surfaces sit in their neighbour's shadow.
+    face: 0.18
+    # Upward-facing surfaces catch sky.
+    sky: 0.08
+    # Lower courses receive less bounce light, fading out over baseHeight.
+    base: 0.14
+    baseHeight: 1.0
+    # Damp, faintly green tint at grade, fading out over groundTintHeight.
+    groundTint: [0.93, 0.96, 0.88]
+    groundTintHeight: 0.6
+
+  # Far-band shell colour as a fraction of the palette colour, so the ribbon
+  # matches the crevice-darkened average of the near stones.
+  shellShade: 0.82
+
+# Per-style overrides of any of the keys above.
+styles: {}

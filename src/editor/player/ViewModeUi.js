@@ -1,53 +1,50 @@
-import {
-  PLAYER_MODE_EDIT,
-  PLAYER_MODE_WALK,
-  PLAYER_POINTER_LOCK_MESSAGE,
-  PLAYER_SPAWN_PICK_MESSAGE,
-} from './playerConstants.js';
+import { PLAYER_MODE_EDIT, PLAYER_MODE_WALK } from './playerConstants.js';
+import { hudIcon } from './hud/hudIcons.js';
+import { PlayerHud } from './hud/PlayerHud.js';
 
-function collisionHelp(player) {
-  const collision = player?.collision;
-  if (!collision?.active || collision.ready || !collision.readiness) return null;
-  const failure = collision.readiness.failed?.[0] ?? null;
-  if (failure) {
-    return `Collision failed in ${failure.chunkKey ?? 'the destination'}: ${failure.message}`;
-  }
-  const missing = collision.readiness.missing?.length ?? 0;
-  return missing > 0
-    ? `Loading collision safety data… ${missing} chunk${missing === 1 ? '' : 's'} remaining.`
-    : 'Loading collision safety data…';
-}
-
+/**
+ * The Edit / Play switch and the walking HUD.
+ *
+ * The switch floats over the viewport rather than living in the topbar, which
+ * the editor chrome hides; it stays reachable in every mode. The mode is also
+ * mirrored onto the editor root as `data-view-mode`, which `playerMode.css`
+ * uses to clear the editing chrome away while walking.
+ */
 export class ViewModeUi {
-  constructor({ root, controller }) {
+  /**
+   * @param {object} options
+   * @param {HTMLElement} options.root editor root holding the viewport
+   * @param {import('./ViewModeController.js').ViewModeController} options.controller
+   * @param {{ minimap?: ConstructorParameters<typeof PlayerHud>[0]['minimap'] }} [options.hud]
+   */
+  constructor({ root, controller, hud = {} }) {
     this.root = root;
     this.controller = controller;
-    const topbar = root.querySelector('.topbar');
     const viewport = root.querySelector('[data-role="viewport"]');
-    if (!topbar || !viewport) {
-      throw new Error('View mode UI requires the editor topbar and viewport.');
+    if (!viewport) {
+      throw new Error('View mode UI requires the editor viewport.');
     }
 
     this.viewport = viewport;
     this.switcher = document.createElement('div');
     this.switcher.className = 'view-mode-switcher';
+    this.switcher.setAttribute('role', 'group');
     this.switcher.setAttribute('aria-label', 'Camera mode');
     this.switcher.innerHTML = `
-      <button type="button" data-view-mode="${PLAYER_MODE_EDIT}">Edit / Orbit</button>
-      <button type="button" data-view-mode="${PLAYER_MODE_WALK}">Player</button>
+      <button type="button" data-view-mode="${PLAYER_MODE_EDIT}" title="Edit / Orbit">
+        ${hudIcon('edit')}<span>Edit</span>
+      </button>
+      <button type="button" data-view-mode="${PLAYER_MODE_WALK}" title="Walk the world as the player">
+        ${hudIcon('play')}<span>Play</span>
+      </button>
     `;
-    topbar.prepend(this.switcher);
+    viewport.append(this.switcher);
 
-    this.hud = document.createElement('div');
-    this.hud.className = 'player-hud';
-    this.hud.hidden = true;
-    this.hud.innerHTML = `
-      <span class="player-crosshair" aria-hidden="true"></span>
-      <div class="player-help" data-role="player-help"></div>
-    `;
-    viewport.append(this.hud);
-    this.help = this.hud.querySelector('[data-role="player-help"]');
-    this.crosshair = this.hud.querySelector('.player-crosshair');
+    this.hud = new PlayerHud({
+      viewport,
+      canToggleCamera: Boolean(controller.thirdPersonCamera),
+      minimap: hud.minimap ?? null,
+    });
 
     this.onClick = (event) => {
       const button = event.target.closest('[data-view-mode]');
@@ -72,39 +69,26 @@ export class ViewModeUi {
 
     for (const button of this.switcher.querySelectorAll('[data-view-mode]')) {
       const isPlayerButton = button.dataset.viewMode === PLAYER_MODE_WALK;
-      button.classList.toggle(
-        'is-active',
-        isPlayerButton ? playerActive : button.dataset.viewMode === state.mode && !state.awaitingSpawn,
-      );
+      const active = isPlayerButton
+        ? playerActive
+        : button.dataset.viewMode === state.mode && !state.awaitingSpawn;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
     }
 
-    this.hud.hidden = !playerActive;
-    if (!playerActive) {
-      return;
-    }
+    this.hud.render(state);
+  }
 
-    this.crosshair.hidden = state.awaitingSpawn;
-    if (state.awaitingSpawn) {
-      this.help.textContent = PLAYER_SPAWN_PICK_MESSAGE;
-      return;
-    }
-
-    const readiness = collisionHelp(state.player);
-    if (readiness) {
-      this.help.textContent = readiness;
-      return;
-    }
-
-    this.help.textContent = state.player.pointerLocked
-      ? 'WASD move · Shift run · Space jump · Esc release mouse'
-      : `${PLAYER_POINTER_LOCK_MESSAGE} WASD move · Shift run · Space jump.`;
+  /** Per-frame: keeps the minimap turned with the camera. */
+  update() {
+    this.hud.update(this.controller.getHeading());
   }
 
   dispose() {
     this.unsubscribe?.();
     this.switcher.removeEventListener('click', this.onClick);
     this.switcher.remove();
-    this.hud.remove();
+    this.hud.dispose();
     delete this.root.dataset.viewMode;
     this.root.removeAttribute('data-awaiting-spawn');
   }

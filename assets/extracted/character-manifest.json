@@ -1,0 +1,252 @@
+{
+  "version": 1,
+  "generator": "scripts/prepare-character-assets.mjs",
+  "assets": [
+    {
+      "id": "drusniel",
+      "input": "assets/characters/drusniel_dark_elf.glb",
+      "inputBytes": 3896256,
+      "inputSha256": "4a0b4e4b2d56c410199bd42fee9d55c2c04ee09dfa4c1ba5ba8e398d2ac0f9a5",
+      "prepared": "assets/extracted/characters/drusniel-dark-elf.glb",
+      "published": "public/assets/characters/drusniel-dark-elf.glb",
+      "preparedBytes": 2981624,
+      "preparedSha256": "ae11086c58a56d45e20b28d5d7ee43b8ce13d8d4a14912ff6047bc55c496160e",
+      "clips": [
+        {
+          "name": "Running",
+          "duration": 0.7
+        },
+        {
+          "name": "Walking",
+          "duration": 1.033333
+        }
+      ],
+      "joints": 28,
+      "dielectricMaterials": [],
+      "triangles": 31077,
+      "sourceAsset": {
+        "author": "Daniel Sobrado (generated with Meshy)",
+        "license": "Proprietary; owned by the project author",
+        "source": "grass-test/public/Assets/Drusniel_Dark_Elf.glb",
+        "sourceSha256": "48ddb4195f412fca15757c2696f1ded3280736f736bd229dfbaa5eb58e1db918",
+        "decodedFrom": "KHR_draco_mesh_compression"
+      }
+    },
+    {
+      "id": "enanillo",
+      "input": "assets/characters/enanillo_dwarven.glb",
+      "inputBytes": 6256108,
+      "inputSha256": "4054bf6446ce74fc593f90b06d81699cf2055dcc154dc0e94c8ea642fcd09dc9",
+      "prepared": "assets/extracted/characters/enanillo-dwarven.glb",
+      "published": "public/assets/characters/enanillo-dwarven.glb",
+      "preparedBytes": 5943200,
+      "preparedSha256": "52bf5cbf70a89db4bb791982af54901cab3d00174729587d664c6159a7c80825",
+      "clips": [
+        {
+          "name": "Armature|running|baselayer",
+          "duration": 0.666667
+        },
+        {
+          "name": "Armature|walking_man|baselayer",
+          "duration": 1.066667
+        }
+      ],
+      "joints": 24,
+      "dielectricMaterials": [
+        "Material_1"
+      ],
+      "triangles": 53777,
+      "sourceAsset": {
+        "author": "Daniel Sobrado (generated with Meshy)",
+        "license": "Proprietary; owned by the project author",
+        "source": "grass-test/public/Assets/Enanillo_Dwarven.glb",
+        "sourceSha256": "d4cca7e22fc15089d6ffce3917197ab724640f5db288ac739dc07d74996340d3",
+        "decodedFrom": "KHR_draco_mesh_compression"
+      }
+    },
+    {
+      "id": "paladin",
+      "input": "assets/characters/radiant_paladin.glb",
+      "inputBytes": 2371464,
+      "inputSha256": "c9ac30f1ad2a966cb06bbe533cf29316c95c647782bdd7ecadb519fa4bef9286",
+      "prepared": "assets/extracted/characters/radiant-paladin.glb",
+      "published": "public/assets/characters/radiant-paladin.glb",
+      "preparedBytes": 1689272,
+      "preparedSha256": "6e2b6ec039613e30e80dc44d25b0f9a52bf0056f9129829dbbf67b79662289de",
+      "clips": [
+        {
+          "name": "Armature|running|baselayer",
+          "duration": 0.666667
+        },
+        {
+          "name": "Armature|walking_man|baselayer",
+          "duration": 1.066667
+        }
+      ],
+      "joints": 24,
+      "dielectricMaterials": [
+        "Material_1"
+      ],
+      "triangles": 28164,
+      "sourceAsset": {
+        "author": "Daniel Sobrado (generated with Meshy)",
+        "license": "Proprietary; owned by the project author",
+        "source": "grass-test/public/Assets/Radiant_Paladin.glb",
+        "sourceSha256": "f4d6e89a2dd9d3c18d6e6c55c360fe0002fe27edb5787c6b6d6f29dd42bbe579",
+        "decodedFrom": "KHR_draco_mesh_compression"
+      }
+    },
+    {
+      "id": "cleric",
+      "input": "assets/characters/arcane_wizard.glb",
+      "inputBytes": 3582592,
+      "inputSha256": "28963f632bed0114844d7f24f5a0d7192a80c855962d50c0003576a2ff862485",
+      "prepared": "assets/extracted/characters/devout-cleric.glb",
+      "published": "public/assets/characters/devout-cleric.glb",
+      "preparedBytes": 3276112,
+      "preparedSha256": "d8aa24e6982875dc36978746ff7b82a6e23bc9f387e6906291a7366426b70d75",
+      "clips": [
+        {
+          "name": "Running",
+          "duration": 0.666667
+        },
+        {
+          "name": "Walking",
+          "duration": 1.066667
+        }
+      ],
+      "joints": 24,
+      "dielectricMaterials": [
+        "Material_1"
+      ],
+      "triangles": 43059,
+      "sourceAsset": {
+        "author": "Daniel Sobrado (generated with Meshy)",
+        "license": "Proprietary; owned by the project author",
+        "source": "grass-test/public/Assets/Arcane_Wizard.glb",
+        "sourceSha256": "7692f6f816e0fec1eaa9870619717764335cdebf959a9634c80bb5401e23c746",
+        "decodedFrom": "KHR_draco_mesh_compression"
+      }
+    },
+    {
+      "id": "wizard",
+      "input": "assets/characters/devout_cleric.glb",
+      "inputBytes": 9579996,
+      "inputSha256": "f5ec8c0885f38fa7cc8ab98256c74fa4dedb3c0b1475fc25b511741f0a3fc8a7",
+      "prepared": "assets/extracted/characters/arcane-wizard.glb",
+      "published": "public/assets/characters/arcane-wizard.glb",
+      "preparedBytes": 8197424,
+      "preparedSha256": "ae49f2af8221617a3039c74ceabff58cd93b73745dc89e9d050ed4c5c4a8da37",
+      "clips": [
+        {
+          "name": "Running",
+          "duration": 0.7
+        },
+        {
+          "name": "Walking",
+          "duration": 1.033333
+        }
+      ],
+      "joints": 28,
+      "dielectricMaterials": [],
+      "triangles": 88427,
+      "sourceAsset": {
+        "author": "Daniel Sobrado (generated with Meshy)",
+        "license": "Proprietary; owned by the project author",
+        "source": "grass-test/public/Assets/Devout_Cleric.glb",
+        "sourceSha256": "d9da872335748df2f59a04b103e5051785d2d0542b5d5f91b59dc32d841d92c2",
+        "decodedFrom": "KHR_draco_mesh_compression"
+      }
+    },
+    {
+      "id": "serpent",
+      "input": "assets/characters/serpent_master.glb",
+      "inputBytes": 4422416,
+      "inputSha256": "c3e1aeab5774c3dd6041d5154532b2527d838e79a6baad522b942b3ffe6b1b2c",
+      "prepared": "assets/extracted/characters/serpent-master.glb",
+      "published": "public/assets/characters/serpent-master.glb",
+      "preparedBytes": 3254708,
+      "preparedSha256": "c07f0bce41567e68dffe46c04a10cb8a65a36c888154df676de886eb2b438c11",
+      "clips": [
+        {
+          "name": "Running",
+          "duration": 0.7
+        },
+        {
+          "name": "Walking",
+          "duration": 1.033333
+        }
+      ],
+      "joints": 28,
+      "dielectricMaterials": [],
+      "triangles": 30832,
+      "sourceAsset": {
+        "author": "Daniel Sobrado (generated with Meshy)",
+        "license": "Proprietary; owned by the project author",
+        "source": "grass-test/public/Assets/Serpent_Master.glb",
+        "sourceSha256": "2728814494a1bcb352adc3af69aa475030d207ed9bef0511d3538d22330f5d1d",
+        "decodedFrom": "KHR_draco_mesh_compression"
+      }
+    },
+    {
+      "id": "villager",
+      "input": "assets/characters/villager_rugged_blacks.glb",
+      "inputBytes": 2826828,
+      "inputSha256": "964a83c8ed072e602f5bf09b1a56c740a825e9e15612c4911f627f6ddf606470",
+      "prepared": "assets/extracted/characters/villager-rugged-blacks.glb",
+      "published": "public/assets/characters/villager-rugged-blacks.glb",
+      "preparedBytes": 2886348,
+      "preparedSha256": "892213ae027614af23886c0f737708771cd8088c10a9ffc0bcbbca9d5e63f9f2",
+      "clips": [
+        {
+          "name": "Running",
+          "duration": 0.708333
+        },
+        {
+          "name": "Walking",
+          "duration": 1.083333
+        }
+      ],
+      "joints": 28,
+      "dielectricMaterials": [],
+      "triangles": 40865,
+      "sourceAsset": {
+        "author": "Daniel Sobrado (generated with Meshy)",
+        "license": "Proprietary; owned by the project author",
+        "source": "grass-test/public/Assets/Villager_Rugged_Blacks.glb",
+        "sourceSha256": "7a308783824ae1c7b4891005e6610f84f633d3d10f4b4b89f38c02b30b4fc331",
+        "decodedFrom": "KHR_draco_mesh_compression"
+      }
+    },
+    {
+      "id": "goblin",
+      "input": "assets/characters/goblin_gribble_thornhide.glb",
+      "inputBytes": 3247328,
+      "inputSha256": "6154928fa840d1c0135d332f8c9a1055490a5f6d2c84f4215fdd182d0e791c86",
+      "prepared": "assets/extracted/characters/goblin-gribble-thornhide.glb",
+      "published": "public/assets/characters/goblin-gribble-thornhide.glb",
+      "preparedBytes": 3303444,
+      "preparedSha256": "95e8b84f296bd416f6e6c925561d4cb71dbd678d3037cd31722d17e36530df34",
+      "clips": [
+        {
+          "name": "Running",
+          "duration": 0.708333
+        },
+        {
+          "name": "Walking",
+          "duration": 1.083333
+        }
+      ],
+      "joints": 28,
+      "dielectricMaterials": [],
+      "triangles": 47458,
+      "sourceAsset": {
+        "author": "Daniel Sobrado (generated with Meshy)",
+        "license": "Proprietary; owned by the project author",
+        "source": "grass-test/public/Assets/Goblin_Gribble_Thornhide.glb",
+        "sourceSha256": "3f0a4680b1719b652dcf3a31f8cc012cfd909b6d0e289dfb39c6e4ab436ae682",
+        "decodedFrom": "KHR_draco_mesh_compression"
+      }
+    }
+  ]
+}

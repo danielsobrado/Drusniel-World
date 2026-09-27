@@ -23,6 +23,7 @@ import {
   stylizedPathWearMask,
 } from './StylizedNoiseNodes.js';
 import { createSurfaceClassNodes } from './SurfaceMaskNodes.js';
+import { sampleWorldWindCanonical } from '../weather/wind/worldWindState.js';
 
 function colorNode(value) {
   const color = new THREE.Color(value);
@@ -80,7 +81,11 @@ export function createStylizedFlowerMaterial({
   const rotationZ = sin(angle).mul(positionLocal.x).add(cos(angle).mul(positionLocal.z));
   const localHeight = positionLocal.y.mul(size);
   const heightMask = localHeight.mul(localHeight);
-  const windDirection = vec2(config.wind.direction[0], config.wind.direction[1]);
+  // The same world wind field the grass bends to, so a gust front crosses
+  // flowers and blades together. `worldXZ` is canonical, like the grass's.
+  const worldWind = sampleWorldWindCanonical(worldXZ);
+  const windDirection = worldWind.direction;
+  const gustScale = worldWind.envelope.clamp(0.35, 3.5);
   const windPerpendicular = vec2(windDirection.y.negate(), windDirection.x);
   const primary = sin(dot(worldXZ, windDirection).mul(config.wind.frequency)
     .add(time.mul(config.wind.speed)));
@@ -94,7 +99,8 @@ export function createStylizedFlowerMaterial({
     primary.add(secondary).add(turbulence)
       .mul(config.flowers.windStrength)
       .mul(heightMask)
-      .add(float(config.flowers.windLean).mul(heightMask)),
+      .add(float(config.flowers.windLean).mul(heightMask))
+      .mul(gustScale),
   );
   const bend = sin(localHeight.mul(config.flowers.bendFrequency)
     .add(time.mul(config.wind.speed * 0.4))

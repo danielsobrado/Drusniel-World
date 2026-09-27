@@ -1,19 +1,11 @@
 import { WATER_BODY_ID_RIVER_BASE } from './WaterConstants.js';
+import { createReachProfile } from './RiverReachProfile.js';
+import { atlasToWorldCell } from './WaterSourceCoordinates.js';
 
 const MINIMUM_RIVER_RADIUS_CELLS = 0.75;
 
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
-}
-
-function toWorldCell(source, point) {
-  if (!Array.isArray(point) || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) {
-    return null;
-  }
-  return {
-    x: source.bounds.minCellX + point[0] / source.atlas.width * source.bounds.widthCells,
-    z: source.bounds.minCellZ + point[1] / source.atlas.height * source.bounds.heightCells,
-  };
 }
 
 function deduplicatePoints(points) {
@@ -46,11 +38,31 @@ function assertSourceDimensions(source) {
   }
 }
 
+/**
+ * The river level, traced downstream sample by sample: never above the ground
+ * there (less a small bank inset), never above the level upstream less the
+ * minimum gradient, never above a lake it runs through, never below the sea.
+ */
+function createLevelTracer({ sampleBaseHeight, seaLevel, bankInset, lakeLevelAt, minimumGradient }) {
+  const ceiling = (point) => Math.min(
+    sampleBaseHeight(point.x, point.z) - bankInset,
+    lakeLevelAt?.(point.x, point.z) ?? Number.POSITIVE_INFINITY,
+  );
+  return {
+    start: (point) => Math.max(seaLevel, ceiling(point)),
+    next: (upstream, point, distanceMeters) => Math.max(
+      seaLevel,
+      Math.min(ceiling(point), upstream - minimumGradient * distanceMeters),
+    ),
+  };
+}
+
 export function createRiverSurfaceSegments({
   source,
   sampleBaseHeight,
   seaLevel,
   config,
+  lakeLevelAt = null,
 }) {
   if (!source?.rivers?.length) return [];
   assertSourceDimensions(source);
@@ -58,7 +70,7 @@ export function createRiverSurfaceSegments({
   const cellSizeMeters = config.cellSizeMeters;
 
   for (const river of source.rivers) {
-    let points = deduplicatePoints((river.points ?? []).map((point) => toWorldCell(source, point)));
+    let points = deduplicatePoints((river.points ?? []).map((point) => atlasToWorldCell(source, point)));
     if (points.length < 2) continue;
     const firstHeight = sampleBaseHeight(points[0].x, points[0].z);
     const lastHeight = sampleBaseHeight(points[points.length - 1].x, points[points.length - 1].z);
@@ -77,20 +89,16 @@ export function createRiverSurfaceSegments({
       config.river.maximumDepth,
     );
     const radiusCells = Math.max(worldWidthCells * 0.5, MINIMUM_RIVER_RADIUS_CELLS);
-    const levels = new Float64Array(points.length);
     const bankInset = Math.min(0.35, channelDepth * 0.2);
-    levels[0] = Math.max(seaLevel, sampleBaseHeight(points[0].x, points[0].z) - bankInset);
-    for (let index = 1; index < points.length; index += 1) {
-      const distanceMeters = Math.hypot(
-        points[index].x - points[index - 1].x,
-        points[index].z - points[index - 1].z,
-      ) * cellSizeMeters;
-      const terrainLevel = sampleBaseHeight(points[index].x, points[index].z) - bankInset;
-      const descendingLevel = levels[index - 1] - config.river.minimumGradient * distanceMeters;
-      levels[index] = Math.max(seaLevel, Math.min(terrainLevel, descendingLevel));
-    }
-
     const bodyId = resolveBodyId(river.id);
+    const trace = createLevelTracer({
+      sampleBaseHeight,
+      seaLevel,
+      bankInset,
+      lakeLevelAt,
+      minimumGradient: config.river.minimumGradient,
+    });
+    let level = trace.start(points[0]);
     for (let index = 1; index < points.length; index += 1) {
       const start = points[index - 1];
       const end = points[index];
@@ -98,8 +106,22 @@ export function createRiverSurfaceSegments({
       const dz = end.z - start.z;
       const length = Math.hypot(dx, dz);
       if (length <= 1e-6) continue;
+      const lengthMeters = length * cellSizeMeters;
+      const steps = Math.max(1, Math.ceil(lengthMeters / config.river.profileStepMeters));
+      const levels = new Float64Array(steps + 1);
+      levels[0] = level;
+      for (let step = 1; step <= steps; step += 1) {
+        const t = step / steps;
+        levels[step] = trace.next(
+          levels[step - 1],
+          { x: start.x + dx * t, z: start.z + dz * t },
+          lengthMeters / steps,
+        );
+      }
+      level = levels[steps];
       segments.push(Object.freeze({
         bodyId,
+        profile: createReachProfile(levels, lengthMeters, config.falls),
         ax: start.x,
         az: start.z,
         bx: end.x,
@@ -109,8 +131,8 @@ export function createRiverSurfaceSegments({
         length,
         flowX: dx / length,
         flowZ: dz / length,
-        startSurface: levels[index - 1],
-        endSurface: levels[index],
+        startSurface: levels[0],
+        endSurface: levels[steps],
         radiusCells,
         channelDepth,
       }));

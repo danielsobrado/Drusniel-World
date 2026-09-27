@@ -172,6 +172,16 @@ class ProceduralAudio {
         this.noise(duration, 300 + variant * 50, vol, 0.8);
         this.tone(pitch - variant * 20, duration, vol * 0.5, "sawtooth", 0, 50);
         break;
+      case "footstep":
+        // A soft heel thump: low-passed noise, its cutoff nudged per step so a
+        // run of footfalls does not repeat one sample.
+        this.noise(duration, 260 + variant * 70, vol, 0.65);
+        this.tone(pitch - variant * 8, duration * 0.6, vol * 0.35, "sine", 0, pitch * 0.6);
+        break;
+      case "splash":
+        this.noise(duration, 900 + variant * 180, vol, 0.85, "bandpass");
+        this.noise(duration * 0.5, 320, vol * 0.6, 0.6);
+        break;
       case "jump":
         this.tone(pitch, duration, vol, "triangle", 0, pitch * 1.35);
         break;

@@ -262,8 +262,10 @@ export class WorkerBackedWorldStore extends InfiniteWorldStore {
   }
 
   refreshPageRenderPixels(page) {
-    const maskConfig = this.generator.getSurfaceMaskConfig?.(this.surfaceMaskConfig)
-      ?? this.surfaceMaskConfig;
+    const maskConfig = {
+      ...(this.generator.getSurfaceMaskConfig?.(this.surfaceMaskConfig) ?? this.surfaceMaskConfig),
+      worldSeed: this.generator.toMetadata?.().seed ?? 0,
+    };
     delete page.grassScatter;
     delete page.flowerScatter;
     // Water first, as in generateBaseWorldChunk: the surface mask classifies

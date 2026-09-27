@@ -64,3 +64,45 @@ test('workshop and construction soft limestone share surface response', () => {
 
   for (const material of Object.values(workshop)) material.dispose();
 });
+
+test('workshop and construction warm fieldstone share surface response and mortar', () => {
+  const workshop = createWorkshopMaterials({
+    seed: 3141,
+    irregularity: 0.42,
+    detail: 2,
+    style: 'warm-fieldstone',
+    topStyle: 'slate',
+    weathering: 0.25,
+    albedo: null,
+    archetype: 'manor',
+    finish: 'masonry',
+  });
+  const construction = createConstructionMaterials(normalizeConstructionRecord({
+    version: 1,
+    id: 'construction-rounded',
+    revision: 1,
+    seed: 3141,
+    kind: 'wall',
+    style: { key: 'rounded-fieldstone', version: 1 },
+    dimensions: { height: 3.5, thickness: 0.8 },
+    path: createCubicBezierPathFromStroke([[0, 0], [8, 0], [16, 0], [24, 0]], {
+      simplifyTolerance: 0.01,
+    }),
+    features: [],
+  }));
+
+  assert.equal(workshop.stone.userData.stoneSurface.palette, 'warm-fieldstone');
+  assert.equal(construction.stone.userData.stoneSurface.palette, 'warm-fieldstone');
+  assert.equal(workshop.stone.bumpScale, construction.stone.bumpScale);
+  assert.equal(workshop.stone.normalScale.x, construction.stone.normalScale.x);
+  assert.equal(workshop.stone.envMapIntensity, construction.stone.envMapIntensity);
+  assert.equal(
+    workshop.stone.userData.stoneSurface.roughnessBase,
+    construction.stone.userData.stoneSurface.roughnessBase,
+  );
+  const mortar = new THREE.Color(mortarProfile('rounded-fieldstone').color);
+  assert.ok(construction.mortar.color.equals(mortar));
+  assert.ok(workshop.mortar.color.equals(mortar));
+
+  for (const material of Object.values(workshop)) material.dispose();
+});

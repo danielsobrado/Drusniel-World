@@ -64,7 +64,7 @@ export class TerrainMaterialBakeGpuBridge {
   }
 
   clearSlot(slot, state) {
-    if (state.key !== null || state.stale) clearTerrainMaterialBakeGpu(slot.material);
+    if (state.key !== null || state.stale) clearTerrainMaterialBakeGpu(slot.mesh);
     state.key = null;
     state.stale = false;
     state.failedKey = null;
@@ -72,7 +72,7 @@ export class TerrainMaterialBakeGpuBridge {
   }
 
   failSlot(slot, state, page, error) {
-    clearTerrainMaterialBakeGpu(slot.material);
+    clearTerrainMaterialBakeGpu(slot.mesh);
     state.key = null;
     state.stale = false;
     state.failedKey = page.descriptor.key;
@@ -86,7 +86,7 @@ export class TerrainMaterialBakeGpuBridge {
   }
 
   advancePublication(slot, state, now) {
-    const gpuState = getTerrainMaterialBakeGpuState(slot.material);
+    const gpuState = getTerrainMaterialBakeGpuState(slot.mesh);
     if (!gpuState || gpuState.disposed || gpuState.ready.value < 0.5) return;
     if (gpuState.blend.value >= 1) return;
     if (this.publishFadeMs <= 0 || state.publishedAt === null) {
@@ -113,13 +113,13 @@ export class TerrainMaterialBakeGpuBridge {
 
     try {
       const previousKey = state.key;
-      const bytes = uploadTerrainMaterialBakeGpu(slot.material, page, { stale });
+      const bytes = uploadTerrainMaterialBakeGpu(slot.mesh, page, { stale });
       if (bytes > 0) {
         PerfCounters.inc('terrainMaterialBakeGpuUploads');
         PerfCounters.inc('terrainMaterialBakeGpuUploadBytes', bytes);
       }
       if (previousKey !== page.descriptor.key) {
-        const gpuState = getTerrainMaterialBakeGpuState(slot.material);
+        const gpuState = getTerrainMaterialBakeGpuState(slot.mesh);
         if (gpuState) gpuState.blend.value = 0;
         state.publishedAt = now;
       }
@@ -147,7 +147,7 @@ export class TerrainMaterialBakeGpuBridge {
       if (this.updateSlot(slot, state, now)) {
         readySlots += 1;
         if (state.stale) staleSlots += 1;
-        const gpuState = getTerrainMaterialBakeGpuState(slot.material);
+        const gpuState = getTerrainMaterialBakeGpuState(slot.mesh);
         if (gpuState && gpuState.blend.value < 1) transitioningSlots += 1;
       }
     }
@@ -164,7 +164,7 @@ export class TerrainMaterialBakeGpuBridge {
     if (this.disposed) return;
     this.disposed = true;
     for (const slot of this.terrainView.slots) {
-      clearTerrainMaterialBakeGpu(slot.material);
+      clearTerrainMaterialBakeGpu(slot.mesh);
     }
     this.states.clear();
     PerfCounters.set('terrainMaterialBakeGpuReadySlots', 0);

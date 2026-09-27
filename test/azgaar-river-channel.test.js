@@ -43,7 +43,8 @@ test('river channels carve the authoritative terrain and descend continuously', 
 test('river banks blend back to untouched terrain', () => {
   const model = createModel();
   assert.equal(model.sampleWater(50, 60).coverage, 0);
-  assert.equal(model.sampleHeight(50, 60), 25);
+  // Past the levee (river.leveeWidthMeters) and its falloff the ground is untouched.
+  assert.equal(model.sampleHeight(50, 99), 25);
 });
 
 test('minimum river radius reaches the terrain vertex grid', () => {

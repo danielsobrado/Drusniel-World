@@ -44,6 +44,7 @@ function resolveMaskConfig(request) {
       waterTileId: provided.waterTileId ?? 0,
       grassTileIds: [...provided.grassTileIds],
       waterlineDepth: provided.waterlineDepth,
+      snow: provided.snow ?? null,
     };
   }
   return createSurfaceMaskConfig(null);
@@ -96,7 +97,10 @@ export function generateBaseWorldChunk(request) {
   enrichPageRenderPixels(
     page,
     (cellX, cellZ) => generator.sampleTile(cellX, cellZ),
-    generator.getSurfaceMaskConfig?.(maskConfig) ?? maskConfig,
+    {
+      ...(generator.getSurfaceMaskConfig?.(maskConfig) ?? maskConfig),
+      worldSeed: generator.toMetadata?.().seed ?? 0,
+    },
     (tileId) => generator.getTileDefinition?.(tileId),
   );
   // enrichPageRenderPixels builds both tile + surface mask; split isn't

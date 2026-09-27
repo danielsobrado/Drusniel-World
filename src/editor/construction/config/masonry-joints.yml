@@ -40,3 +40,16 @@ styles:
       max: 0.030
 
     coarseLodMultiplier: 1.20
+
+  # Rounded stones nearly touch at their widest: the rolled rims open each
+  # joint into a much wider shadowed crevice, so the solved gap stays narrow.
+  rounded-fieldstone:
+    headJoint:
+      min: 0.008
+      max: 0.016
+
+    bedJoint:
+      min: 0.008
+      max: 0.014
+
+    coarseLodMultiplier: 1.10

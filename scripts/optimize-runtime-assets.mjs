@@ -18,6 +18,7 @@ import {
   ensureGltfpack,
 } from './lib/gltfpack-tool.mjs';
 import {
+  configuredCharacterDefinitions,
   configuredRuntimeScenes,
   runtimeAssetSources,
   runtimeAssetTextureTiers,
@@ -46,6 +47,12 @@ const wildlifeManifestPath = path.join(
   'assets',
   'extracted',
   'wildlife-manifest.json',
+);
+const characterManifestPath = path.join(
+  repositoryRoot,
+  'assets',
+  'extracted',
+  'character-manifest.json',
 );
 const runtimeManifestPath = path.join(
   repositoryRoot,
@@ -87,6 +94,9 @@ function requiredNamesByScene(editorConfig) {
     ...(assets.groundDetailVariants ?? []),
     ...(assets.aquaticVariants ?? []),
     ...(assets.wildlifeVariants ?? []),
+    // Characters name no extra nodes: verifyNames already requires every named
+    // source node — every bone — to survive optimization.
+    ...configuredCharacterDefinitions(editorConfig).map(({ scene }) => ({ scene })),
   ];
   const result = new Map();
   for (const definition of definitions) {
@@ -360,11 +370,15 @@ async function main() {
   const editorConfig = yaml.load(fs.readFileSync(editorConfigPath, 'utf8'));
   const extractionManifest = JSON.parse(fs.readFileSync(extractionManifestPath, 'utf8'));
   const wildlifeManifest = JSON.parse(fs.readFileSync(wildlifeManifestPath, 'utf8'));
+  const characterManifest = fs.existsSync(characterManifestPath)
+    ? JSON.parse(fs.readFileSync(characterManifestPath, 'utf8'))
+    : { assets: [] };
   const assets = runtimeAssetSources(
     repositoryRoot,
     editorConfig,
     extractionManifest,
     wildlifeManifest,
+    characterManifest,
   );
   const textureTiers = runtimeAssetTextureTiers(editorConfig);
   const expectedScenes = configuredRuntimeScenes(editorConfig);

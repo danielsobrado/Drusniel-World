@@ -52,7 +52,15 @@ const ALL_AUDIO_EVENTS = [
   "clod.lod.toggle",
   "clod.wireframe.toggle",
   "clod.locked-border.toggle",
-  "player.jump"
+  "player.jump",
+  "player.footstep",
+  "player.footstep.water",
+  "player.footstep.grass",
+  "player.footstep.leaves",
+  "player.footstep.mud",
+  "player.footstep.gravel",
+  "player.footstep.snow",
+  "player.footstep.sand"
 ];
 export {
   ALL_AUDIO_EVENTS

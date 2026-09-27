@@ -80,6 +80,7 @@ test('the set covers every kind, profile, top and bond the editor validates', ()
     'profile-round', 'profile-segmental', 'profile-pointed', 'profile-flat',
     'top-flat', 'top-crenellated', 'top-ruined', 'top-irregular',
     'bond-coursed-rubble', 'bond-ashlar', 'bond-random-rubble', 'bond-dry-stone',
+    'bond-rounded-fieldstone',
     'cut', 'duplicate', 'trash', 'move', 'rotate', 'scale', 'settings', 'link',
     'material', 'reset', 'reset-all', 'center', 'frame', 'close',
   ];

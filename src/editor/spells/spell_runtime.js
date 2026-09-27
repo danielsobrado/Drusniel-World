@@ -183,7 +183,9 @@ export function createSpellRuntime(deps) {
     const spellId = SPELL_IDS[numericCode - 1];
     if (!spellId) return false;
     event.preventDefault();
-    cast(spellId);
+    // Through the dock, so a key cast lights its slot and plays the cast sound
+    // exactly like a click; the dock calls back into `cast`.
+    menu.cast(spellId);
     return true;
   };
 

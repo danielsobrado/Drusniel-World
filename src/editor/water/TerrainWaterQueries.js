@@ -8,6 +8,7 @@ import {
 } from './WaterConstants.js';
 import { createWaterNavigationSample } from './WaterNavigation.js';
 import { createNoWaterSample, createWaterSample } from './WaterSample.js';
+import { seaSurfaceOffset } from './seaState.js';
 
 const WATER_TILE_ID = 0;
 
@@ -27,17 +28,27 @@ function assertTerrainView(terrainView) {
   assertWorldStore(terrainView.worldStore);
 }
 
-function toCanonicalWorldSample(sample) {
-  if (sample.kind === WATER_KIND_NONE || (sample.flowX === 0 && sample.flowZ === 0)) return sample;
+/**
+ * The water as the player meets it, in canonical space: flow turned to world
+ * axes, and the open sea riding the same swell the water material draws.
+ */
+function toCanonicalWorldSample(sample, worldX, worldZ) {
+  if (sample.kind === WATER_KIND_NONE) return sample;
+  const swell = sample.kind === WATER_KIND_OCEAN
+    ? seaSurfaceOffset(worldX, worldZ, sample.depth)
+    : 0;
+  if (swell === 0 && sample.flowX === 0 && sample.flowZ === 0) return sample;
   return createWaterSample({
     kind: sample.kind,
     bodyId: sample.bodyId,
     coverage: sample.coverage,
-    surfaceHeight: sample.surfaceHeight,
+    surfaceHeight: sample.surfaceHeight + swell,
     bedHeight: sample.bedHeight,
     shoreDistance: sample.shoreDistance,
     flowX: sample.flowX,
     flowZ: -sample.flowZ,
+    fall: sample.fall,
+    plunge: sample.plunge,
     flags: sample.flags,
   });
 }
@@ -81,6 +92,8 @@ export function sampleWorldStoreWater(worldStore, cellX, cellZ) {
     shoreDistance: addedWater ? 0 : base.shoreDistance,
     flowX: addedWater ? 0 : base.flowX,
     flowZ: addedWater ? 0 : base.flowZ,
+    fall: addedWater ? 0 : base.fall,
+    plunge: addedWater ? 0 : base.plunge,
     flags: base.flags,
   });
 }
@@ -95,7 +108,7 @@ export function getCanonicalWater(terrainView, worldX, worldZ) {
     terrainView.worldStore,
     worldX / tileSize,
     -worldZ / tileSize,
-  ));
+  ), worldX, worldZ);
 }
 
 export function getWorldWater(terrainView, renderX, renderZ) {

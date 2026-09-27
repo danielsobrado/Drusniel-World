@@ -73,12 +73,44 @@ export const CONSTRUCTION_MORTAR_PROFILES = Object.freeze({
     roughness: 1,
     metalness: 0,
   }),
+  // Mostly hidden by the rolled rims of rounded stones; warm and mid-dark so a
+  // joint reads as a shadowed crevice rather than a hole through the wall.
+  'rounded-fieldstone': Object.freeze({
+    color: '#6b655b',
+    roughness: 1,
+    metalness: 0,
+  }),
 });
 
 const DEFAULT_MORTAR_PROFILE = CONSTRUCTION_MORTAR_PROFILES['coursed-rubble'];
 
 export function mortarProfile(styleKey) {
   return CONSTRUCTION_MORTAR_PROFILES[styleKey] ?? DEFAULT_MORTAR_PROFILE;
+}
+
+/**
+ * Styles whose mortar core sits deeper than the shared `faceRecess`.
+ *
+ * A rounded stone's rim rolls back by its edge radius before it reaches the
+ * joint, so a core at the shared 5.5 cm would sit level with the bottom of the
+ * rims and read as a flat grey floor instead of a shadowed crevice.
+ */
+const FACE_RECESS_BY_STYLE = Object.freeze({
+  'rounded-fieldstone': 0.07,
+});
+
+const styleConfigCache = new Map();
+
+/** `CONSTRUCTION_MORTAR_CONFIG` with the style's own recess, if it has one. */
+export function mortarConfigForStyle(styleKey) {
+  const recess = FACE_RECESS_BY_STYLE[styleKey];
+  if (recess == null) return CONSTRUCTION_MORTAR_CONFIG;
+  let config = styleConfigCache.get(styleKey);
+  if (!config) {
+    config = Object.freeze({ ...CONSTRUCTION_MORTAR_CONFIG, faceRecess: recess });
+    styleConfigCache.set(styleKey, config);
+  }
+  return config;
 }
 
 export function overlapForCategory(category, config = CONSTRUCTION_MORTAR_CONFIG) {

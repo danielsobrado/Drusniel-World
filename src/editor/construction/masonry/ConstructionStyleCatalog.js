@@ -32,7 +32,22 @@
  * † `splitMaxDepth` 1: expected leaves ≈ 1 + c. Depth 2: ≈ 1 + c + c².
  * soft-limestone-rubble base cell 0.52 × 1.09 = 0.567 m² → ≈ 0.423 m² / leaf,
  * matching coursed-rubble's finished density budget.
+ * rounded-fieldstone base cell 0.5 × 0.95 = 0.475 m²; its 0.24 m split floor
+ * rejects most horizontal splits, so ≈ 1.25 leaves → ≈ 0.38 m² / leaf above
+ * its footing course, whose cells are 1.5× taller and 1.35× wider and rarely
+ * split.
  */
+
+/**
+ * The coping course every flat-topped wall used before styles could size it.
+ * `CurvedCoursePacker` falls back to these for style objects built outside the
+ * catalogue.
+ */
+export const DEFAULT_COPING = Object.freeze({
+  height: 0.16,
+  oversail: 1.14,
+  widthRatio: 1.15,
+});
 
 /** Shared defaults that reproduce the former hard-coded packer behaviour. */
 const DEFAULT_STYLE_TUNING = Object.freeze({
@@ -45,6 +60,20 @@ const DEFAULT_STYLE_TUNING = Object.freeze({
   depthScaleMin: 0.95,
   depthScaleMax: 0.985,
   faceOffsetAmplitude: 0.009,
+
+  // Shortest leaf a horizontal split may leave, in metres. Matches
+  // `CourseLattice`'s MIN_SPLIT_HEIGHT, which every style used before.
+  splitMinHeight: 0.14,
+
+  // How the stones are meshed. `soft` is the bevelled-prism path with optional
+  // relief and edge wear; `rounded` is the pillow-stone mesher.
+  geometry: 'soft',
+  // Top style a newly drawn wall starts with; null keeps the schema default.
+  defaultTop: null,
+  // Optional taller, wider, buried first course. Null means course 0 is an
+  // ordinary course sitting on grade, as it always was.
+  footing: null,
+  coping: DEFAULT_COPING,
 });
 
 /**
@@ -56,7 +85,13 @@ const STONE_PALETTE_KEYS = new Set([
   'limestone',
   'sandstone',
   'soft-limestone',
+  'warm-fieldstone',
 ]);
+
+const GEOMETRY_KINDS = new Set(['soft', 'rounded']);
+
+/** Mirrors `ConstructionSchema`'s top styles; the schema imports this module. */
+const TOP_STYLE_KEYS = new Set(['flat', 'irregular', 'crenellated', 'ruined']);
 
 function finiteInRange(value, label, minimum, maximum) {
   if (!Number.isFinite(value) || value < minimum || value > maximum) {
@@ -67,6 +102,39 @@ function finiteInRange(value, label, minimum, maximum) {
 
 function positive(value, label) {
   return finiteInRange(value, label, Number.EPSILON, Infinity);
+}
+
+function freezeFooting(footing, key) {
+  if (footing == null) return null;
+  if (typeof footing !== 'object') throw new Error(`${key} footing must be an object.`);
+  const resolved = {
+    heightRatio: footing.heightRatio,
+    widthRatio: footing.widthRatio,
+    splitChance: footing.splitChance ?? 0,
+    plinth: footing.plinth ?? 0,
+    burialMargin: footing.burialMargin ?? 0,
+    burialMax: footing.burialMax ?? 0,
+  };
+  finiteInRange(resolved.heightRatio, `${key} footing heightRatio`, 1, 3);
+  finiteInRange(resolved.widthRatio, `${key} footing widthRatio`, 0.5, 2.5);
+  finiteInRange(resolved.splitChance, `${key} footing splitChance`, 0, 1);
+  finiteInRange(resolved.plinth, `${key} footing plinth`, 0, 0.3);
+  finiteInRange(resolved.burialMargin, `${key} footing burialMargin`, 0, 1);
+  finiteInRange(resolved.burialMax, `${key} footing burialMax`, 0, 2);
+  if (resolved.burialMax < resolved.burialMargin) {
+    throw new Error(`${key} footing burialMax must be at least burialMargin.`);
+  }
+  return Object.freeze(resolved);
+}
+
+function freezeCoping(coping, key) {
+  if (coping === DEFAULT_COPING) return DEFAULT_COPING;
+  if (!coping || typeof coping !== 'object') throw new Error(`${key} coping must be an object.`);
+  const resolved = { ...DEFAULT_COPING, ...coping };
+  finiteInRange(resolved.height, `${key} coping height`, 0.05, 0.6);
+  finiteInRange(resolved.oversail, `${key} coping oversail`, 1, 1.6);
+  finiteInRange(resolved.widthRatio, `${key} coping widthRatio`, 0.8, 2);
+  return Object.freeze(resolved);
 }
 
 /**
@@ -100,6 +168,7 @@ export function defineConstructionStyle(input) {
   finiteInRange(style.jointTilt, `${style.key} jointTilt`, 0, 0.5);
   finiteInRange(style.splitChance, `${style.key} splitChance`, 0, 1);
   finiteInRange(style.splitMaxDepth, `${style.key} splitMaxDepth`, 0, 2);
+  finiteInRange(style.splitMinHeight, `${style.key} splitMinHeight`, 0.05, 1);
 
   finiteInRange(style.jointInsetMin, `${style.key} jointInsetMin`, 0, 0.1);
   finiteInRange(style.jointInsetMax, `${style.key} jointInsetMax`, 0, 0.1);
@@ -144,6 +213,17 @@ export function defineConstructionStyle(input) {
       `${style.key} references unknown stone palette ${style.stonePalette}.`,
     );
   }
+
+  if (!GEOMETRY_KINDS.has(style.geometry)) {
+    throw new Error(`${style.key} geometry must be one of ${[...GEOMETRY_KINDS].join(', ')}.`);
+  }
+
+  if (style.defaultTop != null && !TOP_STYLE_KEYS.has(style.defaultTop)) {
+    throw new Error(`${style.key} defaultTop ${style.defaultTop} is not a top style.`);
+  }
+
+  style.footing = freezeFooting(style.footing, style.key);
+  style.coping = freezeCoping(style.coping, style.key);
 
   return Object.freeze(style);
 }
@@ -233,9 +313,51 @@ export const CONSTRUCTION_STYLES = Object.freeze({
     jointTilt: 0.24,
     splitChance: 0.68,
   }),
+  /**
+   * Chunky rounded field stone in the reference game's manner: pillow-shaped
+   * units with rolled rims (meshed by `ConstructionPillowStoneMesher`), narrow
+   * joints that the rounding opens into dark crevices, a buried footing course
+   * of big stones, and a thick capstone course on a flat top.
+   */
+  'rounded-fieldstone': defineConstructionStyle({
+    key: 'rounded-fieldstone',
+    label: 'Rounded fieldstone',
+    courseHeight: 0.5,
+    targetWidth: 0.95,
+    minWidth: 0.3,
+    irregularity: 0.42,
+    detail: 2,
+    merlonSpacing: 1.2,
+    stonePalette: 'warm-fieldstone',
+    bedAmplitude: 0.1,
+    jointTilt: 0.12,
+    splitChance: 0.36,
+    splitMaxDepth: 1,
+    // A course split horizontally leaves two slabs a rounded rim turns into
+    // sausages; only let it happen where both halves stay chunky.
+    splitMinHeight: 0.24,
+    depthScaleMin: 0.97,
+    depthScaleMax: 1.0,
+    faceOffsetAmplitude: 0.022,
+    geometry: 'rounded',
+    defaultTop: 'flat',
+    footing: {
+      heightRatio: 1.5,
+      widthRatio: 1.35,
+      splitChance: 0.15,
+      plinth: 0.05,
+      burialMargin: 0.1,
+      burialMax: 0.6,
+    },
+    coping: {
+      height: 0.24,
+      oversail: 1.2,
+      widthRatio: 1.35,
+    },
+  }),
 });
 
-export const DEFAULT_CONSTRUCTION_STYLE_KEY = 'coursed-rubble';
+export const DEFAULT_CONSTRUCTION_STYLE_KEY = 'rounded-fieldstone';
 
 export const CONSTRUCTION_STYLE_KEYS = Object.freeze(Object.keys(CONSTRUCTION_STYLES));
 

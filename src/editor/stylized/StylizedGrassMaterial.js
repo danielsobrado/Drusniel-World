@@ -30,6 +30,8 @@ import {
   stylizedPathWearMask,
 } from './StylizedNoiseNodes.js';
 import { createSurfaceClassNodes } from './SurfaceMaskNodes.js';
+import { sampleWorldWindCanonical } from '../weather/wind/worldWindState.js';
+import { groundDeformationNode } from './deformation/groundDeformationNode.js';
 import { assignGrassMaterialData } from '../../render/postprocessing/PostProcessingMaterialData.js';
 
 const TWO_PI = Math.PI * 2;
@@ -98,6 +100,16 @@ export function createStylizedGrassMaterial({
   const trampleSample = texture(trampleTexture, localUv);
   const trampleDirection = trampleSample.xy.mul(2).sub(1);
   const trampleInfluence = trampleSample.z;
+  // Trodden by the player: footprints (groundDeformationState) press blades down,
+  // and they rise again as the print fades. Addressed from the chunk's whole-metre
+  // corner so it is exact at planet scale.
+  const trodden = groundDeformationNode(
+    vec2(
+      chunkCenter.x.sub(chunkWorldSize * 0.5),
+      chunkCenter.y.negate().sub(chunkWorldSize * 0.5),
+    ).round(),
+    localUv.mul(chunkWorldSize),
+  );
 
   const dirtSettings = {
     scale: float(config.dirt.scale),
@@ -128,6 +140,7 @@ export function createStylizedGrassMaterial({
   const dirt = max(pathWear.wear, stylizedDirtMask(worldXZ, dirtSettings));
   const shrink = oneMinus(dirt.mul(config.dirt.bladeCut))
     .mul(oneMinus(trampleInfluence.mul(config.rocks.flatten)))
+    .mul(oneMinus(trodden.mul(0.75)))
     .mul(surfaceClass.landGrass);
   // The blade's rank in its clump's length ordering, uniform in [0, 1).
   const lengthRank = bladeLengthPhase.add(parameters.w).fract();
@@ -173,7 +186,13 @@ export function createStylizedGrassMaterial({
   // `shrink`, so a blade pressed flat under a rock or cut back over dirt does not
   // keep swinging its tip out sideways at full reach.
   const curveOffset = rotateByClump(bladeCurve).mul(bladeLength).mul(shrink);
-  const windDirection = vec2(config.wind.direction[0], config.wind.direction[1]);
+  // Direction and strength come from the world wind field: gust fronts travel
+  // across the sward and curl as they go, instead of every blade in view obeying
+  // one fixed direction. `envelope` is 1 in the calm the tuning was authored in.
+  // `worldXZ` is canonical (it is built from the chunk's canonical centre).
+  const worldWind = sampleWorldWindCanonical(worldXZ);
+  const windDirection = worldWind.direction;
+  const gustScale = worldWind.envelope.clamp(0.35, 3.5);
   const windPerpendicular = vec2(windDirection.y.negate(), windDirection.x);
   // The gust is a world-space travelling wave, and at the configured frequency its
   // wavelength is on the order of ten metres — so every blade of a sub-metre clump
@@ -198,8 +217,9 @@ export function createStylizedGrassMaterial({
   const swing = primary.add(secondary).add(turbulence)
     .mul(tuned.windStrength)
     .mul(compliance)
-    .mul(heightMask);
-  const lean = tuned.windLean.mul(compliance).mul(heightMask);
+    .mul(heightMask)
+    .mul(gustScale);
+  const lean = tuned.windLean.mul(compliance).mul(heightMask).mul(gustScale);
 
   // Tip flutter: fast, small, and confined to the top of the blade. Running it
   // from the root would read as the whole blade vibrating instead of as a tip
@@ -225,7 +245,8 @@ export function createStylizedGrassMaterial({
       .mul(bladeWind.z)
       .mul(tuned.flutterStrength)
       .mul(flutterWeight)
-      .mul(flutterFade),
+      .mul(flutterFade)
+      .mul(gustScale.sqrt()),
   );
   const windOffset = windDirection.mul(swing.add(lean)).add(flutterOffset);
   const rockOffset = trampleDirection

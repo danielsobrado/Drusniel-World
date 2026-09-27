@@ -1,0 +1,331 @@
+import { projectedUvAt, WORKSHOP_UV_DENSITY } from '../../workshop/WorkshopProjectedUv.js';
+import { domeFactor } from '../masonry/StonePillowField.js';
+import {
+  createRoundedOutline,
+  normalizeConvexQuad,
+  outlinePointCount,
+} from './PillowStoneOutline.js';
+
+/**
+ * Mesh one rounded "pillow" stone into a `MasonryVertexWriter`.
+ *
+ * The stone is the face quad the packer solved, extruded through the wall and
+ * rounded three ways: its outline's corners are arcs in the face plane
+ * (`PillowStoneOutline`), each face rolls back into the joint along a quarter
+ * circle of the face's own rim radius, and each face domes outward, peaking at
+ * its centre. Rim rings come first, outermost (the silhouette) to innermost (the
+ * edge of the dome); dome rings follow, then a centre vertex. The front and back
+ * faces share their outermost ring's footprint, so the side band between them
+ * is a straight extrusion that reuses those rings' vertices.
+ *
+ * Normals are analytic — the rim's are exact, the dome's come from its radial
+ * slope — so there is no `computeVertexNormals` pass and no crease anywhere on
+ * a stone. Colour is baked per vertex by the caller's shader, and every vertex
+ * gets one, which is what a `vertexColors` material requires (CLAUDE.md).
+ *
+ * Three.js-free.
+ */
+
+const HALF_PI = Math.PI / 2;
+/** Attempts to fit a pillow into a quad too narrow for its sampled radii. */
+const FIT_ATTEMPTS = 4;
+const FIT_SHRINK = 0.7;
+
+/** Vertices and triangles one stone costs at a tessellation level. */
+export function estimatePillowStone({ arcSegments, rimRings, faceRings }) {
+  const pointCount = outlinePointCount(arcSegments);
+  const faceVertices = (rimRings + 1 + faceRings) * pointCount + 1;
+  const faceTriangles = (rimRings + faceRings) * pointCount * 2 + pointCount;
+  return {
+    pointCount,
+    vertices: faceVertices * 2,
+    triangles: faceTriangles * 2 + pointCount * 2,
+  };
+}
+
+/** Row-major rotation matrix for a Three.js 'XYZ' Euler triple. */
+export function eulerXYZMatrix([x, y, z]) {
+  const a = Math.cos(x);
+  const b = Math.sin(x);
+  const c = Math.cos(y);
+  const d = Math.sin(y);
+  const e = Math.cos(z);
+  const f = Math.sin(z);
+  return [
+    c * e, -c * f, d,
+    a * f + b * e * d, a * e - b * f * d, -b * c,
+    b * f - a * e * d, b * e + a * f * d, a * c,
+  ];
+}
+
+function scaleFace(face, scale) {
+  return { ...face, edgeRadius: face.edgeRadius * scale, bulge: face.bulge * scale };
+}
+
+/** Fit the outline, shrinking the whole pillow if its corners do not fit. */
+function fitOutline(ring, pillow, arcSegments) {
+  let scale = 1;
+  for (let attempt = 0; attempt < FIT_ATTEMPTS; attempt += 1) {
+    const outline = createRoundedOutline(ring, pillow.cornerRadius * scale, arcSegments);
+    if (outline) {
+      return {
+        outline,
+        front: scale === 1 ? pillow.front : scaleFace(pillow.front, scale),
+        back: scale === 1 ? pillow.back : scaleFace(pillow.back, scale),
+        shrunk: scale !== 1,
+      };
+    }
+    scale *= FIT_SHRINK;
+  }
+  return null;
+}
+
+function ringBounds(ring) {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of ring) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  return { minX, maxX, minY, maxY };
+}
+
+/**
+ * Per-stone vertex emitter: transform, drape, project UVs, shade, write.
+ * Kept as a closure over reusable scratch so a stone allocates nothing per
+ * vertex.
+ */
+function createEmitter(writer, {
+  matrix,
+  position,
+  bounds,
+  shade,
+  drape,
+  uvDensity,
+}) {
+  const color = [0, 0, 0];
+  const uv = [0, 0];
+  const ground = [0, 0];
+  const spanY = Math.max(1e-6, bounds.maxY - bounds.minY);
+  const [m0, m1, m2, m3, m4, m5, m6, m7, m8] = matrix;
+
+  return function emit(lx, ly, lz, lnx, lny, lnz, crevice) {
+    const px = m0 * lx + m1 * ly + m2 * lz + position[0];
+    let py = m3 * lx + m4 * ly + m5 * lz + position[1];
+    const pz = m6 * lx + m7 * ly + m8 * lz + position[2];
+    let nx = m0 * lnx + m1 * lny + m2 * lnz;
+    let ny = m3 * lnx + m4 * lny + m5 * lnz;
+    let nz = m6 * lnx + m7 * lny + m8 * lnz;
+    const aboveGrade = py;
+
+    if (drape) {
+      // A vertical shear by the ground along the wall: joints that two stones
+      // share land on the same ground height, so courses follow a slope without
+      // stepping at every head joint. Normals follow the shear's inverse
+      // transpose, n - slope * n.y * tangent.
+      drape.sample(px, pz, ground);
+      py += ground[0];
+      const slope = ground[1];
+      if (slope !== 0) {
+        const lift = slope * ny;
+        nx -= lift * drape.tangentX;
+        nz -= lift * drape.tangentZ;
+        const length = Math.hypot(nx, ny, nz) || 1;
+        nx /= length;
+        ny /= length;
+        nz /= length;
+      }
+    }
+
+    projectedUvAt(uv, 0, px, py, pz, nx, ny, nz, uvDensity);
+    shade(color, aboveGrade, (ly - bounds.minY) / spanY, crevice, ny);
+    return writer.vertex(px, py, pz, nx, ny, nz, color[0], color[1], color[2], uv[0], uv[1]);
+  };
+}
+
+/**
+ * Write one side's rim rings, dome rings and centre. Returns the index of each
+ * vertex of the outermost ring, which the side band reuses.
+ */
+function writeFace(writer, emit, {
+  outline,
+  face,
+  sign,
+  halfDepth,
+  rimRings,
+  faceRings,
+  centroid,
+  halfWidth,
+  halfHeight,
+  creviceScale,
+}) {
+  const pointCount = outline.pointCount;
+  const edgeRadius = Math.min(face.edgeRadius, outline.cornerRadius);
+  const bulge = face.bulge;
+  const summit = halfDepth + bulge;
+  const rings = [];
+
+  for (let ring = 0; ring <= rimRings; ring += 1) {
+    const angle = (HALF_PI * ring) / rimRings;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    const inset = edgeRadius * (1 - cosine);
+    const height = halfDepth - edgeRadius + edgeRadius * sine;
+    const crevice = Math.min(1, (summit - height) / creviceScale);
+    const indices = new Array(pointCount);
+    for (let point = 0; point < pointCount; point += 1) {
+      indices[point] = emit(
+        outline.pointX(point, inset),
+        outline.pointY(point, inset),
+        sign * height,
+        cosine * outline.normalX(point),
+        cosine * outline.normalY(point),
+        sign * sine,
+        crevice,
+      );
+    }
+    rings.push(indices);
+  }
+
+  // The dome: rings scaled toward the centroid from the rim's innermost ring.
+  // Height follows bulge * (1 - rho^2)^2, flat where it meets the rim so there
+  // is no crease ring, and tilted/twisted per face by `domeFactor`.
+  const [cx, cy] = centroid;
+  for (let ring = 1; ring <= faceRings; ring += 1) {
+    const rho = 1 - ring / (faceRings + 1);
+    const falloff = 1 - rho * rho;
+    const profile = falloff * falloff;
+    const slopeProfile = -4 * rho * falloff;
+    const indices = new Array(pointCount);
+    for (let point = 0; point < pointCount; point += 1) {
+      const edgeX = outline.pointX(point, edgeRadius);
+      const edgeY = outline.pointY(point, edgeRadius);
+      const radialX = edgeX - cx;
+      const radialY = edgeY - cy;
+      const radius = Math.hypot(radialX, radialY) || 1e-6;
+      const x = cx + radialX * rho;
+      const y = cy + radialY * rho;
+      const dome = domeFactor(face, (x - cx) / halfWidth, (y - cy) / halfHeight);
+      const lift = bulge * dome * profile;
+      const slope = (bulge * dome * slopeProfile) / radius;
+      const normalLength = Math.hypot(slope, 1);
+      indices[point] = emit(
+        x,
+        y,
+        sign * (halfDepth + lift),
+        (-slope * radialX) / radius / normalLength,
+        (-slope * radialY) / radius / normalLength,
+        sign / normalLength,
+        Math.max(0, (bulge - lift) / creviceScale),
+      );
+    }
+    rings.push(indices);
+  }
+
+  const summitLift = bulge * domeFactor(face, 0, 0);
+  const center = emit(cx, cy, sign * (halfDepth + summitLift), 0, 0, sign, 0);
+
+  for (let band = 0; band + 1 < rings.length; band += 1) {
+    const outer = rings[band];
+    const inner = rings[band + 1];
+    for (let point = 0; point < pointCount; point += 1) {
+      const next = (point + 1) % pointCount;
+      if (sign > 0) {
+        writer.triangle(outer[point], outer[next], inner[next]);
+        writer.triangle(outer[point], inner[next], inner[point]);
+      } else {
+        writer.triangle(outer[point], inner[next], outer[next]);
+        writer.triangle(outer[point], inner[point], inner[next]);
+      }
+    }
+  }
+  const last = rings[rings.length - 1];
+  for (let point = 0; point < pointCount; point += 1) {
+    const next = (point + 1) % pointCount;
+    if (sign > 0) writer.triangle(last[point], last[next], center);
+    else writer.triangle(last[point], center, last[next]);
+  }
+  return rings[0];
+}
+
+/**
+ * @param writer `MasonryVertexWriter`
+ * @param stone `{ corners, depth, position, rotation, pillow }` — `corners` in
+ *   the stone's face plane, `position` in module space with `y` above grade.
+ * @param options.lod `{ arcSegments, rimRings, faceRings }`
+ * @param options.shade from `createRoundedStoneShader`
+ * @param options.creviceReach crevice saturation depth in (edge radius + bulge)
+ * @param options.drape optional `{ tangentX, tangentZ, sample(x, z, out) }`
+ *   writing ground height and along-wall slope into `out[0]`, `out[1]`
+ * @returns `{ vertices, triangles, shrunk }`, or null when the quad cannot be
+ *   rounded and the caller must fall back to a prism.
+ */
+export function writePillowStone(writer, stone, {
+  lod,
+  shade,
+  creviceReach = 1,
+  drape = null,
+  uvDensity = WORKSHOP_UV_DENSITY,
+}) {
+  const ring = normalizeConvexQuad(stone.corners);
+  if (!ring || !(stone.depth > 0)) return null;
+  const fitted = fitOutline(ring, stone.pillow, lod.arcSegments);
+  if (!fitted) return null;
+
+  const { outline } = fitted;
+  const bounds = ringBounds(ring);
+  const halfDepth = stone.depth / 2;
+  const innerBounds = {
+    halfWidth: Math.max(1e-4, (bounds.maxX - bounds.minX) / 2 - fitted.front.edgeRadius),
+    halfHeight: Math.max(1e-4, (bounds.maxY - bounds.minY) / 2 - fitted.front.edgeRadius),
+  };
+  const estimate = estimatePillowStone(lod);
+  writer.reserve(estimate.vertices, estimate.triangles * 3);
+  const startVertices = writer.vertexCount;
+  const startIndices = writer.indexCount;
+
+  const emit = createEmitter(writer, {
+    matrix: eulerXYZMatrix(stone.rotation),
+    position: stone.position,
+    bounds,
+    shade,
+    drape,
+    uvDensity,
+  });
+
+  const sides = [];
+  for (const [sign, face] of [[1, fitted.front], [-1, fitted.back]]) {
+    const creviceScale = Math.max(1e-4, creviceReach * (face.edgeRadius + face.bulge));
+    sides.push(writeFace(writer, emit, {
+      outline,
+      face,
+      sign,
+      halfDepth,
+      rimRings: lod.rimRings,
+      faceRings: lod.faceRings,
+      centroid: outline.centroid,
+      halfWidth: innerBounds.halfWidth,
+      halfHeight: innerBounds.halfHeight,
+      creviceScale,
+    }));
+  }
+
+  // Side band: the front and back silhouettes share a footprint, so this is a
+  // straight extrusion through the wall, wound to face outward.
+  const [front, back] = sides;
+  for (let point = 0; point < outline.pointCount; point += 1) {
+    const next = (point + 1) % outline.pointCount;
+    writer.triangle(front[point], back[point], back[next]);
+    writer.triangle(front[point], back[next], front[next]);
+  }
+
+  return {
+    vertices: writer.vertexCount - startVertices,
+    triangles: (writer.indexCount - startIndices) / 3,
+    shrunk: fitted.shrunk,
+  };
+}

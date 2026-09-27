@@ -6,9 +6,11 @@ import {
   float,
   max,
   mix,
+  modelWorldMatrix,
   normalView,
   normalWorld,
   oneMinus,
+  positionGeometry,
   positionLocal,
   positionView,
   positionViewDirection,
@@ -20,10 +22,12 @@ import {
   uv,
   vec2,
   vec3,
+  vec4,
 } from 'three/tsl';
 import { authoredTexture } from './AuthoredTextureNode.js';
 import { stylizedFbm } from './StylizedNoiseNodes.js';
 import { registerTreeWindTime } from './forest/TreeWindTime.js';
+import { sampleWorldWind } from '../weather/wind/worldWindState.js';
 import { assignTreeFoliageMaterialData } from '../../render/postprocessing/PostProcessingMaterialData.js';
 
 const TWO_PI = Math.PI * 2;
@@ -59,14 +63,21 @@ export function createStylizedLeafMaterial({
   preserveSourceColor = false,
 }) {
   registerTreeWindTime(config, time);
+  // Height within the crown from the prototype's own geometry: `positionLocal`
+  // here is already placed by the instance matrix (see preInstancePosition), so
+  // against the prototype bounds it would read every leaf as the crown top.
   const normalizedHeight = clamp(
-    positionLocal.y.sub(bounds.minY).div(Math.max(0.001, bounds.maxY - bounds.minY)),
+    positionGeometry.y.sub(bounds.minY).div(Math.max(0.001, bounds.maxY - bounds.minY)),
     0,
     1,
   );
   const heightMask = normalizedHeight.mul(normalizedHeight);
   const localXZ = positionLocal.xz;
-  const windDirection = vec2(config.wind.direction[0], config.wind.direction[1]);
+  // Direction and gusts from the shared world wind field, like the grass below,
+  // so a gust front bends the canopy and the sward together.
+  const worldWind = sampleWorldWind(modelWorldMatrix.mul(vec4(positionLocal, 1)).xz);
+  const windDirection = worldWind.direction;
+  const gustScale = worldWind.envelope.clamp(0.35, 3.5);
   const windPerpendicular = vec2(windDirection.y.negate(), windDirection.x);
   const phase = attribute('instanceDither', 'vec3').y.mul(TWO_PI);
   const primary = sin(dot(localXZ, windDirection).mul(config.wind.frequency)
@@ -84,7 +95,7 @@ export function createStylizedLeafMaterial({
   // Soft stiffness from per-instance morphology.z (trunk scale channel): thicker /
   // flare trunks sway less. Keeps wind response in the same range as clod trees.
   const stiffness = clamp(attribute('instanceMorphology', 'vec3').z, 0.65, 1.35);
-  const windScale = float(1).div(stiffness).mul(0.95);
+  const windScale = float(1).div(stiffness).mul(0.95).mul(gustScale);
   const wave = primary.add(flutter).add(turbulence);
   const sway = windDirection.mul(wave.mul(config.trees.windStrength).mul(heightMask).mul(windScale));
   const dip = wave.abs().mul(config.trees.windStrength).mul(config.trees.dip).mul(heightMask).mul(windScale);

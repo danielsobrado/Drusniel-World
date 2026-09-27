@@ -94,6 +94,39 @@ test('a shell section spans only its own arc', () => {
   whole.dispose();
 });
 
+test('shell faces carry wall-local metre UVs and a flat top', () => {
+  const record = wallRecord();
+  const sampled = sampleShellPath(record);
+  const geometry = buildShellGeometry(sampled.points, {
+    record,
+    terrainView: createTerrainView(),
+    origin: { x: 0, z: 0 },
+  });
+  const uv = geometry.getAttribute('uv');
+  const normal = geometry.getAttribute('normal');
+  const position = geometry.getAttribute('position');
+  assert.ok(uv, 'the stone detail needs UVs');
+  assert.equal(uv.count, position.count);
+
+  let maxU = -Infinity;
+  let maxV = -Infinity;
+  let topVertices = 0;
+  let sideVertices = 0;
+  for (let index = 0; index < uv.count; index += 1) {
+    maxU = Math.max(maxU, uv.getX(index));
+    maxV = Math.max(maxV, uv.getY(index));
+    if (normal.getY(index) > 0.99) topVertices += 1;
+    if (Math.abs(normal.getY(index)) < 0.01) sideVertices += 1;
+  }
+  // u is arc length and v climbs the face then crosses the top, in metres.
+  assert.ok(Math.abs(maxU - sampled.totalDistance) < 1e-6, `${maxU} vs ${sampled.totalDistance}`);
+  assert.ok(Math.abs(maxV - (record.dimensions.height + record.dimensions.thickness)) < 1e-6);
+  // Faces no longer share vertices, so the top is lit as a top.
+  assert.ok(topVertices >= sampled.points.length * 2, `${topVertices} top vertices`);
+  assert.ok(sideVertices >= sampled.points.length * 4, `${sideVertices} side vertices`);
+  geometry.dispose();
+});
+
 test('a far module shell never covers a near module that is drawing masonry', () => {
   const store = new ConstructionStore();
   const view = new ConstructionView({

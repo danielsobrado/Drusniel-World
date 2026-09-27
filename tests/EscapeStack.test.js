@@ -139,7 +139,9 @@ test('dispose detaches the listener and drops every handler', () => {
   const target = createTarget();
   const stack = new EscapeStack({ target });
   stack.register(ESCAPE_PRIORITY.selection, () => true);
-  assert.equal(target.listenerCount, 1);
+  // The capture-phase keydown listener, plus the pagehide listener that
+  // disposes the stack when the page goes away.
+  assert.equal(target.listenerCount, 2);
   stack.dispose();
   assert.equal(target.listenerCount, 0);
   assert.equal(stack.handlers.length, 0);

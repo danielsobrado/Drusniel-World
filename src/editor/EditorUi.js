@@ -1855,8 +1855,8 @@ export class EditorUi {
         Math.max(2, Math.ceil(definition.footprint.depth * scale)),
       );
     }
-    context.strokeStyle = '#f0cf68';
-    context.strokeRect(MINIMAP_SIZE / 2 - 2, MINIMAP_SIZE / 2 - 2, 4, 4);
+    // No centre marker in the bitmap: the walking HUD keeps the player centred
+    // between redraws, so a mark at the bitmap's centre would drift off them.
     this.renderMinimapBurgs();
   }
 

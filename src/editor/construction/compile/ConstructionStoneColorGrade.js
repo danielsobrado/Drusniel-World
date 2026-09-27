@@ -33,17 +33,50 @@ export function applyConstructionStoneColorGrade(geometry, {
   category = 'field',
   hasCustomStoneMaterial = false,
 } = {}) {
-  const profile = constructionStoneColorProfile(styleKey);
   const color = geometry?.getAttribute?.('color');
+  if (!color) return geometry;
+  const multipliers = constructionStoneColorMultipliers({
+    styleKey,
+    seed,
+    stableIndex,
+    category,
+    hasCustomStoneMaterial,
+  });
+  if (!multipliers) return geometry;
+
+  for (let vertex = 0; vertex < color.count; vertex += 1) {
+    color.setXYZ(
+      vertex,
+      Math.max(0, Math.min(1, color.getX(vertex) * multipliers[0])),
+      Math.max(0, Math.min(1, color.getY(vertex) * multipliers[1])),
+      Math.max(0, Math.min(1, color.getZ(vertex) * multipliers[2])),
+    );
+  }
+  color.needsUpdate = true;
+  return geometry;
+}
+
+/**
+ * The uniform RGB multipliers `applyConstructionStoneColorGrade` applies to one
+ * stone, or null when the style, category or a custom material disables it.
+ * Exposed for meshers that write vertex colours into typed arrays directly.
+ */
+export function constructionStoneColorMultipliers({
+  styleKey,
+  seed,
+  stableIndex,
+  category = 'field',
+  hasCustomStoneMaterial = false,
+} = {}) {
+  const profile = constructionStoneColorProfile(styleKey);
   if (
-    !color
-    || !profile.enabled
+    !profile.enabled
     || hasCustomStoneMaterial
     || !(profile.strength > 0)
-  ) return geometry;
+  ) return null;
 
   const categoryAmount = categoryStrength(profile, category);
-  if (!(categoryAmount > 0)) return geometry;
+  if (!(categoryAmount > 0)) return null;
 
   const colorHash = mixSeed((seed >>> 0) ^ COLOR_HASH, stableIndex >>> 0);
   const valueHash = mixSeed((seed >>> 0) ^ VALUE_HASH, stableIndex >>> 0);
@@ -63,16 +96,5 @@ export function applyConstructionStoneColorGrade(geometry, {
     * categoryAmount
     * lerp(0.72, 1, strengthLane);
   const value = lerp(profile.value.min, profile.value.max, lane(valueHash, 8));
-  const multipliers = target.map((channel) => lerp(1, channel, amount) * value);
-
-  for (let vertex = 0; vertex < color.count; vertex += 1) {
-    color.setXYZ(
-      vertex,
-      Math.max(0, Math.min(1, color.getX(vertex) * multipliers[0])),
-      Math.max(0, Math.min(1, color.getY(vertex) * multipliers[1])),
-      Math.max(0, Math.min(1, color.getZ(vertex) * multipliers[2])),
-    );
-  }
-  color.needsUpdate = true;
-  return geometry;
+  return target.map((channel) => lerp(1, channel, amount) * value);
 }

@@ -46,6 +46,7 @@ import { TreeImpostorBaker } from './impostor/TreeImpostorBaker.js';
 import { TreeImpostorBatch } from './impostor/TreeImpostorBatch.js';
 import { createTreeImpostorSourceSignature } from './impostor/TreeImpostorManifest.js';
 import { registerPrototypeIndices } from './BiomeAssetPalette.js';
+import { applyCloudShadow } from './CloudShadow.js';
 
 function firstMaterial(mesh, name) {
   return materialList(mesh).find((material) => material?.name === name) ?? materialList(mesh)[0];
@@ -435,7 +436,7 @@ export class StylizedTreeView {
         // collar is sized from all trunk/branch bounds, which can turn a spreading
         // broadleaf into a conspicuous polygonal plinth.
         if (!preserveSourceAppearance) attachRootCollar(parts);
-        if (parts.length > 0) this.prototypes.push(parts);
+        if (parts.length > 0) this.prototypes.push(this.withCloudShadow(parts));
       }
     }
     return this.prototypes.length - firstIndex;
@@ -484,9 +485,15 @@ export class StylizedTreeView {
       }));
       // No attachRootCollar here: these prototypes already carry a root flare,
       // and the collar it merges is indexed while these are de-indexed.
-      this.prototypes.push(parts);
+      this.prototypes.push(this.withCloudShadow(parts));
     }
     return generated.map((prototype) => prototype.speciesId);
+  }
+
+  /** Parts whose materials take cloud shadows; the LOD clones inherit it. */
+  withCloudShadow(parts) {
+    for (const part of parts) applyCloudShadow(part.material, this.config.sky);
+    return parts;
   }
 
   createRenderResources() {
@@ -614,6 +621,7 @@ export class StylizedTreeView {
       name: `stylized-pine-impostor-${atlas.prototypeIndex}`,
       gpuCulling: this.config.lod?.gpuCulling?.enabled !== false,
     }));
+    for (const batch of this.impostorBatches) applyCloudShadow(batch.batch.material, this.config.sky);
     this.impostorVersion += 1;
     this.lastUpdateKey = null;
     PerfCounters.set('treeImpostorAtlasBytes', this.impostorAtlases.reduce((total, atlas) => (

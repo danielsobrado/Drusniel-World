@@ -41,6 +41,7 @@ import { parseQaParams } from './editor/performance/qa/parseQaParams.js';
 import { PlayerController } from './editor/player/PlayerController.js';
 import { ViewModeController } from './editor/player/ViewModeController.js';
 import { ViewModeUi } from './editor/player/ViewModeUi.js';
+import { createHudMinimapSource } from './editor/player/hud/createHudMinimapSource.js';
 import { PLAYER_MODE_EDIT, PLAYER_MODE_WALK } from './editor/player/playerConstants.js';
 import { isTreeImpostorBakeMode } from './editor/stylized/impostorBakeMode.js';
 import { StylizedSurfaceView } from './editor/stylized/StylizedSurfaceView.js';
@@ -54,7 +55,36 @@ import {
 import { attachSpellHotkeys, createSpellRuntime } from './editor/spells/spell_runtime.js';
 import { attachCaptureHotkey } from './editor/input/attachCaptureHotkey.js';
 import { ThirdPersonCamera } from './editor/player/ThirdPersonCamera.js';
-import { CharacterView } from './editor/character/CharacterView.js';
+import { createCharacterView } from './editor/character/createCharacterView.js';
+import { audioBus, emitAudio } from './editor/audio/index.js';
+import { WorldSoundscape } from './editor/audio/world_soundscape.js';
+import { SurfaceWetness } from './editor/weather/surfaceWetness.js';
+import { SkyLookController } from './editor/stylized/sky/SkyLookController.js';
+import { SKY_PRESETS } from './editor/stylized/sky/SkyPresets.js';
+import { SnowCountryWeight } from './editor/stylized/sky/SnowCountryWeight.js';
+import { FallingLeaves } from './editor/stylized/leaves/FallingLeaves.js';
+import { SnowPowderKicks } from './editor/stylized/powder/SnowPowderKicks.js';
+import { WorldAmbience } from './editor/stylized/ambient/WorldAmbience.js';
+import { HeroSelectUi } from './editor/character/HeroSelectUi.js';
+import { updateCharacterOcclusion } from './editor/character/CharacterOcclusion.js';
+import { WorldWindPass } from './editor/weather/wind/WorldWindPass.js';
+import { WaterfallMist } from './editor/stylized/mist/WaterfallMist.js';
+import { createRiverFallSiteSource } from './editor/water/RiverFallSites.js';
+import { resolveWaterQualityFeatures } from './editor/water/WaterQuality.js';
+import { configureSea, updateSeaState } from './editor/water/seaState.js';
+import { classifyFootstepSurface } from './editor/audio/footstep_surface.js';
+import { snowAtPoint } from './editor/materials/SnowAccumulation.js';
+import { terrainBakeMacroSeed } from './editor/materials/TerrainBakeNoise.js';
+import {
+  stampFootprint,
+  updateGroundDeformation,
+} from './editor/stylized/deformation/groundDeformationState.js';
+import { SwitchableCharacterView } from './editor/character/SwitchableCharacterView.js';
+import {
+  resolveHeroPreference,
+  storeHeroPreference,
+} from './editor/character/heroPreference.js';
+import { PROCEDURAL_HERO_ID } from './config/validateCharacterConfig.js';
 
 /** How long the drow holds the casting stance after a spell fires. */
 const SPELL_CAST_POSE_MS = 520;
@@ -180,7 +210,9 @@ async function startEditor() {
     heightScale: config.world.heightScale,
     seaLevel: config.world.seaLevel,
   });
-  const surfaceMaskConfig = createSurfaceMaskConfig(config.stylizedSurface);
+  const surfaceMaskConfig = createSurfaceMaskConfig(config.stylizedSurface, {
+    tileSize: config.map.tileSize,
+  });
   const vegetationScatterConfig = createVegetationScatterConfig(
     config.stylizedSurface,
     config.map.tileSize,
@@ -386,6 +418,14 @@ async function startEditor() {
     return;
   }
 
+  const SKY_PRESET_STORAGE_KEY = 'drusniel_sky_preset';
+  const storedSkyPreset = (() => {
+    try {
+      return window.localStorage.getItem(SKY_PRESET_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  })();
   const macroFarTerrain = new MacroFarTerrainView({
     scene: terrainView.scene,
     worldStore,
@@ -678,7 +718,11 @@ async function startEditor() {
     },
   });
   ui.attachWorkshop(proceduralWorkshop);
-  const viewModeUi = new ViewModeUi({ root, controller: viewModeController });
+  const viewModeUi = new ViewModeUi({
+    root,
+    controller: viewModeController,
+    hud: { minimap: createHudMinimapSource({ ui, controller, tileMap }) },
+  });
 
   let farViewActive = false;
   const applyViewDistance = (active) => {
@@ -718,6 +762,107 @@ async function startEditor() {
     weatherWindZ: config.weather?.windZ ?? 0.18,
   };
   const weatherEnabled = config.weather?.enabled !== false;
+  // One advected gust field for everything that sways, rendered once per frame
+  // into a small camera-centred texture (docs/plans/grass-test-merge-plan-2026-09-24.md §4.1).
+  const worldWind = new WorldWindPass({
+    config: config.weather?.windField ?? {},
+    defaultDirection: config.stylizedSurface?.wind?.direction ?? [1, 0],
+  });
+  let lastWindTimestamp = null;
+  const waterVisual = config.stylizedSurface.water;
+  configureSea(waterVisual.enabled !== false && resolveWaterQualityFeatures(waterVisual).flow
+    ? waterVisual.sea
+    : null);
+  // How stormy the sea is: rain roughens it, a storm fully.
+  const seaStormForWeather = () => {
+    if (!weatherEnabled) return 0;
+    const intensity = Math.max(0, Math.min(1, weatherSettings.weatherIntensity ?? 0));
+    if (weatherSettings.weatherMode === 'storm') return intensity;
+    if (weatherSettings.weatherMode === 'rain' || weatherSettings.weatherMode === 'wind') {
+      return intensity * 0.5;
+    }
+    return 0;
+  };
+  const fallSites = createRiverFallSiteSource(() => worldStore.generator);
+  const waterfallMist = new WaterfallMist({
+    scene: terrainView.scene,
+    floatingOrigin: terrainView.floatingOrigin,
+    getSites: fallSites,
+    getSkyView: () => stylizedSurface.skyView ?? null,
+    config: waterVisual.waterfall,
+    enabled: waterVisual.enabled !== false && waterVisual.foam.enabled
+      && resolveWaterQualityFeatures(waterVisual).foam,
+  });
+  // Rain on the ground and wind in the open, for the ambient beds; the sea
+  // reads the same rain.
+  const weatherAudioLevels = () => {
+    const active = weatherEnabled && weatherSettings.weatherMode !== 'off';
+    const intensity = active ? Math.max(0, Math.min(1, weatherSettings.weatherIntensity ?? 0)) : 0;
+    const mode = weatherSettings.weatherMode;
+    return {
+      rain: mode === 'rain' || mode === 'storm' ? intensity : 0,
+      wind: mode === 'wind' || mode === 'storm' ? intensity : 0.25,
+    };
+  };
+  const surfaceWetness = new SurfaceWetness(config.stylizedSurface.wetness);
+  let lastWetnessSeconds = null;
+  // Time of day, greyed by the weather; the far haze follows the fog colour.
+  const skyLooks = stylizedSurface.skyView
+    ? new SkyLookController({
+      skyView: stylizedSurface.skyView,
+      preset: storedSkyPreset ?? undefined,
+      onLook: (look) => macroFarTerrain.setFogColor(look.fogColor),
+    })
+    : null;
+  const fallingLeaves = new FallingLeaves({
+    scene: terrainView.scene,
+    config: config.stylizedSurface.fallingLeaves,
+    getTile: (cellX, cellZ) => worldStore.getTile(cellX, cellZ),
+    getTileSize: () => config.map.tileSize,
+    getOrigin: () => terrainView.floatingOrigin.getState(),
+  });
+  const snowCountry = new SnowCountryWeight({
+    getTile: (cellX, cellZ) => worldStore.getTile(cellX, cellZ),
+    getTileSize: () => config.map.tileSize,
+    getOrigin: () => terrainView.floatingOrigin.getState(),
+    getGroundHeight: (x, z) => terrainView.getCanonicalHeight(x, z),
+    snowLine: config.stylizedSurface.materialBake.classification.snowLine,
+    snowFade: config.stylizedSurface.materialBake.classification.snowFade,
+  });
+  const worldAmbience = new WorldAmbience({
+    settings: config.stylizedSurface.ambientEffects,
+    terrainView,
+    getGenerator: () => worldStore.generator,
+    getTile: (cellX, cellZ) => worldStore.getTile(cellX, cellZ),
+    tileSize: config.map.tileSize,
+    skyView: stylizedSurface.skyView ?? null,
+    defaultWindDirection: config.stylizedSurface?.wind?.direction ?? [1, 0],
+    snowLine: config.stylizedSurface.materialBake.classification.snowLine,
+  });
+  const snowPowder = new SnowPowderKicks({
+    scene: terrainView.scene,
+    config: config.stylizedSurface.snowPowder,
+  });
+  const weatherOvercast = () => {
+    if (!weatherEnabled) return 0;
+    const intensity = Math.max(0, Math.min(1, weatherSettings.weatherIntensity ?? 0));
+    const share = { rain: 0.8, storm: 1, snow: 0.6, sandstorm: 0.4 }[weatherSettings.weatherMode] ?? 0;
+    return share * intensity;
+  };
+  const worldSoundscape = new WorldSoundscape({
+    audioBus,
+    getTile: (cellX, cellZ) => worldStore.getTile(cellX, cellZ),
+    getTileSize: () => config.map.tileSize,
+    getSeaLevel: () => worldStore.generator?.seaLevel ?? 0,
+    getOrigin: () => terrainView.floatingOrigin.getState(),
+    getWeather: weatherAudioLevels,
+    isNight: () => Boolean(skyLooks?.night),
+    getWaterKind: (x, z) => worldStore.generator?.sampleWater?.(x / config.map.tileSize, -z / config.map.tileSize)?.kind ?? 0,
+    getSnowCountry: () => snowCountry.value,
+    isUnderwater: () => viewModeController.mode === PLAYER_MODE_WALK
+      && Boolean(playerController.getStatus().headSubmerged),
+    getFallSites: fallSites,
+  });
   const weatherController = weatherEnabled
     ? createWeatherController({
       scene: terrainView.scene,
@@ -736,21 +881,99 @@ async function startEditor() {
     );
   }
 
+  const heroStorage = (() => {
+    try {
+      return window.localStorage;
+    } catch {
+      return null;
+    }
+  })();
+  const createHeroView = (heroId) => createCharacterView({
+    scene: terrainView.scene,
+    terrain: characterGround,
+    sunDirection: terrainView.godRays.sunDirection,
+    config: {
+      ...(config.character ?? {}),
+      hero: heroId,
+      runSpeed: config.player.walkSpeed * config.player.runMultiplier,
+    },
+    getWeatherSettings: () => ({
+      enabled: weatherEnabled && weatherSettings.weatherMode !== 'off',
+      intensity: weatherSettings.weatherIntensity,
+      windX: weatherSettings.weatherWindX,
+      windZ: weatherSettings.weatherWindZ,
+    }),
+    loader: stylizedSurface.sceneAssets?.loader ?? null,
+    renderer: terrainView.renderer,
+    baseUrl: import.meta.env.BASE_URL,
+  });
   const characterView = characterEnabled
-    ? new CharacterView({
-      scene: terrainView.scene,
-      terrain: characterGround,
-      sunDirection: terrainView.godRays.sunDirection,
-      config: {
-        ...(config.character ?? {}),
-        runSpeed: config.player.walkSpeed * config.player.runMultiplier,
-      },
-      getWeatherSettings: () => ({
-        enabled: weatherEnabled && weatherSettings.weatherMode !== 'off',
-        intensity: weatherSettings.weatherIntensity,
-        windX: weatherSettings.weatherWindX,
-        windZ: weatherSettings.weatherWindZ,
+    ? new SwitchableCharacterView({
+      createView: createHeroView,
+      heroId: resolveHeroPreference(config.character, {
+        search: window.location.search,
+        storage: heroStorage,
       }),
+    })
+    : null;
+  // Footfalls sound once the hero's stride lands them; the variant alternates
+  // by foot and cycles so a run of steps never repeats one sound exactly.
+  let footstepCount = 0;
+  // What a foot lands on, for its sound: the same snow the terrain draws, the
+  // tile's biome, and the beach band above the sea.
+  const footstepSurface = (footstep, canonicalX, canonicalZ) => {
+    const tileSize = config.map.tileSize;
+    const generator = worldStore.generator;
+    const bake = config.stylizedSurface.materialBake;
+    const tileId = worldStore.getTile(Math.floor(canonicalX / tileSize), Math.floor(-canonicalZ / tileSize));
+    const snow = snowAtPoint({
+      height: footstep.y,
+      slope: 0,
+      dx: 0,
+      dz: 0,
+      curvature: 0,
+      tileId,
+      worldX: canonicalX,
+      worldZ: canonicalZ,
+    }, bake.classification, terrainBakeMacroSeed(bake.macro.seedOffset, generator?.toMetadata?.().seed));
+    return classifyFootstepSurface({
+      inWater: footstep.surface === 'water',
+      tileId,
+      heightAboveSea: footstep.y - (generator?.seaLevel ?? 0),
+      snow,
+    });
+  };
+  const detachFootsteps = characterView?.onFootstep((footstep) => {
+    footstepCount += 1;
+    const origin = terrainView.floatingOrigin.getState();
+    const canonicalX = footstep.x + origin.x;
+    const canonicalZ = footstep.z + origin.z;
+    if (footstep.surface !== 'water') {
+      stampFootprint(canonicalX, canonicalZ, footstep.facing ?? 0);
+    }
+    const surface = footstepSurface(footstep, canonicalX, canonicalZ);
+    if (surface === 'snow') snowPowder.kick(footstep);
+    emitAudio(`player.footstep.${surface}`, {
+      variant: (footstepCount % 3) + (footstep.foot === 'left' ? 0 : 0.5),
+    });
+  }) ?? null;
+  const heroSelectUi = characterView
+    ? new HeroSelectUi({
+      root,
+      heroes: [
+        ...Object.entries(config.character?.roster ?? {}).map(([id, entry]) => ({
+          id,
+          name: entry.name ?? id,
+          title: entry.title,
+        })),
+        { id: PROCEDURAL_HERO_ID, name: 'Drow', title: 'Procedural, cloth-simulated' },
+      ],
+      heroId: characterView.heroId,
+      onSelect: async (heroId) => {
+        const swapped = await characterView.setHero(heroId);
+        if (swapped) storeHeroPreference(heroId, heroStorage);
+        return swapped;
+      },
     })
     : null;
   characterView?.setVisible(false);
@@ -759,6 +982,18 @@ async function startEditor() {
     ? createWeatherUi({
       root,
       settings: weatherSettings,
+      timePresets: skyLooks
+        ? Object.entries(SKY_PRESETS).map(([value, preset]) => ({ value, label: preset.label }))
+        : null,
+      timePreset: skyLooks?.preset,
+      onTimeChange: (preset) => {
+        skyLooks?.setPreset(preset);
+        try {
+          window.localStorage.setItem(SKY_PRESET_STORAGE_KEY, preset);
+        } catch {
+          // Private windows keep the choice for this session only.
+        }
+      },
       onChange: (next) => {
         const previousMode = weatherSettings.weatherMode;
         Object.assign(weatherSettings, next);
@@ -820,6 +1055,15 @@ async function startEditor() {
       playerController,
       thirdPersonCamera,
       characterView,
+      worldWind,
+      waterfallMist,
+      worldSoundscape,
+      surfaceWetness,
+      skyLooks,
+      fallingLeaves,
+      snowPowder,
+      worldAmbience,
+      groundDeformation: { stampFootprint },
       weatherSettings,
       weatherController,
       spellRuntime,
@@ -872,6 +1116,8 @@ async function startEditor() {
     if (finishWaterPrewarm) {
       terrainView.renderer.render(terrainView.scene, editorCamera.camera);
     }
+    worldWind.update(0, editorCamera.camera.position, terrainView.floatingOrigin.getState(), null);
+    worldWind.render(terrainView.renderer);
     await characterView?.prewarm(terrainView.renderer, playerController.camera);
     await postProcessingController.precompile(playerController.camera);
     terrainView.prewarmPostProcessing(playerController.camera);
@@ -923,6 +1169,7 @@ async function startEditor() {
 
   let lastWeatherTimestamp = null;
   let lastCharacterTimestamp = null;
+  const characterCentre = { x: 0, y: 0, z: 0 };
   terrainView.setAnimationLoop((timestamp) => {
     if (!active) return;
 
@@ -957,6 +1204,7 @@ async function startEditor() {
 
     viewModeController.update(frameTimestamp);
     ui.setMinimapHeading(viewModeController.getHeading());
+    viewModeUi.update();
     if (profiling) perfQa.mark('player');
 
     let renderFocus = viewModeController.getFocusWorld();
@@ -967,6 +1215,8 @@ async function startEditor() {
       controller.refreshObjects();
       constructionView.rebase();
       characterView?.shiftWorld(rebase.shiftX, rebase.shiftZ);
+      snowPowder.shiftWorld(rebase.shiftX, rebase.shiftZ);
+      worldAmbience.shiftWorld(rebase.shiftX, rebase.shiftZ);
       renderFocus = viewModeController.getFocusWorld();
     }
     if (profiling) perfQa.mark('floatingOrigin');
@@ -988,6 +1238,22 @@ async function startEditor() {
         );
       }
       lastCharacterTimestamp = wantVisible ? frameTimestamp : null;
+      const occluding = wantVisible && viewModeController.isThirdPerson;
+      if (occluding) {
+        const status = playerController.getStatus();
+        const footY = Number.isFinite(status.footY) ? status.footY : status.position.y;
+        characterCentre.x = status.position.x;
+        characterCentre.y = footY + characterView.height * 0.55;
+        characterCentre.z = status.position.z;
+      }
+      updateCharacterOcclusion({
+        renderer: terrainView.renderer,
+        camera: viewModeController.camera,
+        target: occluding ? characterCentre : null,
+        height: characterView.height,
+        pixelScale: postProcessingController.graph?.sceneResolutionScale ?? 1,
+        enabled: occluding,
+      });
       if (profiling) perfQa.mark('character');
     }
 
@@ -1042,6 +1308,64 @@ async function startEditor() {
       nextStreamingStatusAt = frameTimestamp + 250;
     }
     for (const listener of streamingFrameListeners) listener();
+    const windCamera = viewModeController.camera.position;
+    worldWind.update(
+      lastWindTimestamp === null ? 0 : (frameTimestamp - lastWindTimestamp) / 1000,
+      windCamera,
+      terrainView.floatingOrigin.getState(),
+      {
+        enabled: weatherEnabled && weatherSettings.weatherMode !== 'off',
+        windX: weatherSettings.weatherWindX,
+        windZ: weatherSettings.weatherWindZ,
+        intensity: weatherSettings.weatherIntensity,
+      },
+    );
+    lastWindTimestamp = frameTimestamp;
+    worldWind.render(terrainView.renderer);
+    waterfallMist.update(frameTimestamp / 1000, viewModeController.camera);
+    updateGroundDeformation(frameTimestamp / 1000);
+    updateSeaState({
+      timeSeconds: frameTimestamp / 1000,
+      storm: seaStormForWeather(),
+      rain: weatherAudioLevels().rain,
+      seaLevel: worldStore.generator?.seaLevel,
+    });
+    worldSoundscape.update(frameTimestamp / 1000, viewModeController.camera);
+    const frameSeconds = frameTimestamp / 1000;
+    const frameDelta = lastWetnessSeconds === null ? 0 : Math.min(1, frameSeconds - lastWetnessSeconds);
+    lastWetnessSeconds = frameSeconds;
+    surfaceWetness.update(frameDelta, weatherAudioLevels().rain);
+    skyLooks?.setOvercast(weatherOvercast());
+    const snowCountryWeight = snowCountry.update(frameDelta, viewModeController.camera);
+    skyLooks?.setSnowCountry(snowCountryWeight);
+    weatherController?.setRegionalSnow(snowCountryWeight);
+    skyLooks?.update(frameDelta);
+    snowPowder.update(frameSeconds);
+    worldAmbience.update(frameDelta, {
+      camera: viewModeController.camera,
+      walking: viewModeController.mode === PLAYER_MODE_WALK,
+      orbitFocus: renderFocus,
+      weather: {
+        enabled: weatherEnabled,
+        mode: weatherSettings.weatherMode,
+        intensity: weatherSettings.weatherIntensity,
+        windX: weatherSettings.weatherWindX,
+        windZ: weatherSettings.weatherWindZ,
+      },
+      skyPreset: skyLooks?.preset ?? 'configured',
+      night: Boolean(skyLooks?.night),
+      snowCountry: snowCountryWeight,
+      player: characterView,
+    });
+    fallingLeaves.update(
+      frameSeconds,
+      frameDelta,
+      viewModeController.camera,
+      weatherEnabled && weatherSettings.weatherMode !== 'off'
+        ? { x: weatherSettings.weatherWindX, z: weatherSettings.weatherWindZ }
+        : { x: 0.3, z: 0.1 },
+      viewModeController.mode === PLAYER_MODE_WALK,
+    );
     terrainView.render(viewModeController.camera);
     assetStartupTelemetry.markFirstFrame();
     if (profiling) {
@@ -1079,6 +1403,10 @@ async function startEditor() {
     spellKeyHandler = null;
     detachSpellHotkeys();
     detachCameraViewHotkey();
+    detachFootsteps?.();
+    worldWind.dispose();
+    waterfallMist.dispose();
+    heroSelectUi?.dispose();
     characterView?.dispose();
     spellRuntime?.dispose();
     worldMapUi.dispose();

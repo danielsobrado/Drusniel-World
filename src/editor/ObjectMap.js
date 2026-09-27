@@ -1,6 +1,8 @@
 import { ObjectSpatialIndex } from './ObjectSpatialIndex.js';
 
 const MAX_OBJECT_FOOTPRINT_CELLS = 65_536;
+/** Spatial bucket side, in cells, for a tile map that is not chunked. */
+const UNCHUNKED_BUCKET_CELLS = 32;
 
 function normalizeRotation(rotation) {
   const numeric = Number(rotation ?? 0);
@@ -53,7 +55,10 @@ export class ObjectMap {
     this.nextId = 1;
     this.replacing = false;
     this.spatialIndex = new ObjectSpatialIndex({
-      bucketSize: tileMap.chunkSize,
+      // Buckets follow the streamed chunks; a bounded TileMap has none.
+      bucketSize: Number.isSafeInteger(tileMap.chunkSize) && tileMap.chunkSize > 0
+        ? tileMap.chunkSize
+        : UNCHUNKED_BUCKET_CELLS,
       boundsForObject: (object) => this.getBounds(
         object.x, object.z, object.definitionKey, object.rotation,
       ),

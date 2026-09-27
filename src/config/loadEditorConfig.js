@@ -1,4 +1,5 @@
 import yaml from 'js-yaml';
+import ambientEffectsConfigSource from '../../config/ambient-effects.yaml?raw';
 import azgaarGuidanceConfigSource from '../../config/azgaar-guidance.yaml?raw';
 import collisionConfigSource from '../../config/collision.yaml?raw';
 import configSource from '../../editor.config.yaml?raw';
@@ -8,6 +9,8 @@ import waterVisualConfigSource from '../../config/water-visual.yaml?raw';
 import { createCollisionConfig } from '../editor/collision/CollisionConfig.js';
 import { registerCollisionConfig } from '../editor/collision/CollisionPlayerBridge.js';
 import { createTerrainMaterialBakeConfig } from '../editor/materials/TerrainMaterialBakeConfig.js';
+import { resolveSurfaceWetnessConfig } from '../editor/weather/surfaceWetnessConfig.js';
+import { resolveAmbientEffectsConfig } from '../editor/stylized/ambient/ambientEffectsConfig.js';
 import {
   applyWaterDomainConfig,
   validateWaterDomainConfig,
@@ -39,6 +42,10 @@ export function loadEditorConfig() {
   config.import.azgaarGuidance = yaml.load(azgaarGuidanceConfigSource);
   config.stylizedSurface.materialBake = createTerrainMaterialBakeConfig(
     yaml.load(terrainMaterialBakeConfigSource),
+  );
+  config.stylizedSurface.wetness = resolveSurfaceWetnessConfig(config.stylizedSurface.wetness);
+  config.stylizedSurface.ambientEffects = resolveAmbientEffectsConfig(
+    yaml.load(ambientEffectsConfigSource)?.ambientEffects,
   );
   applyWaterDomainConfig(config, yaml.load(waterConfigSource));
   applyWaterVisualConfig(config, yaml.load(waterVisualConfigSource));

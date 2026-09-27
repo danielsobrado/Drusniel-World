@@ -228,9 +228,12 @@ content without affecting terrain streaming.
 - `Space` jumps.
 - Mouse movement looks around.
 - `Esc` releases the mouse.
+- `V` swings the camera out to third person and back.
 - Select **Edit / Orbit** to return to editing.
 
 Player grounding uses the authoritative CPU heightfield and therefore remains readback-free. GPU-only caves, overhangs, and added voxel surfaces do not yet provide player collision.
+
+The player walks as Drusniel, a rigged dark elf, by default. The **Hero** picker in the top bar swaps live between eight authored characters and the procedural drow. The choice is remembered per browser, `?hero=<id>` overrides it, and `character.hero` in `editor.config.yaml` sets the default. A soft contact shadow grounds the hero, footfalls play surface-aware steps, and tree canopy dithers open around the hero in third person. Movement stays owned by the player controller. The walk and run clips advance by distance travelled, so the feet stay planted at any speed. Each foot is planted on the ground under it on slopes, and the arms rise into a cast with every spell. In deep water he treads water when still, swims a front crawl along the surface when moving, and dives head-first when heading down; the swim is posed procedurally, since no rig ships a swim clip. The model streams in after the first frame and never delays startup.
 
 ## GPU marching cubes
 

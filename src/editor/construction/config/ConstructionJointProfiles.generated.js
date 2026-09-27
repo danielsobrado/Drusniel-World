@@ -17,6 +17,14 @@ export const CONSTRUCTION_JOINT_PROFILES = Object.freeze({
     minimumRenderedWidth: 0.12,
     minimumRenderedHeight: 0.08,
   }),
+  "rounded-fieldstone": Object.freeze({
+    headJoint: Object.freeze({ min: 0.008, max: 0.016 }),
+    bedJoint: Object.freeze({ min: 0.008, max: 0.014 }),
+    coarseLodMultiplier: 1.1,
+    mortarSafetyOverlap: 0.003,
+    minimumRenderedWidth: 0.12,
+    minimumRenderedHeight: 0.08,
+  }),
   "soft-limestone-rubble": Object.freeze({
     headJoint: Object.freeze({ min: 0.026, max: 0.04 }),
     bedJoint: Object.freeze({ min: 0.02, max: 0.03 }),

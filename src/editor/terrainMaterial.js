@@ -13,7 +13,6 @@ import {
   positionWorld,
   sin,
   smoothstep,
-  texture,
   uv,
   vec2,
   vec3,
@@ -35,6 +34,13 @@ import {
   stylizedPatchMask,
   stylizedPathWearMask,
 } from './stylized/StylizedNoiseNodes.js';
+import { createCoastSwashNodes, DEFAULT_COAST_SWASH } from './stylized/CoastSwashShading.js';
+import { createSnowSurfaceNodes } from './stylized/SnowSurfaceShading.js';
+import { createFootprintShading } from './stylized/deformation/FootprintShading.js';
+import { applyCloudShadow } from './stylized/CloudShadow.js';
+import { createRainWetnessShading } from './stylized/RainWetnessShading.js';
+import { resolveSurfaceWetnessConfig } from './weather/surfaceWetnessConfig.js';
+import { createSlotBakeGpuState, slotTexture, slotVector2 } from './materials/TerrainSlotBindings.js';
 
 const HEIGHT_SHADE_SCALE = 0.018;
 const MINIMUM_HEIGHT_SHADE = 0.72;
@@ -45,20 +51,29 @@ function colorNode(value) {
   return vec3(color.r, color.g, color.b);
 }
 
+/**
+ * The terrain material. Its per-slot inputs are templates: every mesh drawn
+ * with it supplies its own through TerrainSlotBindings, so one material (one
+ * shader build) serves all slots. With `bakeGpuState`, the bake textures are
+ * read from each mesh's own state too; without, the material carries a state
+ * of its own, for a single mesh.
+ */
 export function createTerrainMaterial({
   tileTexture,
   heightTexture,
   surfaceMaskTexture,
   forestFloorTexture,
-  chunkCenter,
+  chunkCenter: chunkCenterTemplate,
   chunkWorldSize,
   stylizedConfig,
+  bakeGpuState = null,
 }) {
   const terrainUv = uv();
-  const tileColor = texture(tileTexture, terrainUv).rgb;
-  const terrainHeight = texture(heightTexture, terrainUv).r;
-  const surface = texture(surfaceMaskTexture, terrainUv);
-  const forestFloor = texture(forestFloorTexture, terrainUv).r;
+  const tileColor = slotTexture('tileTexture', tileTexture, terrainUv).rgb;
+  const terrainHeight = slotTexture('heightTexture', heightTexture, terrainUv).r;
+  const surface = slotTexture('surfaceMaskTexture', surfaceMaskTexture, terrainUv);
+  const forestFloor = slotTexture('forestFloorTexture', forestFloorTexture, terrainUv).r;
+  const chunkCenter = slotVector2('chunkCenter', chunkCenterTemplate);
   const heightShade = clamp(
     terrainHeight.mul(HEIGHT_SHADE_SCALE).add(1),
     MINIMUM_HEIGHT_SHADE,
@@ -199,13 +214,17 @@ export function createTerrainMaterial({
 
   groundColor = max(groundColor, vec3(0));
   const proceduralColor = groundColor.mul(heightShade);
-  const materialBakeGpu = createTerrainMaterialBakeGpuState(stylizedConfig.materialBake);
+  const ownBakeGpu = bakeGpuState ? null : createTerrainMaterialBakeGpuState(stylizedConfig.materialBake);
+  const materialBakeGpu = bakeGpuState ? createSlotBakeGpuState(bakeGpuState) : ownBakeGpu;
   const familyAtlas = acquireTerrainMaterialFamilyAtlas(stylizedConfig.materialBake);
   const material = new THREE.MeshStandardNodeMaterial({
     metalness: 0,
     roughness: stylizedConfig.materialBake.render.fallbackRoughness,
+    // Double-sided in every view mode, and set here so it never changes: a
+    // side change rebuilds this node graph per slot (see ViewModeSurfacePolicy).
+    side: THREE.DoubleSide,
   });
-  attachTerrainMaterialBakeGpuState(material, materialBakeGpu);
+  if (ownBakeGpu) attachTerrainMaterialBakeGpuState(material, ownBakeGpu);
   attachTerrainMaterialFamilyAtlas(material, familyAtlas);
   try {
     const bakedSurface = createTerrainMaterialBakedSurface({
@@ -220,11 +239,51 @@ export function createTerrainMaterial({
       gpuState: materialBakeGpu,
       stylizedConfig,
     });
-    material.colorNode = bakedSurface.color;
-    material.roughnessNode = bakedSurface.roughness;
+    // Swash, foam and wet sand where the ground meets the sea.
+    const swash = createCoastSwashNodes({
+      worldXZ,
+      groundHeight: terrainHeight,
+      config: { ...DEFAULT_COAST_SWASH, ...(stylizedConfig.water?.coast ?? {}) },
+    });
+    const shoreSurface = swash
+      ? swash.apply(
+        bakedSurface.color,
+        bakedSurface.roughness ?? float(stylizedConfig.materialBake.render.fallbackRoughness),
+      )
+      : bakedSurface;
+    // Rain darkens and slicks exposed ground; snow and canopy shelter it.
+    const surface = createRainWetnessShading({
+      snow: bakedSurface.snow ?? float(0),
+      canopy: bakedSurface.canopy ?? float(0),
+      config: resolveSurfaceWetnessConfig(stylizedConfig.wetness),
+    }).apply(
+      shoreSurface.color,
+      shoreSurface.roughness ?? float(stylizedConfig.materialBake.render.fallbackRoughness),
+    );
+    const snowSurface = bakedSurface.snow
+      ? createSnowSurfaceNodes({
+        terrainUv,
+        chunkWorldSize,
+        chunkCenter,
+        snow: bakedSurface.snow,
+        stylizedConfig,
+      })
+      : null;
+    const footprints = createFootprintShading({
+      terrainUv,
+      chunkWorldSize,
+      chunkCenter,
+      groundHeight: terrainHeight,
+      snow: bakedSurface.snow ?? float(0),
+    });
+    const snowColor = snowSurface ? snowSurface.apply(surface.color) : surface.color;
+    material.colorNode = footprints.apply(snowColor);
+    material.roughnessNode = surface.roughness;
+    if (snowSurface) material.emissiveNode = snowSurface.emissive;
     if (bakedSurface.normal) material.normalNode = bakedSurface.normal;
     // Geometry displacement and the baked surface normal are derived from the same heightfield.
     material.positionNode = positionLocal.add(vec3(0, 0, terrainHeight));
+    applyCloudShadow(material, stylizedConfig.sky);
     return assignTerrainMaterialData(material);
   } catch (error) {
     material.dispose();

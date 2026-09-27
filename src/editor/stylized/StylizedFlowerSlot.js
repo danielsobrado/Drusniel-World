@@ -9,7 +9,7 @@ import { filterScatterByForest } from './forest/ForestFloor.js';
 function createCrossGeometry(maxInstances) {
   const positions = new Float32Array([
     -0.5, 0, 0, 0.5, 0, 0, -0.5, 1, 0, 0.5, 1, 0,
-    0, 0, -0.5, 0, 0.5, 0, 1, -0.5, 0, 1, 0.5,
+    0, 0, -0.5, 0, 0, 0.5, 0, 1, -0.5, 0, 1, 0.5,
   ]);
   const uvs = new Float32Array([
     0, 0, 1, 0, 0, 1, 1, 1,

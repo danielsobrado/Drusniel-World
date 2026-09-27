@@ -29,6 +29,9 @@ const ROCK_SCRATCH = {
   scale: new THREE.Vector3(),
 };
 import { createPathClearanceField } from './TreeManifestStore.js';
+import { buildRiverbankRocks, DEFAULT_RIVERBANK_ROCKS } from './riverbankRocks.js';
+import { RiverRockSource } from './RiverRockSource.js';
+import { buildCoastStones, DEFAULT_COAST_STONES } from './coastStones.js';
 
 const ROCK_CLUSTER_SEED_OFFSET = 0xa7;
 
@@ -94,6 +97,9 @@ export class StylizedRockView {
     this.terrainView = terrainView;
     this.config = config;
     this.revisionTracker = revisionTracker;
+    this.riverRocks = new RiverRockSource(() => terrainView.worldStore?.generator ?? null);
+    this.riverbankConfig = { ...DEFAULT_RIVERBANK_ROCKS, ...(config.rocks?.riverbank ?? {}) };
+    this.coastStoneConfig = { ...DEFAULT_COAST_STONES, ...(config.rocks?.coast ?? {}) };
     this.biomeAssetPalette = biomeAssetPalette;
     this.regionalCharacterField = regionalCharacterField;
     this.prototypeIndicesByAsset = new Map();
@@ -360,6 +366,7 @@ export class StylizedRockView {
       this.prototypeBiomeRulesSignature,
       this.pathClearance?.signature ?? 'nopath',
       this.biomeAssetPalette?.revision ?? 0,
+      this.riverRocks.signature,
     ].join('|');
   }
 
@@ -404,10 +411,68 @@ export class StylizedRockView {
     };
   }
 
-  storeManifest(cacheKey, key, placements) {
+  storeManifest(cacheKey, key, scattered) {
+    const [chunkX, chunkZ] = cacheKey.split(':').map(Number);
+    const features = [
+      ...this.riverbankRocksForChunk(chunkX, chunkZ),
+      ...this.coastStonesForChunk(chunkX, chunkZ),
+    ];
+    const placements = features.length ? [...scattered, ...features] : scattered;
     this.manifestCache.set(cacheKey, { key, placements });
     this.placementsByChunk.set(cacheKey, placements);
     return placements;
+  }
+
+  /** Beach pebbles on ground just above the sea in a chunk. */
+  coastStonesForChunk(chunkX, chunkZ) {
+    const seaLevel = this.terrainView.worldStore?.generator?.seaLevel;
+    if (!this.coastStoneConfig.enabled || !Number.isFinite(seaLevel)) return [];
+    const tileSize = this.terrainView.worldStore.tileSize;
+    const options = this.manifestOptions(chunkX, chunkZ);
+    return buildCoastStones({
+      chunkX,
+      chunkZ,
+      chunkSize: this.terrainView.worldStore.chunkSize,
+      tileSize,
+      seaLevel,
+      heightAt: options.heightAt,
+      prototypeIndexForRoll: (roll, x, z) => options.prototypeIndexForRoll(
+        roll,
+        options.tileAt(Math.floor(x / tileSize), Math.floor(-z / tileSize)),
+        x,
+        z,
+      ),
+      radiusForScale: options.radiusForScale,
+      config: this.coastStoneConfig,
+    });
+  }
+
+  /** Bank stones, fall-lip boulders and plunge-pool blocks the rivers place in a chunk. */
+  riverbankRocksForChunk(chunkX, chunkZ) {
+    const chunkSize = this.terrainView.worldStore.chunkSize;
+    const tileSize = this.terrainView.worldStore.tileSize;
+    const rivers = this.riverbankConfig.enabled
+      ? this.riverRocks.forChunk(chunkX, chunkZ, chunkSize, tileSize)
+      : null;
+    if (!rivers) return [];
+    const options = this.manifestOptions(chunkX, chunkZ);
+    return buildRiverbankRocks({
+      chunkX,
+      chunkZ,
+      chunkSize,
+      tileSize,
+      segments: rivers.segments,
+      falls: rivers.falls,
+      heightAt: options.heightAt,
+      prototypeIndexForRoll: (roll, x, z) => options.prototypeIndexForRoll(
+        roll,
+        options.tileAt(Math.floor(x / tileSize), Math.floor(-z / tileSize)),
+        x,
+        z,
+      ),
+      radiusForScale: options.radiusForScale,
+      config: this.riverbankConfig,
+    });
   }
 
   manifestForChunk(chunkX, chunkZ) {

@@ -1,3 +1,6 @@
+import { resolveMountainRidges } from '../editor/world/MountainRidges.js';
+import { resolveTrailGrading } from '../editor/world/TrailGrading.js';
+
 const MAX_MACRO_ATLAS_CELLS = 4_000_000;
 
 const POSITIVE_GUIDANCE_FIELDS = Object.freeze([
@@ -117,5 +120,11 @@ export function validateImportConfig(config) {
   }
 
   validateGuidanceConfig(importConfig.azgaarGuidance);
+  try {
+    resolveMountainRidges(importConfig.azgaarRidges);
+    resolveTrailGrading(importConfig.azgaarTrails);
+  } catch (error) {
+    throw new Error(`Invalid editor configuration: ${error.message}`);
+  }
   return importConfig;
 }

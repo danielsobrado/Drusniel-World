@@ -1,14 +1,16 @@
 import { emitAudio } from '../_clod_shims/audio.js';
 import { defaultSpellConfig } from './spell_config.js';
+import { spellGlyph } from './spell_icons.js';
 
 const MISS_FLASH_MS = 280;
+const CAST_LABEL_MS = 1100;
 const SPELL_BUTTONS = Object.freeze([
-  { id: 'fire', key: 1, icon: '🔥', method: 'playFire' },
-  { id: 'water', key: 2, icon: '💧', method: 'playWater' },
-  { id: 'air', key: 3, icon: '💨', method: 'playAir' },
-  { id: 'earth', key: 4, icon: '🪨', method: 'playEarth' },
-  { id: 'lightning', key: 5, icon: '⚡', method: 'playLightning' },
-  { id: 'fireball', key: 6, icon: '☄️', method: 'playFireball' },
+  { id: 'fire', key: 1, method: 'playFire' },
+  { id: 'water', key: 2, method: 'playWater' },
+  { id: 'air', key: 3, method: 'playAir' },
+  { id: 'earth', key: 4, method: 'playEarth' },
+  { id: 'lightning', key: 5, method: 'playLightning' },
+  { id: 'fireball', key: 6, method: 'playFireball' },
 ]);
 
 function resolveMenuRoot(rootId, suppliedRoot) {
@@ -25,16 +27,63 @@ function stopUiPropagation(event) {
   event.stopPropagation();
 }
 
-function createSpellButton({ key, icon, label, onClick }) {
+function createSpellButton({ id, key, label, onClick }) {
   const button = document.createElement('button');
   button.type = 'button';
-  button.textContent = `${key} ${icon} ${label}`;
-  button.title = `${label} spell (${key})`;
+  button.className = 'spell-slot';
+  button.dataset.spell = id;
+  button.title = `${label} (${key})`;
+  button.setAttribute('aria-label', `${label} spell, key ${key}`);
   button.setAttribute('aria-pressed', 'false');
+  button.innerHTML = `
+    <span class="spell-slot__glyph">${spellGlyph(id)}</span>
+    <svg class="spell-slot__channel" viewBox="0 0 48 48" aria-hidden="true">
+      <circle cx="24" cy="24" r="22" pathLength="100"/>
+    </svg>
+    <kbd class="spell-slot__key">${key}</kbd>
+    <span class="spell-slot__label"></span>
+  `;
+  // Labels come from spells YAML, so they are set as text.
+  button.querySelector('.spell-slot__label').textContent = label;
   button.addEventListener('click', onClick);
   return button;
 }
 
+function createGrip(title) {
+  const grip = document.createElement('span');
+  grip.className = 'spell-menu-grip';
+  grip.title = `${title} — drag to move`;
+  grip.setAttribute('aria-hidden', 'true');
+  grip.innerHTML = '<i></i><i></i><i></i><i></i><i></i><i></i>';
+  return grip;
+}
+
+/**
+ * Feedback for a cast that started: the ring round the slot drains over the
+ * cast, and the spell's name surfaces above it for a moment. Web Animations
+ * restart cleanly when the same spell is cast again before the ring empties.
+ */
+function playCastFeedback(button, durationMs) {
+  const ring = button.querySelector('.spell-slot__channel circle');
+  const label = button.querySelector('.spell-slot__label');
+  button.castAnimations?.forEach((animation) => animation.cancel());
+  button.castAnimations = [
+    ring?.animate?.(
+      [{ strokeDashoffset: 0 }, { strokeDashoffset: 100 }],
+      { duration: durationMs, easing: 'linear' },
+    ),
+    label?.animate?.(
+      [{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }],
+      { duration: CAST_LABEL_MS, easing: 'ease-out' },
+    ),
+  ].filter(Boolean);
+}
+
+/**
+ * The spell dock: six round slots on a paper pill, dragged by its grip.
+ * Casting from a slot and casting from the number keys (`cast`) share one
+ * path, so both get the same ring, miss flash and cast sound.
+ */
 export function createSpellMenu(deps = {}) {
   const config = deps.config ?? defaultSpellConfig;
   const controller = deps.controller ?? {};
@@ -44,11 +93,10 @@ export function createSpellMenu(deps = {}) {
   let dragOffset = null;
 
   root.replaceChildren();
+  root.classList.add('spell-dock');
   root.setAttribute('aria-label', 'Spell menu');
 
-  const title = document.createElement('span');
-  title.className = 'spell-menu-title';
-  title.textContent = config.menu.title;
+  const grip = createGrip(config.menu.title);
 
   const slots = document.createElement('div');
   slots.className = 'spell-menu-slots';
@@ -56,6 +104,7 @@ export function createSpellMenu(deps = {}) {
 
   const flashMiss = (button) => {
     window.clearTimeout(missFlashTimer);
+    for (const other of buttons.values()) other.classList.remove('spell-miss');
     button.classList.add('spell-miss');
     missFlashTimer = window.setTimeout(() => {
       button.classList.remove('spell-miss');
@@ -79,6 +128,7 @@ export function createSpellMenu(deps = {}) {
     }
 
     button.setAttribute('aria-pressed', 'true');
+    playCastFeedback(button, entry.castDurationMs);
     emitAudio(`spell.${descriptor.id}.cast`, {
       volume: entry.audio.volume,
       durationMs: entry.castDurationMs,
@@ -93,8 +143,8 @@ export function createSpellMenu(deps = {}) {
   for (const descriptor of SPELL_BUTTONS) {
     const entry = config[descriptor.id];
     const button = createSpellButton({
+      id: descriptor.id,
       key: descriptor.key,
-      icon: descriptor.icon,
       label: entry.label,
       onClick: () => castSpell(descriptor),
     });
@@ -102,7 +152,7 @@ export function createSpellMenu(deps = {}) {
     slots.append(button);
   }
 
-  root.append(title, slots);
+  root.append(grip, slots);
   root.addEventListener('pointerdown', stopUiPropagation);
   root.addEventListener('click', stopUiPropagation);
 
@@ -124,7 +174,7 @@ export function createSpellMenu(deps = {}) {
   };
 
   const onDragStart = (event) => {
-    if (!(event.target instanceof HTMLElement) || !title.contains(event.target)) return;
+    if (!(event.target instanceof HTMLElement) || !grip.contains(event.target)) return;
     event.preventDefault();
     const rect = root.getBoundingClientRect();
     dragOffset = { x: event.clientX - rect.left, y: event.clientY - rect.top };
@@ -138,9 +188,13 @@ export function createSpellMenu(deps = {}) {
     window.addEventListener('pointerup', onDragEnd);
   };
 
-  title.addEventListener('pointerdown', onDragStart);
+  grip.addEventListener('pointerdown', onDragStart);
 
   return {
+    cast: (spellId) => {
+      const descriptor = SPELL_BUTTONS.find(({ id }) => id === spellId);
+      return descriptor ? castSpell(descriptor) : false;
+    },
     castFire: () => castSpell(SPELL_BUTTONS[0]),
     castWater: () => castSpell(SPELL_BUTTONS[1]),
     castAir: () => castSpell(SPELL_BUTTONS[2]),
@@ -151,10 +205,14 @@ export function createSpellMenu(deps = {}) {
       for (const timer of resetTimers.values()) window.clearTimeout(timer);
       resetTimers.clear();
       window.clearTimeout(missFlashTimer);
+      for (const button of buttons.values()) {
+        button.castAnimations?.forEach((animation) => animation.cancel());
+      }
       if (dragOffset) onDragEnd();
-      title.removeEventListener('pointerdown', onDragStart);
+      grip.removeEventListener('pointerdown', onDragStart);
       root.removeEventListener('pointerdown', stopUiPropagation);
       root.removeEventListener('click', stopUiPropagation);
+      root.classList.remove('spell-dock');
       if (owned) root.remove();
       else root.replaceChildren();
     },

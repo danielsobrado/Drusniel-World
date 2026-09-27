@@ -36,14 +36,15 @@ test('orbit inspection renders terrain from both sides without changing water', 
   assert.equal(fixture.waterMaterial.side, THREE.DoubleSide);
 });
 
-test('player mode restores front-face terrain while underwater water remains double-sided', () => {
+test('switching to player mode changes no terrain material, so no shader rebuilds', () => {
   const fixture = createFixture();
   applyTerrainInspectionMode(fixture.terrainView, true);
 
   const changed = applyTerrainInspectionMode(fixture.terrainView, false);
 
-  assert.equal(changed, 2);
-  assert.equal(fixture.nearMaterial.side, THREE.FrontSide);
-  assert.equal(fixture.farMaterial.side, THREE.FrontSide);
+  assert.equal(changed, 0);
+  assert.equal(fixture.nearMaterial.side, THREE.DoubleSide);
+  assert.equal(fixture.farMaterial.side, THREE.DoubleSide);
   assert.equal(fixture.waterMaterial.side, THREE.DoubleSide);
+  assert.equal(applyTerrainInspectionMode(fixture.terrainView, true), 0, 'nor back to orbit');
 });

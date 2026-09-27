@@ -5,6 +5,16 @@ function slash(value) {
   return value.replaceAll('\\', '/');
 }
 
+/**
+ * Playable characters from `character.roster`, keyed by id in the YAML. Every
+ * entry is published whether or not it is the current hero, so switching hero
+ * is a configuration change rather than an asset rebuild.
+ */
+export function configuredCharacterDefinitions(editorConfig) {
+  const roster = editorConfig.character?.roster ?? {};
+  return Object.entries(roster).map(([id, definition]) => ({ id, ...definition }));
+}
+
 export function configuredRuntimeScenes(editorConfig) {
   const assets = editorConfig.stylizedSurface?.assets ?? {};
   const variants = [
@@ -14,6 +24,7 @@ export function configuredRuntimeScenes(editorConfig) {
     ...(assets.groundDetailVariants ?? []),
     ...(assets.aquaticVariants ?? []),
     ...(assets.wildlifeVariants ?? []),
+    ...configuredCharacterDefinitions(editorConfig),
   ];
   return [...new Set([
     assets.scene,
@@ -48,6 +59,8 @@ export function runtimeAssetTextureTiers(editorConfig) {
   assign(assets.aquaticVariants, 'scatter');
   assign(assets.wildlifeVariants, 'scatter');
   assign(assets.treeVariants, 'hero');
+  // The player's character is the one model the camera never leaves.
+  assign(configuredCharacterDefinitions(editorConfig), 'hero');
   if (assets.scene) tiers.set(assets.scene, 'hero');
   return tiers;
 }
@@ -57,12 +70,13 @@ export function runtimeAssetSources(
   editorConfig,
   extractionManifest,
   wildlifeManifest,
+  characterManifest = { assets: [] },
 ) {
   const extractedSources = new Map();
   for (const output of extractionManifest.sources.flatMap((source) => source.outputs)) {
     if (output.published) extractedSources.set(`/${slash(output.published).replace(/^public\//, '')}`, output.output);
   }
-  for (const asset of wildlifeManifest.assets ?? []) {
+  for (const asset of [...(wildlifeManifest.assets ?? []), ...(characterManifest.assets ?? [])]) {
     extractedSources.set(
       `/${slash(asset.published).replace(/^public\//, '')}`,
       asset.prepared,

@@ -4,6 +4,7 @@ import {
   normalizePostProcessingSettings,
   postProcessingSettingsToPlain,
 } from '../render/postprocessing/PostProcessingSettings.js';
+import { assertCharacterConfig } from './validateCharacterConfig.js';
 
 const REQUIRED_POSITIVE_PATHS = Object.freeze([
   Object.freeze(['map', 'tileSize']),
@@ -500,6 +501,18 @@ function validateStylizedSurface(config) {
       || surface.sky.shadowMapSize > 4096) {
     throw new Error('Invalid editor configuration: stylized sky shadowMapSize must be an integer from 512 to 4096.');
   }
+  const ambientSaturation = surface.sky.ambientSaturation;
+  if (ambientSaturation !== undefined
+      && (!Number.isFinite(ambientSaturation) || ambientSaturation < 0 || ambientSaturation > 1)) {
+    throw new Error('Invalid editor configuration: stylizedSurface.sky.ambientSaturation must be within [0, 1].');
+  }
+  const cloudShadows = surface.sky.cloudShadows;
+  if (cloudShadows !== undefined && (typeof cloudShadows.enabled !== 'boolean'
+      || !Number.isFinite(cloudShadows.strength) || cloudShadows.strength < 0 || cloudShadows.strength > 1)) {
+    throw new Error(
+      'Invalid editor configuration: stylizedSurface.sky.cloudShadows needs enabled (boolean) and strength within [0, 1].',
+    );
+  }
   if (surface.sky.cloudCeiling <= surface.sky.cloudFloor || surface.sky.fogDensity < 0) {
     throw new Error('Invalid editor configuration: stylized sky cloud and fog ranges are invalid.');
   }
@@ -861,44 +874,6 @@ export function validatePostProcessing(config) {
   );
 }
 
-/**
- * The player's drow, and the third-person boom it is seen from.
- *
- * Optional in its entirety: the whole section absent means the character is on
- * with its built-in defaults, which is what `editor.config.yaml` documents.
- */
-function assertCharacterConfig(character) {
-  if (character === undefined) return;
-  if (typeof character !== 'object' || character === null || Array.isArray(character)) {
-    throw new Error('Invalid editor configuration: character must be an object.');
-  }
-  for (const name of ['enabled', 'visibleInFirstPerson']) {
-    if (character[name] !== undefined && typeof character[name] !== 'boolean') {
-      throw new Error(`Invalid editor configuration: character.${name} must be boolean.`);
-    }
-  }
-
-  const boom = character.thirdPerson;
-  if (boom === undefined) return;
-  if (typeof boom !== 'object' || boom === null || Array.isArray(boom)) {
-    throw new Error('Invalid editor configuration: character.thirdPerson must be an object.');
-  }
-  for (const name of ['distance', 'pivotHeight', 'minDistance', 'clearance', 'damping']) {
-    if (boom[name] !== undefined && (!Number.isFinite(boom[name]) || boom[name] <= 0)) {
-      throw new Error(`Invalid editor configuration: character.thirdPerson.${name} must be positive.`);
-    }
-  }
-  // Shoulder offset is the one that may legitimately be zero or negative — zero
-  // centres the character and negative swings the boom over the other shoulder.
-  if (boom.shoulder !== undefined && !Number.isFinite(boom.shoulder)) {
-    throw new Error('Invalid editor configuration: character.thirdPerson.shoulder must be finite.');
-  }
-  if (boom.distance !== undefined && boom.minDistance !== undefined
-      && boom.minDistance > boom.distance) {
-    throw new Error('Invalid editor configuration: character.thirdPerson.minDistance must not exceed distance.');
-  }
-}
-
 export function validateEditorConfig(config) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) {
     throw new Error('Invalid editor configuration: expected a YAML object.');
@@ -955,6 +930,11 @@ export function validateEditorConfig(config) {
   }
 
   assertCharacterConfig(config.character);
+  const windField = config.weather?.windField;
+  if (windField !== undefined
+      && (typeof windField !== 'object' || windField === null || Array.isArray(windField))) {
+    throw new Error('Invalid editor configuration: weather.windField must be an object.');
+  }
 
   if (config.world.farTerrain !== undefined) {
     const far = config.world.farTerrain;

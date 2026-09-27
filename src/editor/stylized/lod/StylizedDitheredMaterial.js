@@ -1,12 +1,13 @@
 import {
   attribute,
   float,
-  positionLocal,
   step,
   vec3,
 } from 'three/tsl';
 import { authoredTexture } from '../AuthoredTextureNode.js';
 import { orientedScreenDitherThreshold } from './screenDither.js';
+import { characterOcclusionKeep } from '../../character/CharacterOcclusion.js';
+import { setPreInstancePosition } from './preInstancePosition.js';
 
 export function createSourceOpacityNode(material) {
   if (material.opacityNode) return material.opacityNode;
@@ -24,20 +25,26 @@ export function createSourceOpacityNode(material) {
   return opacity;
 }
 
-function applyMorphology(material, sourceMaterial, kind, pivot) {
+/**
+ * Per-tree crown and trunk scale about the prototype's pivot. It must act in the
+ * prototype's own space, so it runs before the instance matrix (see
+ * preInstancePosition); applied after it, the scale pulled every crown toward the
+ * mesh origin and parted it from its trunk by tens of metres. The source
+ * material's wind stays in `positionNode`, after instancing, in world axes.
+ */
+function applyMorphology(material, kind, pivot) {
   if (kind !== 'leaf' && kind !== 'trunk') return;
   const morphology = attribute('instanceMorphology', 'vec3');
-  const sourcePosition = sourceMaterial.positionNode ?? positionLocal;
   const horizontalScale = kind === 'leaf' ? morphology.x : morphology.z;
   const verticalScale = kind === 'leaf' ? morphology.y : float(1);
   const pivotX = float(pivot.x);
   const pivotY = float(pivot.y);
   const pivotZ = float(pivot.z);
-  material.positionNode = vec3(
-    sourcePosition.x.sub(pivotX).mul(horizontalScale).add(pivotX),
-    sourcePosition.y.sub(pivotY).mul(verticalScale).add(pivotY),
-    sourcePosition.z.sub(pivotZ).mul(horizontalScale).add(pivotZ),
-  );
+  setPreInstancePosition(material, (position) => vec3(
+    position.x.sub(pivotX).mul(horizontalScale).add(pivotX),
+    position.y.sub(pivotY).mul(verticalScale).add(pivotY),
+    position.z.sub(pivotZ).mul(horizontalScale).add(pivotZ),
+  ));
   material.userData.treeMorphologyPivot = [pivot.x, pivot.y, pivot.z];
   material.userData.treeMorphologyPivotY = pivot.y;
 }
@@ -78,10 +85,16 @@ export function createDitheredMaterial(sourceMaterial, {
   }
   applyMorphology(
     material,
-    sourceMaterial,
     kind,
     morphologyPivot ?? { x: 0, y: morphologyPivotY, z: 0 },
   );
+  // Canopy between the third-person camera and the player dithers open around
+  // the player's silhouette. Leaves only: they cast no shadow, so the shadow
+  // pass's fallback to maskNode never sees the view-space cut.
+  if (kind === 'leaf') {
+    const keep = characterOcclusionKeep();
+    material.maskNode = material.maskNode ? material.maskNode.and(keep) : keep;
+  }
   material.alphaTest = sourceOpacity
     ? Math.max(0.001, sourceMaterial.alphaTest ?? 0.32)
     : 0.5;

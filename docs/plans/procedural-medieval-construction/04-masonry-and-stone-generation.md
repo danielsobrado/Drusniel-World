@@ -12,7 +12,7 @@ what is still aspirational:
 | §13 stone attributes | **Partial** — per-stone tint and local AO strength are baked into vertex colours; the remaining attributes are not packed yet |
 | §14 seed locality | **Implemented** — every unit's shape derives only from its own stable index |
 | §15 budgets | **Implemented** for roof tiles: target tile size grows when a roof exceeds budget, per this section's "increase target stone size" |
-| §4 course solver | Partial — exact fill without drift (`packCourse` normalizes candidate widths to the span), but no bounded candidate *heights* and no reserved foundation courses |
+| §4 course solver | Partial — exact fill without drift (`packCourse` normalizes candidate widths to the span), but no bounded candidate *heights*. A reserved foundation course exists for styles that declare `footing` (live construction's `rounded-fieldstone`, 2026-09-24): a taller, wider, plinth-proud first course from a wall-wide course table (`WallCourseTable`), buried below grade by the builder where the ground falls away |
 | §5 joint staggering | **Implemented** — `ProceduralWorkshopCoursePacker` carries forbidden joint bands from the course below and relocates joints out of them by interval subtraction. No backtracking: when bands cover the whole legal window it takes the documented deterministic fallback instead |
 | §6 interval packing | **Implemented** — candidate widths are drawn then normalized to fit the interval exactly, so nothing is clipped; sub-minimum stones are dissolved into a neighbour rather than emitted as slivers, and coverage is validated |
 | §7 stone categories | Categories exist as an irregularity scale only, not as distinct archetypes |

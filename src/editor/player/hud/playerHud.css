@@ -1,0 +1,190 @@
+/* The walking HUD layer. Widgets place themselves; the layer never takes input. */
+.player-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  color: var(--glade-ink);
+  font-family: var(--glade-font);
+}
+
+/* Paper keycap shared by the status line and the control hints. */
+.hud-key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--glade-cream);
+  box-shadow:
+    inset 0 -2px 0 rgb(96 76 52 / 14%),
+    0 0 0 1px var(--glade-line);
+  color: var(--glade-ink);
+  font: 800 9.5px/1 var(--glade-font);
+  letter-spacing: 0.02em;
+}
+
+/* ── Status line ─────────────────────────────────────────────────────────── */
+
+.hud-status {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  display: inline-flex;
+  gap: 9px;
+  align-items: center;
+  max-width: min(560px, calc(100% - 32px));
+  padding: 5px 12px 5px 5px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--glade-paper);
+  box-shadow: var(--glade-shadow);
+  backdrop-filter: var(--glade-blur);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  animation: glade-rise-in 260ms var(--glade-spring) both;
+}
+
+.hud-status__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--glade-accent);
+  color: var(--glade-cream);
+}
+
+.hud-status__icon svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hud-status[data-tone='busy'] .hud-status__icon {
+  background: var(--glade-leaf);
+}
+
+.hud-status[data-tone='danger'] .hud-status__icon {
+  background: var(--glade-danger);
+}
+
+.hud-status__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-status__hint {
+  display: inline-flex;
+  flex: none;
+  gap: 5px;
+  align-items: center;
+  padding-left: 9px;
+  border-left: 1px solid var(--glade-line);
+  color: var(--glade-ink-soft);
+  font-size: 11px;
+}
+
+.hud-spin {
+  animation: glade-spin 900ms linear infinite;
+}
+
+/* ── Reticle ─────────────────────────────────────────────────────────────── */
+
+.hud-reticle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  transform: translate(-50%, -50%);
+}
+
+.hud-reticle::before,
+.hud-reticle::after {
+  position: absolute;
+  border-radius: 50%;
+  content: '';
+}
+
+.hud-reticle::before {
+  inset: 6.5px;
+  background: var(--glade-cream);
+  box-shadow:
+    0 0 0 1px rgb(52 40 28 / 38%),
+    0 1px 3px rgb(0 0 0 / 30%);
+}
+
+.hud-reticle::after {
+  inset: 0;
+  border: 1.5px solid rgb(255 250 240 / 40%);
+  box-shadow: 0 0 2px rgb(0 0 0 / 16%);
+}
+
+/* ── Control hints ───────────────────────────────────────────────────────── */
+
+.hud-keys {
+  position: absolute;
+  bottom: 18px;
+  left: 16px;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 5px 9px;
+  align-items: center;
+  margin: 0;
+  padding: 9px 13px 9px 9px;
+  border-radius: 16px;
+  background: var(--glade-paper);
+  box-shadow: var(--glade-shadow);
+  backdrop-filter: var(--glade-blur);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  transition:
+    opacity 700ms ease,
+    translate 700ms ease;
+  animation: glade-rise-in 320ms var(--glade-spring) both;
+}
+
+.hud-keys dt {
+  display: flex;
+  gap: 3px;
+  justify-content: flex-end;
+  margin: 0;
+}
+
+.hud-keys dd {
+  margin: 0;
+  color: var(--glade-ink-soft);
+}
+
+.hud-keys.is-resting {
+  opacity: 0;
+  translate: 0 6px;
+}
+
+@media (max-width: 760px) {
+  .hud-keys {
+    display: none;
+  }
+
+  .hud-status {
+    top: 56px;
+  }
+}
+
+:root.natural-reduced-motion .player-hud *,
+:root.natural-reduced-motion .player-hud *::before,
+:root.natural-reduced-motion .player-hud *::after {
+  animation: none !important;
+  transition: none !important;
+}

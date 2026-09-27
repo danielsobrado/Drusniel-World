@@ -62,6 +62,11 @@ export function parseAudioConfig(source = audioEventsDefaults) {
         );
       }
     }
+    // Optional recordings from the CC0 bank, tried before the synth.
+    if (entry.samples !== undefined && (!Array.isArray(entry.samples)
+        || entry.samples.some((path) => typeof path !== 'string' || !path.endsWith('.mp3')))) {
+      throw new Error(`Event "${eventId}": samples must be a list of .mp3 paths`);
+    }
   }
   return parsed;
 }

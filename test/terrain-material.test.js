@@ -20,7 +20,9 @@ test('forest-floor tint excludes exposed dirt and path tread', () => {
 
 test('terrain uses PBR response and baked slope-aware surface normals', () => {
   assert.match(source, /new THREE\.MeshStandardNodeMaterial/);
-  assert.match(source, /material\.roughnessNode\s*=\s*bakedSurface\.roughness/);
+  // Roughness comes from the baked surface; the coast swash only wets it at the sea's edge.
+  assert.match(source, /bakedSurface\.roughness/);
+  assert.match(source, /material\.roughnessNode\s*=\s*surface\.roughness/);
   assert.match(source, /material\.normalNode\s*=\s*bakedSurface\.normal/);
 });
 

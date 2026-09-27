@@ -1,17 +1,62 @@
 waterDomain:
-  version: 2
+  # 3 added lakes at their own level, terrain-traced river levels and falls.
+  # All change geography, so a version-2 world must be re-imported.
+  version: 3
   shoreDistanceMeters: 48
   ocean:
     coastalShelfMeters: 20
     shelfDepth: 4
     maximumDepth: 24
     maximumBedSlope: 0.75
+    # Azgaar coasts meet the sea flat at the water line. Low land within
+    # beachWidthMeters of the sea rises to beachHeight above it, so a coast has a
+    # beach for the swash to run up; higher ground is left alone.
+    beachHeight: 1.8
+    beachWidthMeters: 30
   river:
     minimumDepth: 0.8
     maximumDepth: 8
     widthDepthRatio: 0.18
     bankExponent: 1.8
     minimumGradient: 0.0002
+    # Azgaar river points sit about 100 km apart; the level is traced along the
+    # terrain at this spacing, so it never floats over a valley between them.
+    profileStepMeters: 100
+    # Where a traced river cuts through a ridge, its gorge walls rise no steeper
+    # than valleySlope, reaching out as far as the cut needs, up to
+    # valleyReachMeters. A levee keeps the ground beside the channel at least
+    # leveeHeight above the water.
+    valleySlope: 0.7
+    valleyReachMeters: 1500
+    leveeHeight: 1
+    leveeWidthMeters: 12
+  # Azgaar lake features at their own surface level instead of sea-level pits.
+  lake:
+    minimumDepth: 1.5
+    maximumDepth: 18
+    # Distance from the shore over which the bed falls to maximumDepth.
+    shoreDepthMeters: 300
+    # A lip of land at least this far above the lake, so it never spills.
+    bankHeight: 1.5
+    bankWidthMeters: 60
+    # Azgaar outlines do not follow the terrain's own dip, so hills can stand
+    # right at the water. Within shoreReachMeters, land rises from the shore no
+    # steeper than shoreSlope, and hands back to the base terrain at the reach.
+    shoreSlope: 0.3
+    shoreReachMeters: 3000
+    # Azgaar lake outlines are tens of kilometres per edge; this breaks them up.
+    shorelineNoiseMeters: 400
+    shorelineNoiseScaleMeters: 2500
+  # Where the traced level drops at least minimumHeight within one profile
+  # step, the drop is a waterfall; above maximumHeight it becomes a cascade.
+  falls:
+    enabled: true
+    minimumHeight: 4
+    maximumHeight: 30
+    # Rise over run across a fall face.
+    faceSlope: 1.2
+    # Distance over which the plunge churn below a fall dies away.
+    plungeDecayMeters: 40
 player:
   water:
     wadeDepth: 0.7

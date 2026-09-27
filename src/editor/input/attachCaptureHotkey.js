@@ -22,6 +22,9 @@ export function attachCaptureHotkey(getHandler, target = window) {
       console.error('Capture hotkey handler failed.', error);
     }
   };
-  target.addEventListener('keydown', onKeyDown, true);
-  return () => target.removeEventListener('keydown', onKeyDown, true);
+  // The options object rather than a bare `true`: Node's EventTarget (which the
+  // tests run on) ignores a boolean capture flag in removeEventListener, so the
+  // listener would never come off there. Browsers treat the two forms alike.
+  target.addEventListener('keydown', onKeyDown, { capture: true });
+  return () => target.removeEventListener('keydown', onKeyDown, { capture: true });
 }

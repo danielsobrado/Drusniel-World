@@ -1,6 +1,7 @@
 import {
   WATER_BODY_ID_NONE,
   WATER_BODY_ID_PROCEDURAL_OCEAN,
+  WATER_KIND_LAKE,
   WATER_KIND_OCEAN,
   WATER_KIND_RIVER,
   WATER_SAMPLE_FLAG_INCOMPLETE_BED,
@@ -8,10 +9,14 @@ import {
 import { createNoWaterSample, createWaterSample } from './WaterSample.js';
 import { sampleOceanBed } from './OceanBathymetry.js';
 import { RiverChannel } from './RiverChannel.js';
+import { LakeBodies } from './LakeBodies.js';
+import { RiverValley } from './RiverValley.js';
 import { WaterDistanceField } from './WaterDistanceField.js';
 import { WaterCellCache } from './WaterCellCache.js';
 
 const WATER_TILE_ID = 0;
+/** How far a river must stand above a lake to count as still falling into it. */
+const LAKE_INFLOW_MARGIN = 0.05;
 
 export class WaterTerrainModel {
   constructor({
@@ -22,6 +27,7 @@ export class WaterTerrainModel {
     sampleBaseHeight,
     sampleBaseTile,
     isBaseRiverCell = null,
+    resolveLakeLevel = null,
   }) {
     this.source = source;
     this.seed = seed;
@@ -32,13 +38,21 @@ export class WaterTerrainModel {
     this.isBaseRiverCell = isBaseRiverCell;
     this.oceanCellCache = new WaterCellCache({ ArrayType: Uint8Array });
     this.vertexHeightCache = new WaterCellCache({ ArrayType: Float64Array });
+    const lakes = source?.lakes?.length && resolveLakeLevel
+      ? new LakeBodies({ source, resolveLevel: resolveLakeLevel, config })
+      : null;
+    this.lakes = lakes?.size ? lakes : null;
     this.riverChannel = source?.rivers?.length
       ? new RiverChannel({
         source,
         sampleBaseHeight,
         seaLevel,
         config,
+        lakeLevelAt: this.lakes ? (x, z) => this.lakes.levelAt(x, z) : null,
       })
+      : null;
+    this.riverValley = this.riverChannel?.segments.length
+      ? new RiverValley({ segments: this.riverChannel.segments, config, seaLevel, sampleBaseHeight })
       : null;
     this.oceanConfig = Object.freeze({
       ...config.ocean,
@@ -52,11 +66,23 @@ export class WaterTerrainModel {
         Math.ceil(config.shoreDistanceMeters / config.cellSizeMeters),
       ),
     });
+    // From land to the sea: the same transform with the roles swapped.
+    this.beachDistance = config.ocean.beachHeight > 0 && config.ocean.beachWidthMeters > 0
+      ? new WaterDistanceField({
+        isWaterCell: (cellX, cellZ) => !this.isOceanCell(cellX, cellZ),
+        maxDistanceCells: Math.max(1, Math.ceil(config.ocean.beachWidthMeters / config.cellSizeMeters)),
+      })
+      : null;
   }
 
   isRiverCell(cellX, cellZ) {
     if (this.riverChannel?.containsCell(cellX, cellZ)) return true;
     return this.isBaseRiverCell?.(cellX, cellZ) ?? false;
+  }
+
+  /** Whether a cell's centre lies in lake water — lakes paint the water tile like the sea. */
+  isLakeCell(cellX, cellZ) {
+    return this.lakes?.levelAt(cellX + 0.5, cellZ + 0.5) != null;
   }
 
   isOceanCell(cellX, cellZ) {
@@ -75,6 +101,16 @@ export class WaterTerrainModel {
       && this.isOceanCell(cellX, cellZ);
   }
 
+  isLandVertex(cellX, cellZ) {
+    if (!Number.isInteger(cellX) || !Number.isInteger(cellZ)) {
+      return !this.isOceanCell(Math.floor(cellX), Math.floor(cellZ));
+    }
+    return !this.isOceanCell(cellX - 1, cellZ - 1)
+      && !this.isOceanCell(cellX, cellZ - 1)
+      && !this.isOceanCell(cellX - 1, cellZ)
+      && !this.isOceanCell(cellX, cellZ);
+  }
+
   oceanBedHeight(cellX, cellZ, baseHeight) {
     if (!this.isOceanBedVertex(cellX, cellZ)) return baseHeight;
     const distanceMeters = this.oceanDistance.sample(cellX, cellZ) * this.config.cellSizeMeters;
@@ -89,14 +125,33 @@ export class WaterTerrainModel {
     });
   }
 
+  /**
+   * Low land by the sea rises into a beach: from sea level at the shoreline to
+   * `ocean.beachHeight` over `ocean.beachWidthMeters`. Only ground below the
+   * berm's top is considered, so inland terrain never builds the distance field.
+   */
+  beachHeight(cellX, cellZ, height) {
+    const { beachHeight, beachWidthMeters } = this.config.ocean;
+    if (!this.beachDistance || height >= this.seaLevel + beachHeight) return height;
+    // Only vertices wholly on land: the shoreline vertices stay where the
+    // coastline classification puts them, so the waterline does not move.
+    if (!this.isLandVertex(cellX, cellZ)) return height;
+    const distance = this.beachDistance.sample(cellX, cellZ) * this.config.cellSizeMeters;
+    const t = Math.min(1, distance / beachWidthMeters);
+    return Math.max(height, this.seaLevel + beachHeight * t * t * (3 - 2 * t));
+  }
+
   sampleVertexHeight(cellX, cellZ) {
     return this.vertexHeightCache.get(cellX, cellZ, (x, z) => {
       const baseHeight = this.sampleBaseHeight(x, z);
-      const oceanBed = this.oceanBedHeight(x, z, baseHeight);
+      const oceanBed = this.beachHeight(x, z, this.oceanBedHeight(x, z, baseHeight));
+      // Valley walls first, so a lake basin can still cut below a river's levee.
+      const valley = this.riverValley ? this.riverValley.shapeHeight(x, z, oceanBed) : oceanBed;
+      const shaped = this.lakes ? this.lakes.shapeHeight(x, z, valley) : valley;
       const river = this.riverChannel?.sample(x, z) ?? null;
-      if (!river) return oceanBed;
-      const carvedBed = Math.min(oceanBed, river.bedHeight);
-      return oceanBed + (carvedBed - oceanBed) * river.coverage;
+      if (!river) return shaped;
+      const carvedBed = Math.min(shaped, river.bedHeight);
+      return shaped + (carvedBed - shaped) * river.coverage;
     });
   }
 
@@ -128,7 +183,19 @@ export class WaterTerrainModel {
 
   sampleWater(cellX, cellZ) {
     const bedHeight = this.interpolatedHeight(cellX, cellZ);
+    const lake = this.lakes?.sample(cellX, cellZ) ?? null;
     const river = this.riverChannel?.sample(cellX, cellZ) ?? null;
+    // A river still above the lake is falling into it: the river owns that water,
+    // so the face of a fall at the shore runs down to the lake unbroken.
+    if (lake && !(river && river.surfaceHeight > lake.surfaceHeight + LAKE_INFLOW_MARGIN)) {
+      return createWaterSample({
+        kind: WATER_KIND_LAKE,
+        bodyId: lake.bodyId,
+        surfaceHeight: lake.surfaceHeight,
+        bedHeight,
+        shoreDistance: lake.shoreDistance,
+      });
+    }
     if (river) {
       return createWaterSample({
         kind: WATER_KIND_RIVER,
@@ -139,6 +206,8 @@ export class WaterTerrainModel {
         shoreDistance: river.shoreDistance,
         flowX: river.flowX,
         flowZ: river.flowZ,
+        fall: river.fall,
+        plunge: river.plunge,
       });
     }
     if (!this.riverChannel && this.isBaseRiverCell?.(Math.floor(cellX), Math.floor(cellZ))) {

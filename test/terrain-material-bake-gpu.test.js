@@ -45,6 +45,14 @@ function materialWithState() {
   return { material, state };
 }
 
+/** A terrain slot mesh carrying its own bake state, as the shared terrain material reads it. */
+function meshWithState() {
+  const mesh = new THREE.Mesh();
+  const state = createTerrainMaterialBakeGpuState(config());
+  attachTerrainMaterialBakeGpuState(mesh, state);
+  return { mesh, state };
+}
+
 test('GPU state preserves packed channel formats and uploads one page without reallocating', () => {
   const { material, state } = materialWithState();
   const baked = page();
@@ -90,12 +98,11 @@ test('material disposal releases every owned bake texture exactly once', () => {
 });
 
 test('GPU bridge fades a newly published bake without reallocating its textures', () => {
-  const { material, state } = materialWithState();
+  const { mesh, state } = meshWithState();
   const slot = {
     slotIndex: 0,
     descriptor: { key: '0:0' },
-    mesh: { visible: true },
-    material,
+    mesh,
     materialBake: page(),
     materialBakeStale: false,
   };
@@ -121,12 +128,11 @@ test('GPU bridge fades a newly published bake without reallocating its textures'
 });
 
 test('GPU bridge publishes a bake and disables it immediately when the slot loses residency', () => {
-  const { material, state } = materialWithState();
+  const { mesh, state } = meshWithState();
   const slot = {
     slotIndex: 0,
     descriptor: { key: '0:0' },
-    mesh: { visible: true },
-    material,
+    mesh,
     materialBake: page(),
     materialBakeStale: true,
   };
@@ -150,14 +156,13 @@ test('GPU bridge publishes a bake and disables it immediately when the slot lose
 });
 
 test('GPU bridge isolates a malformed page and retries only after the bake revision changes', () => {
-  const { material, state } = materialWithState();
+  const { mesh, state } = meshWithState();
   const broken = page('broken');
   broken.channels.farColor = new Uint8Array(1);
   const slot = {
     slotIndex: 0,
     descriptor: { key: '0:0' },
-    mesh: { visible: true },
-    material,
+    mesh,
     materialBake: broken,
     materialBakeStale: false,
   };

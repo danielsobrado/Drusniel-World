@@ -4,6 +4,8 @@ import {
   encodeTerrainMaterialFarColor,
 } from './TerrainMaterialBakeFarColor.js';
 import { encodeTerrainMaterialWeights } from './TerrainMaterialBakePacking.js';
+import { snowAtPoint } from './SnowAccumulation.js';
+import { terrainBakeMacroSeed, terrainBakeValueNoise as valueNoise } from './TerrainBakeNoise.js';
 
 const DISTANCE_INFINITY = 1e9;
 const SQRT_TWO = Math.SQRT2;
@@ -20,31 +22,6 @@ function smoothstep(edge0, edge1, value) {
   const span = Math.max(1e-9, edge1 - edge0);
   const t = clamp01((value - edge0) / span);
   return t * t * (3 - 2 * t);
-}
-
-function hashUnit(x, z, seed) {
-  let value = Math.imul(x ^ seed, 0x45d9f3b);
-  value = Math.imul(value ^ (value >>> 16) ^ z, 0x45d9f3b);
-  value ^= value >>> 16;
-  return (value >>> 0) / 0xffffffff;
-}
-
-function valueNoise(worldX, worldZ, scale, seed) {
-  const x = worldX / scale;
-  const z = worldZ / scale;
-  const x0 = Math.floor(x);
-  const z0 = Math.floor(z);
-  const tx = x - x0;
-  const tz = z - z0;
-  const sx = tx * tx * (3 - 2 * tx);
-  const sz = tz * tz * (3 - 2 * tz);
-  const a = hashUnit(x0, z0, seed);
-  const b = hashUnit(x0 + 1, z0, seed);
-  const c = hashUnit(x0, z0 + 1, seed);
-  const d = hashUnit(x0 + 1, z0 + 1, seed);
-  const ab = a + (b - a) * sx;
-  const cd = c + (d - c) * sx;
-  return ab + (cd - ab) * sz;
 }
 
 function outputToSource(index, resolution, chunkSize) {
@@ -186,6 +163,8 @@ export function captureTerrainMaterialBakeSource({
     originX: page.originX,
     originZ: page.originZ,
     tilePixels: page.tilePixels.slice(),
+    // Tile ids are the Azgaar biome ids: snow cover follows glacier and tundra.
+    tiles: page.tiles ? Uint8Array.from(page.tiles) : null,
     surfaceMaskPixels: page.surfaceMaskPixels.slice(),
     heights: page.heights.slice(),
     canopyPixels: canopyPixels instanceof Uint8Array ? canopyPixels.slice() : null,
@@ -230,6 +209,9 @@ export async function bakeTerrainMaterialPage({
   const canopyWater = new Uint8Array(texelCount * 2);
   const heights = new Float32Array(texelCount);
   const slopes = new Float32Array(texelCount);
+  const gradientsX = new Float32Array(texelCount);
+  const gradientsZ = new Float32Array(texelCount);
+  const curvatures = new Float32Array(texelCount);
   const sourceIndices = new Uint32Array(texelCount);
   const waterSource = waterDistanceSource(source, chunkSize);
   const rowsPerYield = config.build.rowsPerYield;
@@ -245,6 +227,9 @@ export async function bakeTerrainMaterialPage({
       sourceIndices[index] = sourceIndex;
       heights[index] = shape.center;
       slopes[index] = shape.slope;
+      gradientsX[index] = shape.dx;
+      gradientsZ[index] = shape.dz;
+      curvatures[index] = shape.curvature;
       terrainShapePixels[index * 2] = floatToHalf(shape.slope);
       terrainShapePixels[index * 2 + 1] = floatToHalf(shape.curvature);
       const [normalX, normalZ] = octNormal(shape.dx, shape.dz);
@@ -256,7 +241,7 @@ export async function bakeTerrainMaterialPage({
 
   const classification = config.classification;
   const macro = config.macro;
-  const macroSeed = (macro.seedOffset ^ (Number.isSafeInteger(worldSeed) ? worldSeed : 0)) | 0;
+  const macroSeed = terrainBakeMacroSeed(macro.seedOffset, worldSeed);
 
   for (let z = 0; z < resolution; z += 1) {
     for (let x = 0; x < resolution; x += 1) {
@@ -273,17 +258,18 @@ export async function bakeTerrainMaterialPage({
       const height = heights[index];
       const land = 1 - waterCoverage;
       const rock = smoothstep(classification.rockSlopeStart, classification.rockSlopeFull, slope) * land;
-      const snowAltitude = smoothstep(
-        classification.snowLine,
-        classification.snowLine + classification.snowFade,
+      const worldX = (source.originX + (x + 0.5) * chunkSize / resolution) * tileSize;
+      const worldZ = -(source.originZ + (z + 0.5) * chunkSize / resolution) * tileSize;
+      const snow = snowAtPoint({
         height,
-      );
-      const snowHold = 1 - smoothstep(
-        classification.snowSlopeMax * 0.7,
-        classification.snowSlopeMax,
         slope,
-      );
-      const snow = snowAltitude * snowHold * land;
+        dx: gradientsX[index],
+        dz: gradientsZ[index],
+        curvature: curvatures[index],
+        tileId: source.tiles ? source.tiles[sourceIndex] : -1,
+        worldX,
+        worldZ,
+      }, classification, macroSeed) * land;
       const grass = grassCoverage * (1 - path) * (1 - rock) * (1 - snow) * land;
       const dirt = Math.max(path, (1 - grassCoverage) * land) * (1 - rock) * (1 - snow);
       const weightTotal = grass + dirt + rock + snow;
@@ -315,8 +301,6 @@ export async function bakeTerrainMaterialPage({
       canopyWater[index * 2] = Math.round(canopy * 255);
       canopyWater[index * 2 + 1] = waterByte;
 
-      const worldX = (source.originX + (x + 0.5) * chunkSize / resolution) * tileSize;
-      const worldZ = -(source.originZ + (z + 0.5) * chunkSize / resolution) * tileSize;
       const macroBase = valueNoise(worldX, worldZ, macro.scaleMeters, macroSeed) * 2 - 1;
       const macroRed = 1 + macroBase * macro.strength;
       const macroGreen = 1

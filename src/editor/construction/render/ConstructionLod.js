@@ -3,6 +3,7 @@ import { projectedPixelHeight, selectProjectedLod } from '../../stylized/lod/pro
 export {
   amplifyCoarseJoints,
   coarsePlacements,
+  coarsePlacementsForModule,
   selectDominantPlacement,
 } from './ConstructionCoarsePlacements.js';
 

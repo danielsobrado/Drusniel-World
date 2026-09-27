@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   CONSTRUCTION_STYLES,
   DEFAULT_CONSTRUCTION_STYLE_KEY,
+  DEFAULT_COPING,
   constructionStyle,
   defineConstructionStyle,
 } from '../src/editor/construction/masonry/ConstructionStyleCatalog.js';
@@ -29,13 +30,44 @@ test('soft-limestone-rubble exists with required tuning', () => {
   assert.equal(Object.isFrozen(style), true);
 });
 
-test('default masonry style remains coursed rubble', () => {
-  assert.equal(DEFAULT_CONSTRUCTION_STYLE_KEY, 'coursed-rubble');
+test('new walls default to rounded fieldstone; older styles keep their order', () => {
+  assert.equal(DEFAULT_CONSTRUCTION_STYLE_KEY, 'rounded-fieldstone');
   assert.equal(
     Object.keys(CONSTRUCTION_STYLES)[0],
     'coursed-rubble',
   );
   assert.equal(Object.keys(CONSTRUCTION_STYLES)[1], 'soft-limestone-rubble');
+  assert.equal(Object.keys(CONSTRUCTION_STYLES).at(-1), 'rounded-fieldstone');
+});
+
+test('rounded fieldstone declares its mesher, top, footing and coping', () => {
+  const style = constructionStyle('rounded-fieldstone');
+  assert.equal(style.label, 'Rounded fieldstone');
+  assert.equal(style.geometry, 'rounded');
+  assert.equal(style.defaultTop, 'flat');
+  assert.equal(style.stonePalette, 'warm-fieldstone');
+  assert.deepEqual({ ...style.footing }, {
+    heightRatio: 1.5,
+    widthRatio: 1.35,
+    splitChance: 0.15,
+    plinth: 0.05,
+    burialMargin: 0.1,
+    burialMax: 0.6,
+  });
+  assert.deepEqual({ ...style.coping }, { height: 0.24, oversail: 1.2, widthRatio: 1.35 });
+  assert.equal(Object.isFrozen(style.footing), true);
+  assert.equal(Object.isFrozen(style.coping), true);
+});
+
+test('styles without the new fields keep the behaviour they always had', () => {
+  for (const key of ['coursed-rubble', 'soft-limestone-rubble', 'ashlar', 'random-rubble', 'dry-stone']) {
+    const style = constructionStyle(key);
+    assert.equal(style.geometry, 'soft', key);
+    assert.equal(style.defaultTop, null, key);
+    assert.equal(style.footing, null, key);
+    assert.equal(style.coping, DEFAULT_COPING, key);
+  }
+  assert.deepEqual({ ...DEFAULT_COPING }, { height: 0.16, oversail: 1.14, widthRatio: 1.15 });
 });
 
 test('existing styles keep their authored values and packer defaults', () => {
@@ -127,5 +159,28 @@ test('invalid definitions fail immediately', () => {
   assert.throws(
     () => defineConstructionStyle({ ...base, splitMaxDepth: 1.5 }),
     /splitMaxDepth must be an integer/,
+  );
+  assert.throws(
+    () => defineConstructionStyle({ ...base, geometry: 'voxel' }),
+    /geometry must be one of/,
+  );
+  assert.throws(
+    () => defineConstructionStyle({ ...base, defaultTop: 'domed' }),
+    /defaultTop domed is not a top style/,
+  );
+  assert.throws(
+    () => defineConstructionStyle({ ...base, footing: { heightRatio: 0.5, widthRatio: 1 } }),
+    /footing heightRatio/,
+  );
+  assert.throws(
+    () => defineConstructionStyle({
+      ...base,
+      footing: { heightRatio: 1.5, widthRatio: 1, burialMargin: 0.3, burialMax: 0.1 },
+    }),
+    /burialMax must be at least burialMargin/,
+  );
+  assert.throws(
+    () => defineConstructionStyle({ ...base, coping: { oversail: 2 } }),
+    /coping oversail/,
   );
 });

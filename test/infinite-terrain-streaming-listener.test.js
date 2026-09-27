@@ -56,7 +56,7 @@ test('terrain view disposal cancels only in-flight chunk requests', () => {
     {
       loading: true,
       descriptor: { chunkX: 4, chunkZ: -2 },
-      mesh: {},
+      mesh: { dispatchEvent() {} },
       material: disposable(),
       tileTexture: disposable(),
       surfaceMaskTexture: disposable(),
@@ -66,7 +66,7 @@ test('terrain view disposal cancels only in-flight chunk requests', () => {
     {
       loading: false,
       descriptor: { chunkX: 8, chunkZ: 9 },
-      mesh: {},
+      mesh: { dispatchEvent() {} },
       material: disposable(),
       tileTexture: disposable(),
       surfaceMaskTexture: disposable(),

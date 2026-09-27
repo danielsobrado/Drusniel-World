@@ -3,9 +3,16 @@ import {
   hasGuidanceField,
 } from '../import/AzgaarMacroWorldSource.js';
 import { WorldGuidanceField } from './WorldGuidanceField.js';
+import { ridgeHeight, validateMountainRidges } from './MountainRidges.js';
+import { valueNoise } from './valueNoise2d.js';
+import { TrailGrading, validateTrailGrading } from './TrailGrading.js';
+import { validateRouteMetadata } from '../import/AzgaarRoutes.js';
+import { TILE_BY_KEY } from '../tileCatalog.js';
 import { WORLD_MAX_SAFE_CELL_COORDINATE } from './worldConstants.js';
 
 const WATER_TILE_ID = 0;
+/** Graded routes draw as the editor's Road tile, whose path shading already exists. */
+const PATH_TILE_ID = TILE_BY_KEY.get('road').id;
 const LAND_HEIGHT = 20;
 const MOUNTAIN_RUGGEDNESS = 0.25;
 const LEGACY_DETAIL_GUIDANCE = Object.freeze({
@@ -36,24 +43,6 @@ function lerp(left, right, amount) {
 function smoothstep(value) {
   const t = clamp(value, 0, 1);
   return t * t * (3 - 2 * t);
-}
-
-function hash2d(x, z, seed) {
-  let value = Math.imul(x | 0, 0x1f123bb5) ^ Math.imul(z | 0, 0x5f356495) ^ (seed | 0);
-  value = Math.imul(value ^ (value >>> 15), 0x2c1b3c6d);
-  value = Math.imul(value ^ (value >>> 12), 0x297a2d39);
-  value ^= value >>> 15;
-  return (value >>> 0) / 0xffffffff;
-}
-
-function valueNoise(x, z, seed) {
-  const x0 = Math.floor(x);
-  const z0 = Math.floor(z);
-  const tx = smoothstep(x - x0);
-  const tz = smoothstep(z - z0);
-  const north = lerp(hash2d(x0, z0, seed), hash2d(x0 + 1, z0, seed), tx);
-  const south = lerp(hash2d(x0, z0 + 1, seed), hash2d(x0 + 1, z0 + 1, seed), tx);
-  return lerp(north, south, tz) * 2 - 1;
 }
 
 function pointSegmentDistance(px, py, ax, ay, bx, by) {
@@ -185,6 +174,12 @@ function validateTerrainMetadata(terrain, oceanTransitionCells) {
   if (!Number.isFinite(oceanTransitionCells) || oceanTransitionCells <= 0) {
     throw new Error('Azgaar macro source ocean transition must be positive.');
   }
+  if (terrain.ridges !== undefined && terrain.ridges !== null) {
+    validateMountainRidges(terrain.ridges, 'Azgaar macro source terrain ridges');
+  }
+  if (terrain.trails !== undefined && terrain.trails !== null) {
+    validateTrailGrading(terrain.trails, 'Azgaar macro source terrain trails');
+  }
   const detail = terrain.guidanceDetail;
   if (detail === undefined) return;
   if (!detail || GUIDANCE_DETAIL_FIELDS.some((name) => !Number.isFinite(detail[name]))) {
@@ -214,13 +209,34 @@ function validateRiverMetadata(rivers) {
   }
 }
 
+function validateLakeMetadata(lakes) {
+  if (lakes == null) return;
+  if (!Array.isArray(lakes)) {
+    throw new Error('Azgaar macro source lakes must be an array.');
+  }
+  for (const lake of lakes) {
+    if (!Number.isSafeInteger(lake?.id) || lake.id < 0 || !Number.isFinite(lake.height)
+        || !Array.isArray(lake.outline) || lake.outline.length < 3) {
+      throw new Error('Azgaar macro source contains invalid lake metadata.');
+    }
+    for (const point of lake.outline) {
+      if (!Array.isArray(point) || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) {
+        throw new Error('Azgaar macro source contains invalid lake coordinates.');
+      }
+    }
+  }
+}
+
 export class AzgaarMacroWorldGenerator {
   constructor(source, proceduralMetadata) {
     validateBounds(source.bounds);
     validateTerrainMetadata(source.terrain, source.oceanTransitionCells);
     validateBiomeDefinitions(source.biomes);
     validateRiverMetadata(source.rivers);
+    validateLakeMetadata(source.lakes);
+    validateRouteMetadata(source.routes);
     this.source = source;
+    this.trailGrading = undefined;
     this.heights = decodeGuidanceField(source, 'elevation');
     this.biomeAtlas = decodeGuidanceField(source, 'biomeId');
     this.features = hasGuidanceField(source, 'featureId')
@@ -382,7 +398,32 @@ export class AzgaarMacroWorldGenerator {
     );
   }
 
+  /**
+   * The ground, with roads and trails graded into it for worlds imported with
+   * trail grading (`import.azgaarTrails`).
+   */
   sampleHeight(vertexX, vertexZ) {
+    const height = this.sampleTerrainHeight(vertexX, vertexZ);
+    const trails = this.ensureTrailGrading();
+    return trails ? trails.grade(vertexX, vertexZ, height) : height;
+  }
+
+  /** Built on first use: indexing the routes is only worth it where heights are asked for. */
+  ensureTrailGrading() {
+    if (this.trailGrading !== undefined) return this.trailGrading;
+    const grading = this.source.terrain.trails;
+    this.trailGrading = grading && this.source.routes?.length
+      ? new TrailGrading({
+        source: this.source,
+        sampleTerrainHeight: (x, z) => this.sampleTerrainHeight(x, z),
+        grading,
+      })
+      : null;
+    return this.trailGrading;
+  }
+
+  /** The ground before any path is graded into it. */
+  sampleTerrainHeight(vertexX, vertexZ) {
     const rawHeight = this.sampleRawHeight(vertexX, vertexZ);
     const base = convertHeight(rawHeight, this.source.terrain);
     if (!this.isInside(vertexX, vertexZ)) {
@@ -400,7 +441,26 @@ export class AzgaarMacroWorldGenerator {
       valueNoise(vertexX / 96, vertexZ / 96, this.seed + 1709) * 1.4
       + valueNoise(vertexX / 24, vertexZ / 24, this.seed + 1877) * 0.35
     );
-    return base + detail * coastFade * ruggedness * this.morphologyScale(vertexX, vertexZ);
+    return base
+      + detail * coastFade * ruggedness * this.morphologyScale(vertexX, vertexZ)
+      + this.ridgeRelief(vertexX, vertexZ, elevationFraction) * coastFade;
+  }
+
+  /**
+   * Ridged crests on high ground, for worlds imported with ridges
+   * (`import.azgaarRidges`). Mountainness guidance, where a world has it,
+   * sharpens true ranges and softens high plateaus.
+   */
+  ridgeRelief(vertexX, vertexZ, elevationFraction) {
+    const ridges = this.source.terrain.ridges;
+    if (!ridges) return 0;
+    let scale = 1;
+    if (this.hasMorphologyGuidance && elevationFraction > ridges.startRelief) {
+      const mountainness = this.ensureGuidance()
+        .sampleContinuous('mountainness', vertexX - 0.5, vertexZ - 0.5) ?? 0.5;
+      scale = 0.6 + clamp(mountainness, 0, 1) * 0.6;
+    }
+    return ridgeHeight(vertexX, vertexZ, this.seed, elevationFraction, ridges, scale);
   }
 
   sampleMacroColumn(cellX, cellZ) {
@@ -411,8 +471,17 @@ export class AzgaarMacroWorldGenerator {
         this.outsideDistance(cellX, cellZ) / this.source.oceanTransitionCells,
       );
       height = lerp(height, this.source.terrain.minHeight * 0.35, amount);
+    } else if (rawHeight >= LAND_HEIGHT) {
+      // The far backdrop carries the same crests, so ranges keep their shape
+      // where near terrain hands over to it.
+      height += this.ridgeRelief(cellX, cellZ, landReliefFraction(rawHeight, this.source.terrain));
     }
     return { height, tileId: this.sampleTile(cellX, cellZ) };
+  }
+
+  /** A lake's surface in metres, by the same mapping as the land around it. */
+  lakeSurfaceHeight(lake) {
+    return convertHeight(lake.height, this.source.terrain);
   }
 
   isRiver(cellX, cellZ) {
@@ -437,6 +506,7 @@ export class AzgaarMacroWorldGenerator {
     const rawHeight = this.heights[index];
     if (rawHeight >= LAND_HEIGHT && this.isRiver(cellX, cellZ)) return WATER_TILE_ID;
     if (rawHeight < LAND_HEIGHT) return WATER_TILE_ID;
+    if ((this.ensureTrailGrading()?.pathCover(cellX + 0.5, cellZ + 0.5) ?? 0) >= 0.5) return PATH_TILE_ID;
     return this.biomeBySourceId.get(this.biomeAtlas[index]).tileId;
   }
 }

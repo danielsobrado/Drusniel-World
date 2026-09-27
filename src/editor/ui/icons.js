@@ -78,6 +78,12 @@ export const ICONS = Object.freeze({
   'bond-dry-stone': '<rect x="3.5" y="5.5" width="17" height="13" rx="1"/>'
     + '<path d="M3.5 9.5h17M3.5 12.5h17M3.5 15.5h17"/>'
     + '<path d="M10 5.5v4M7 9.5v3M14 9.5v3M11 12.5v3M17 12.5v3M8 15.5v3"/>',
+  // Pillow stones under a capstone line, big footing stones below.
+  'bond-rounded-fieldstone': '<path d="M3 5.5h18"/>'
+    + '<rect x="4" y="7.5" width="7.5" height="4.5" rx="2.25"/>'
+    + '<rect x="12.5" y="7.5" width="7.5" height="4.5" rx="2.25"/>'
+    + '<rect x="3.5" y="13" width="6" height="5.5" rx="2.6"/>'
+    + '<rect x="10.5" y="13" width="10" height="5.5" rx="2.6"/>',
 
   // --- Workshop gizmo + primitives ----------------------------------------
   material: '<path d="M12 3s6 6.5 6 10.5a6 6 0 0 1-12 0C6 9.5 12 3 12 3Z"/>',

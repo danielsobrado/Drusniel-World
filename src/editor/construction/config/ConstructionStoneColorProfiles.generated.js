@@ -53,6 +53,20 @@ export const CONSTRUCTION_STONE_COLOR_PROFILES = Object.freeze({
     }),
     categories: DEFAULT_CATEGORIES,
   }),
+  "rounded-fieldstone": Object.freeze({
+    enabled: true,
+    strength: 0.8,
+    warmChance: 0.55,
+    neutralChance: 0.2,
+    value: Object.freeze({ min: 0.955, max: 1.045 }),
+    warm: Object.freeze([1.05, 1.016, 0.962]),
+    cool: Object.freeze([0.968, 1.0, 1.036]),
+    outlier: Object.freeze({
+      chance: 0.04,
+      multiplier: Object.freeze([0.9, 0.915, 0.905]),
+    }),
+    categories: DEFAULT_CATEGORIES,
+  }),
 });
 
 export function constructionStoneColorProfile(styleKey) {

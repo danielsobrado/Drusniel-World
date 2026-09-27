@@ -55,6 +55,15 @@ export function validateFarTerrainConfig(farTerrain) {
   }
 
   optionalFinite(farTerrain.snowLine, 'snowLine');
+  if (farTerrain.snowBiomeCover !== undefined) {
+    const cover = farTerrain.snowBiomeCover;
+    if (!cover || typeof cover !== 'object' || Array.isArray(cover)
+        || Object.values(cover).some((value) => !Number.isFinite(value) || value < 0 || value > 1)) {
+      throw new Error(
+        'Invalid editor configuration: world.farTerrain.snowBiomeCover must map tile ids to cover in [0, 1].',
+      );
+    }
+  }
   optionalFinite(farTerrain.rockSlopeStart, 'rockSlopeStart', { minimum: 0 });
   optionalFinite(farTerrain.rockSlopeFull, 'rockSlopeFull', { minimum: 0 });
   optionalFinite(farTerrain.radialFalloff, 'radialFalloff', { minimum: 1 });

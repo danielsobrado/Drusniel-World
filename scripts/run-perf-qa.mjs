@@ -50,6 +50,7 @@ const hitchMs = readArg('hitchMs', '33.3');
 const buildings = readArg('buildings');
 const density = readArg('density');
 const collisionDebug = readArg('collisionDebug');
+const constructionStyle = readArg('constructionStyle');
 const spawnX = readArg('x');
 const spawnZ = readArg('z');
 const yaw = readArg('yaw');
@@ -89,6 +90,9 @@ const query = new URLSearchParams({
 setOptionalQuery(query, 'buildings', buildings);
 setOptionalQuery(query, 'density', density);
 setOptionalQuery(query, 'collisionDebug', collisionDebug);
+setOptionalQuery(query, 'constructionStyle', constructionStyle);
+if (hasFlag('settle')) query.set('settle', '1');
+setOptionalQuery(query, 'settleTimeout', readArg('settleTimeout'));
 setOptionalQuery(query, 'x', spawnX);
 setOptionalQuery(query, 'z', spawnZ);
 setOptionalQuery(query, 'yaw', yaw);

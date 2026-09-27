@@ -16,14 +16,14 @@ import {
 import { cloudMotionCoordinatesNode } from './AtmosphereMotion.js';
 import { directionFromAngles } from './StylizedGodRaysPostProcess.js';
 import { stylizedFbm } from './StylizedNoiseNodes.js';
-
-function colorNode(value) {
-  const color = new THREE.Color(value);
-  return vec3(color.r, color.g, color.b);
-}
+import { updateCloudShadows, wrapCloudCoordinate } from './CloudShadow.js';
+import { createSkyLookUniforms, resolveSkyLook, writeSkyLookUniforms } from './sky/SkyLook.js';
+import { skyAmbientColor } from './sky/skyAmbient.js';
+import { updateSkyLight } from './sky/skyLight.js';
 
 function cloudCoverageNode({
   config,
+  look,
   time,
   direction,
   cameraWorldPosition,
@@ -39,8 +39,8 @@ function cloudCoverageNode({
   });
   const cloudNoise = stylizedFbm(cloudUv);
   const cloudShape = smoothstep(
-    config.sky.cloudDensity,
-    config.sky.cloudDensity + config.sky.cloudSharpness,
+    look.cloudDensity,
+    look.cloudDensity.add(config.sky.cloudSharpness),
     cloudNoise,
   );
   const cloudFloor = smoothstep(
@@ -61,6 +61,7 @@ function cloudCoverageNode({
 
 function createSkyMaterial({
   config,
+  look,
   time,
   sunDirection,
   cameraWorldPosition,
@@ -71,41 +72,34 @@ function createSkyMaterial({
     config.sky.horizonLine + config.sky.horizonSpread,
     direction.y,
   );
-  let color = mix(
-    colorNode(config.sky.lowColor),
-    colorNode(config.sky.highColor),
-    horizon,
-  );
+  let color = mix(look.lowColor, look.highColor, horizon);
 
   const sunAlignment = clamp(dot(direction, sunDirection), 0, 1);
   const sunInner = Math.cos(config.sky.sunSize);
   const sunOuter = Math.cos(config.sky.sunSize + config.sky.sunEdgeSoftness);
   const sunDisc = smoothstep(sunOuter, sunInner, sunAlignment);
   const sunGlow = pow(sunAlignment, config.sky.sunGlowFalloff)
-    .mul(config.sky.sunGlowIntensity);
-  color = color.add(colorNode(config.sky.sunGlowColor).mul(sunGlow));
-  color = mix(color, colorNode(config.sky.sunColor).mul(config.sky.sunEmission), sunDisc);
+    .mul(look.sunGlowIntensity);
+  color = color.add(look.sunGlowColor.mul(sunGlow));
+  color = mix(color, look.sunColor.mul(look.sunEmission), sunDisc);
 
   const {
     coverage: cloudCoverage,
     shape: cloudShape,
   } = cloudCoverageNode({
     config,
+    look,
     time,
     direction,
     cameraWorldPosition,
   });
-  const cloudMask = cloudCoverage.mul(config.sky.cloudOpacity);
+  const cloudMask = cloudCoverage.mul(look.cloudOpacity);
   const cloudEdge = smoothstep(0.15, 0.85, cloudShape);
-  const cloudColor = mix(
-    colorNode(config.sky.cloudCore),
-    colorNode(config.sky.cloudEdge),
-    cloudEdge,
-  );
+  const cloudColor = mix(look.cloudCore, look.cloudEdge, cloudEdge);
   const cloudRim = pow(sunAlignment, config.sky.cloudRimFalloff)
     .mul(config.sky.cloudRimStrength)
     .mul(cloudEdge);
-  const litCloud = cloudColor.add(colorNode(config.sky.cloudRim).mul(cloudRim));
+  const litCloud = cloudColor.add(look.cloudRim.mul(cloudRim));
   color = mix(color, litCloud, cloudMask);
 
   const material = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide });
@@ -118,6 +112,7 @@ function createSkyMaterial({
 
 function createCloudTransmissionMaterial({
   config,
+  look,
   time,
   cloudOcclusion,
   cameraWorldPosition,
@@ -125,6 +120,7 @@ function createCloudTransmissionMaterial({
   const direction = normalize(positionLocal);
   const { coverage } = cloudCoverageNode({
     config,
+    look,
     time,
     direction,
     cameraWorldPosition,
@@ -147,18 +143,24 @@ export class StylizedSkyView {
     this.config = config;
     this.time = uniform(0);
     this.cameraWorldPosition = uniform(new THREE.Vector2());
+    /** Sunlight a cloud takes away; each look sets it (setCloudShadowStrength). */
+    this.cloudShadowStrength = config.sky.cloudShadows?.strength ?? 0;
     this.cloudOcclusion = uniform(
       config.sky.godRays?.cloudOcclusion ?? config.sky.cloudOpacity,
     );
     this.sunDirectionValue = directionFromAngles(config.sky.sunElevation, config.sky.sunAzimuth);
-    this.sunDirection = vec3(
-      this.sunDirectionValue.x,
-      this.sunDirectionValue.y,
-      this.sunDirectionValue.z,
-    );
+    // Live: a new time of day turns this vector in place (applyLook), and every
+    // material holding the uniform follows.
+    this.sunDirection = uniform(this.sunDirectionValue);
+    this.look = resolveSkyLook(config.sky);
+    this.configuredLook = this.look;
+    this.lookUniforms = createSkyLookUniforms(this.look);
+    this.fogDensityScale = 1;
+    this.baseFogDensity = config.sky.fogDensity;
     this.geometry = new THREE.SphereGeometry(1, 64, 32);
     this.material = createSkyMaterial({
       config,
+      look: this.lookUniforms,
       time: this.time,
       sunDirection: this.sunDirection,
       cameraWorldPosition: this.cameraWorldPosition,
@@ -172,6 +174,7 @@ export class StylizedSkyView {
     this.cloudMaskScene = new THREE.Scene();
     this.cloudMaskMaterial = createCloudTransmissionMaterial({
       config,
+      look: this.lookUniforms,
       time: this.time,
       cloudOcclusion: this.cloudOcclusion,
       cameraWorldPosition: this.cameraWorldPosition,
@@ -194,7 +197,7 @@ export class StylizedSkyView {
     }
 
     this.hemisphere = new THREE.HemisphereLight(
-      config.sky.highColor,
+      skyAmbientColor(this.look),
       config.sky.groundLightColor,
       config.sky.ambientIntensity,
     );
@@ -219,6 +222,10 @@ export class StylizedSkyView {
     terrainView.scene.fog = new THREE.FogExp2(config.sky.fogColor, config.sky.fogDensity);
   }
 
+  setCloudShadowStrength(strength) {
+    if (Number.isFinite(strength)) this.cloudShadowStrength = Math.max(0, Math.min(1, strength));
+  }
+
   setRadius(radius) {
     if (Number.isFinite(radius) && radius > 0) {
       this.mesh.scale.setScalar(radius);
@@ -227,9 +234,35 @@ export class StylizedSkyView {
   }
 
   setFogDensity(density) {
-    if (this.terrainView.scene.fog && Number.isFinite(density) && density >= 0) {
-      this.terrainView.scene.fog.density = density;
+    if (Number.isFinite(density) && density >= 0) this.baseFogDensity = density;
+    if (this.terrainView.scene.fog) {
+      this.terrainView.scene.fog.density = this.baseFogDensity * this.fogDensityScale;
     }
+  }
+
+  /**
+   * Show a look (SkyLook): sky colours, sun and lights, fog, cloud shadows.
+   * The sun vector turns in place, and the god rays' shared copy with it.
+   */
+  applyLook(look) {
+    this.look = look;
+    writeSkyLookUniforms(this.lookUniforms, look);
+    this.sunDirectionValue.copy(directionFromAngles(look.sunElevation, look.sunAzimuth));
+    this.terrainView.godRays.sunDirection?.copy(this.sunDirectionValue);
+    this.terrainView.godRays.setLight?.(
+      look.directionalColor,
+      look.directionalIntensity / Math.max(1e-4, this.configuredLook.directionalIntensity),
+    );
+    skyAmbientColor(look, this.hemisphere.color);
+    this.hemisphere.groundColor.set(look.groundLightColor);
+    this.hemisphere.intensity = look.ambientIntensity;
+    this.directional.color.set(look.directionalColor);
+    this.directional.intensity = look.directionalIntensity;
+    this.terrainView.scene.fog?.color.set(look.fogColor);
+    this.fogDensityScale = look.fogDensityScale;
+    this.setFogDensity();
+    this.setCloudShadowStrength(look.cloudShadowStrength);
+    updateSkyLight(look, this.configuredLook);
   }
 
   update(timestamp, camera) {
@@ -241,7 +274,23 @@ export class StylizedSkyView {
       camera.position.x,
       camera.position.z,
     );
-    this.cameraWorldPosition.value.set(canonicalCamera.x, canonicalCamera.z);
+    // Wrapped in double precision: raw canonical metres overflow the cloud
+    // hash's float32 range on a planet-scale world (see CloudShadow).
+    const worldScale = this.config.sky.cloudWorldScale;
+    this.cameraWorldPosition.value.set(
+      wrapCloudCoordinate(canonicalCamera.x, worldScale),
+      wrapCloudCoordinate(canonicalCamera.z, worldScale),
+    );
+    updateCloudShadows({
+      timeSeconds,
+      cameraRender: camera.position,
+      cameraCanonical: canonicalCamera,
+      worldScale,
+      strength: this.cloudShadowStrength,
+      sunDirection: this.sunDirectionValue,
+      sky: this.config.sky,
+      cloudDensity: this.look.cloudDensity,
+    });
     this.mesh.position.copy(camera.position);
     this.cloudMaskMesh.position.copy(camera.position);
     this.directional.position.copy(camera.position).addScaledVector(

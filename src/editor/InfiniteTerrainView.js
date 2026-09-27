@@ -2,6 +2,11 @@ import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import { PerfCounters } from './performance/qa/PerfCounters.js';
 import { createTerrainMaterial } from './terrainMaterial.js';
+import {
+  attachTerrainMaterialBakeGpuState,
+  createTerrainMaterialBakeGpuState,
+} from './materials/TerrainMaterialBakeGpu.js';
+import { TERRAIN_SLOT_KEY } from './materials/TerrainSlotBindings.js';
 import { cellCenterToWorld, worldToCell } from './world/WorldCoordinates.js';
 import {
   createTerrainSlotPlan,
@@ -28,6 +33,7 @@ import {
   directionFromAngles,
 } from './stylized/StylizedGodRaysPostProcess.js';
 import { patchViewportFramebufferSources } from '../render/patchViewportFramebufferSources.js';
+import { createSlotGeometry, fitSlotBounds } from './world/TerrainSlotBounds.js';
 
 // Water refraction / transmission sample viewport colour+depth via
 // ViewportTextureNode, which clones FramebufferTexture/DepthTexture per render
@@ -71,7 +77,26 @@ function createWaterDistanceField(terrainView, stylizedConfig) {
   });
 }
 
-function createSlot({ slotIndex, scene, geometry, worldStore, stylizedConfig }) {
+/**
+ * One terrain material for every slot (see TerrainSlotBindings): built from
+ * the first slot's data, which fixes the texture formats, then shared.
+ */
+function createSharedTerrainMaterialSource({ worldStore, stylizedConfig }) {
+  let material = null;
+  return (slotData, bakeGpuState) => {
+    material ??= createTerrainMaterial({
+      ...slotData,
+      chunkWorldSize: worldStore.chunkSize * worldStore.tileSize,
+      width: worldStore.chunkSize,
+      height: worldStore.chunkSize,
+      stylizedConfig,
+      bakeGpuState,
+    });
+    return material;
+  };
+}
+
+function createSlot({ slotIndex, scene, geometry, worldStore, stylizedConfig, sharedMaterial }) {
   const chunkSize = worldStore.chunkSize;
   const texturePixels = new Uint8Array(chunkSize * chunkSize * 4);
   const surfaceMaskPixels = new Uint8Array(chunkSize * chunkSize * 4);
@@ -128,18 +153,14 @@ function createSlot({ slotIndex, scene, geometry, worldStore, stylizedConfig }) 
   forestFloorTexture.needsUpdate = true;
 
   const chunkCenter = uniform(new THREE.Vector2());
-  const material = createTerrainMaterial({
-    tileTexture,
-    heightTexture,
-    surfaceMaskTexture,
-    forestFloorTexture,
-    chunkCenter,
-    chunkWorldSize: chunkSize * worldStore.tileSize,
-    width: chunkSize,
-    height: chunkSize,
-    stylizedConfig,
-  });
-  const mesh = new THREE.Mesh(geometry, material);
+  const slotData = { tileTexture, heightTexture, surfaceMaskTexture, forestFloorTexture, chunkCenter };
+  const bakeGpuState = createTerrainMaterialBakeGpuState(stylizedConfig.materialBake);
+  const material = sharedMaterial(slotData, bakeGpuState);
+  // Own bounds over the shared buffers: the height is applied in the shader.
+  const mesh = new THREE.Mesh(createSlotGeometry(geometry), material);
+  // What the shared material draws for this slot, and its own bake.
+  mesh.userData[TERRAIN_SLOT_KEY] = slotData;
+  attachTerrainMaterialBakeGpuState(mesh, bakeGpuState);
   mesh.rotation.x = -Math.PI / 2;
   mesh.visible = false;
   mesh.name = `terrain-slot-${slotIndex}`;
@@ -196,7 +217,7 @@ export class InfiniteTerrainView {
       webgpu: false,
       webgl: false,
     });
-    this.surfaceMaskConfig = createSurfaceMaskConfig(stylizedConfig);
+    this.surfaceMaskConfig = createSurfaceMaskConfig(stylizedConfig, { tileSize: worldStore.tileSize });
     this.chunkSize = worldStore.chunkSize;
     this.surfaceMaskChunkRadius = getSurfaceMaskChunkRadius(
       this.surfaceMaskConfig.blendCells,
@@ -276,6 +297,7 @@ export class InfiniteTerrainView {
       this.chunkSize,
       this.chunkSize,
     );
+    const sharedMaterial = createSharedTerrainMaterialSource({ worldStore, stylizedConfig });
     this.slots = Array.from(
       { length: streamingConfig.maxResidentChunks },
       (_, slotIndex) => createSlot({
@@ -284,6 +306,7 @@ export class InfiniteTerrainView {
         geometry: this.geometry,
         worldStore,
         stylizedConfig,
+        sharedMaterial,
       }),
     );
 
@@ -565,6 +588,7 @@ export class InfiniteTerrainView {
     slot.texturePixels.set(ready.tilePixels);
     slot.surfaceMaskPixels.set(ready.surfaceMaskPixels);
     slot.heightPixels.set(ready.heights);
+    fitSlotBounds(slot.mesh.geometry, ready.heights, this.chunkWorldSize);
     slot.tileTexture.needsUpdate = true;
     slot.surfaceMaskTexture.needsUpdate = true;
     slot.heightTexture.needsUpdate = true;
@@ -871,9 +895,11 @@ export class InfiniteTerrainView {
     this.unsubscribeWorld?.();
     this.preview.geometry.dispose();
     this.preview.material.dispose();
+    // Slots share one material; each mesh carries its own bake state.
+    new Set(this.slots.map((slot) => slot.material)).forEach((material) => material.dispose());
     for (const slot of this.slots) {
       this.scene.remove(slot.mesh);
-      slot.material.dispose();
+      slot.mesh.dispatchEvent({ type: 'dispose' });
       slot.tileTexture.dispose();
       slot.surfaceMaskTexture.dispose();
       slot.heightTexture.dispose();

@@ -1,5 +1,6 @@
 import { FrameProfiler } from './FrameProfiler.js';
 import { PerfCounters } from './PerfCounters.js';
+import { PerfQaSettleGate } from './PerfQaSettleGate.js';
 import { buildPerfReport, downloadPerfReport } from './buildPerfReport.js';
 import { createMovementPlan, parseQaParams } from './parseQaParams.js';
 
@@ -116,6 +117,8 @@ export class PerfQaHarness {
     }
     this.profiler = new FrameProfiler({ hitchMs: this.config.hitchMs });
     this.report = null;
+    this.settleGate = new PerfQaSettleGate({ timeoutSeconds: this.config.settleTimeoutSeconds });
+    this.settleResult = null;
     this.status = 'running';
     this.phaseIndex = 0;
     this.phaseStartedAt = performance.now();
@@ -257,6 +260,9 @@ export class PerfQaHarness {
       if (elapsedSeconds < phase.durationSeconds) {
         return;
       }
+      if (phase.settle && !this.settlePhase(elapsedSeconds - phase.durationSeconds)) {
+        return;
+      }
     }
 
     this.phaseIndex += 1;
@@ -278,6 +284,35 @@ export class PerfQaHarness {
       this.log(`Measuring for ${budget}…`);
     }
     this.enterPhase(next);
+  }
+
+  /** Readiness checks the settle gate waits on; a missing system counts as ready. */
+  settleReadiness() {
+    const collision = collisionStatus(this.playerController, { lightweight: true });
+    const streaming = this.terrainView?.getStreamingStatus?.() ?? null;
+    return {
+      collision: collision ? Boolean(collision.ready) : true,
+      streaming: streaming ? streaming.loading === 0 : true,
+      construction: !(PerfCounters.get('constructionQueueDepth') > 0),
+    };
+  }
+
+  /** @returns {boolean} whether the warmup may end now */
+  settlePhase(waitedSeconds) {
+    const verdict = this.settleGate.update(this.settleReadiness(), waitedSeconds);
+    if (verdict === 'waiting') {
+      this.live.phase = `Warmup (settling: ${this.settleGate.blockers.join(', ') || 'holding'})`;
+      return false;
+    }
+    this.settleResult = Object.freeze({
+      settled: verdict === 'settled',
+      waitedSeconds: Math.round(waitedSeconds * 10) / 10,
+      blockers: verdict === 'settled' ? [] : [...this.settleGate.blockers],
+    });
+    this.log(verdict === 'settled'
+      ? `Settled after ${this.settleResult.waitedSeconds}s more warmup`
+      : `Settle timed out waiting for ${this.settleResult.blockers.join(', ')}`);
+    return true;
   }
 
   enterPhase(phase) {
@@ -343,6 +378,7 @@ export class PerfQaHarness {
       collisionConfig: this.editorConfig?.collision ?? null,
       collisionStatus: collision,
       postProcessingCapture: this.buildPostProcessingCaptureSnapshot(),
+      settle: this.settleResult,
     });
     if (typeof window !== 'undefined') {
       window.__perfQaReport = this.report;

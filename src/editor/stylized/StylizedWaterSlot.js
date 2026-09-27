@@ -7,11 +7,11 @@ import {
   PERF_COUNTER_WATER_UPLOAD_BYTES,
   PerfCounters,
 } from '../performance/qa/PerfCounters.js';
-import { waterFieldHasCoverage } from '../water/WaterField.js';
+import { WATER_FLOW_CHANNELS, waterFieldHasCoverage } from '../water/WaterField.js';
 import { createStylizedWaterMaterial } from './StylizedWaterMaterial.js';
+import { SEA_SWELL_COMPONENTS, seaSwellPhaseOrigin } from '../water/SeaSwell.js';
 
 const WATER_FIELD_CHANNELS = 4;
-const WATER_FLOW_CHANNELS = 2;
 // Chebyshev radius, in chunks around the focus chunk, within which water is
 // refracted. Wide enough that the swap happens well outside the range where
 // refraction reads as anything but a faint tint, narrow enough that standing
@@ -19,12 +19,16 @@ const WATER_FLOW_CHANNELS = 2;
 const REFRACTION_CHUNK_RADIUS = 2;
 
 export class StylizedWaterSlot {
-  constructor({ terrainSlot, terrainView, config }) {
+  constructor({ terrainSlot, terrainView, config, sunDirection = null }) {
     this.terrainSlot = terrainSlot;
     this.terrainView = terrainView;
     this.config = config;
     this.time = uniform(0);
     this.surfaceOrigin = uniform(0);
+    // Each swell component's phase at this chunk's centre, in double precision.
+    this.seaPhaseOrigin = SEA_SWELL_COMPONENTS.map(() => uniform(0));
+    this.rippleOrigin = uniform(new THREE.Vector2());
+    this.seaPhaseDescriptor = null;
     this.fieldSize = terrainView.chunkSize + 1;
     this.waterFieldPixels = new Uint16Array(
       this.fieldSize * this.fieldSize * WATER_FIELD_CHANNELS,
@@ -32,7 +36,11 @@ export class StylizedWaterSlot {
     this.waterFlowPixels = new Uint8Array(
       this.fieldSize * this.fieldSize * WATER_FLOW_CHANNELS,
     );
-    this.waterFlowPixels.fill(128);
+    // A still current (0.5 encodes zero) with no fall and no plunge.
+    for (let index = 0; index < this.waterFlowPixels.length; index += WATER_FLOW_CHANNELS) {
+      this.waterFlowPixels[index] = 128;
+      this.waterFlowPixels[index + 1] = 128;
+    }
     this.waterFieldTexture = new THREE.DataTexture(
       this.waterFieldPixels,
       this.fieldSize,
@@ -50,7 +58,7 @@ export class StylizedWaterSlot {
       this.waterFlowPixels,
       this.fieldSize,
       this.fieldSize,
-      THREE.RGFormat,
+      THREE.RGBAFormat,
       THREE.UnsignedByteType,
     );
     this.waterFlowTexture.magFilter = THREE.LinearFilter;
@@ -72,6 +80,9 @@ export class StylizedWaterSlot {
       chunkWorldSize: terrainView.chunkWorldSize,
       time: this.time,
       config,
+      seaPhaseOrigin: this.seaPhaseOrigin,
+      rippleOrigin: this.rippleOrigin,
+      sunDirection,
     };
     this.material = this.createMaterial(false);
     // Built on first approach to water, never up front: a material carrying the
@@ -193,6 +204,16 @@ export class StylizedWaterSlot {
       PerfCounters.inc(PERF_COUNTER_WATER_CHUNKS_REFRACTIVE);
     }
     this.mesh.position.copy(this.terrainSlot.mesh.position);
+    if (descriptor !== this.seaPhaseDescriptor) {
+      this.seaPhaseDescriptor = descriptor;
+      seaSwellPhaseOrigin(descriptor.centerWorldX, descriptor.centerWorldZ)
+        .forEach((phase, index) => { this.seaPhaseOrigin[index].value = phase; });
+      const tileSize = this.terrainView.worldStore.tileSize;
+      this.rippleOrigin.value.set(
+        Math.round(descriptor.originCellX * tileSize),
+        Math.round(descriptor.originCellZ * tileSize),
+      );
+    }
   }
 
   dispose() {

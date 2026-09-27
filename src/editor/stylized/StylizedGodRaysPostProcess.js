@@ -165,6 +165,8 @@ export class StylizedGodRaysPostProcess {
     this.dustSpeed = uniform(config?.dustSpeed ?? 0.025);
     this.atmosphereTime = uniform(0);
     this.tint = uniform(normalizedColorVector(sunColor ?? '#ffffff'));
+    /** The sun's strength against the configured sun; a dim moon scatters dimly. */
+    this.lightScale = uniform(1);
     const volumetric = this.config.volumetric;
     this.volumetricIntensity = uniform(volumetric.intensity ?? 1);
     this.volumetricBlurSoftness = uniform(volumetric.blurSoftness ?? 0.85);
@@ -200,6 +202,12 @@ export class StylizedGodRaysPostProcess {
     if (this.volumetricLight === light) return;
     this.disposeVolumetricPipeline();
     this.volumetricLight = light;
+  }
+
+  /** Follow the sky's light: its colour, and its strength relative to the configured sun. */
+  setLight(color, scale) {
+    this.tint.value.copy(normalizedColorVector(color));
+    if (Number.isFinite(scale)) this.lightScale.value = Math.max(0, scale);
   }
 
   setTime(timeSeconds) {
@@ -260,7 +268,7 @@ export class StylizedGodRaysPostProcess {
 
     this.screenPipeline = new THREE.RenderPipeline(this.renderer);
     this.screenPipeline.outputNode = vec4(
-      beauty.rgb.add(this.raysTexture.sample(screenUV).rgb.mul(this.tint)),
+      beauty.rgb.add(this.raysTexture.sample(screenUV).rgb.mul(this.tint).mul(this.lightScale)),
       beauty.a,
     );
     return this.screenPipeline;
@@ -325,7 +333,7 @@ export class StylizedGodRaysPostProcess {
 
     this.volumetricPipeline = new THREE.RenderPipeline(this.renderer);
     this.volumetricPipeline.outputNode = vec4(
-      beauty.rgb.add(this.tint.mul(rayAmount)),
+      beauty.rgb.add(this.tint.mul(this.lightScale).mul(rayAmount)),
       beauty.a,
     );
     this.volumetricCamera = camera;
@@ -373,6 +381,7 @@ export class StylizedGodRaysPostProcess {
     this.pipeline.render();
     return true;
   }
+
 
   getSettings() {
     const volumetric = this.config.volumetric;

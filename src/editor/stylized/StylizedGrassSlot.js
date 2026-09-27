@@ -12,6 +12,7 @@ import {
 } from './grassLodMath.js';
 import { generatedProfile, resampleProfile } from './grassBladeProfiles.js';
 import { filterScatterByForest } from './forest/ForestFloor.js';
+import { applyCloudShadow } from './CloudShadow.js';
 import {
   compactGrassScatter,
 } from './vegetationScatter.js';
@@ -407,6 +408,7 @@ export class StylizedGrassSlot {
       config: this.config,
       tuning: this.tuning,
     });
+    applyCloudShadow(this.material, this.config.sky);
     this.mesh.geometry = this.geometry;
     this.mesh.material = this.material;
     this.mesh.receiveShadow = true;

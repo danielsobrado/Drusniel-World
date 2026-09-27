@@ -42,14 +42,18 @@ function normalizedWeights(textureNode) {
 }
 
 function sampleBakeTextures(gpuState, terrainUv) {
+  // A shared material samples each drawn slot's own bake (TerrainSlotBindings).
+  const sample = (name) => (gpuState.sampleTexture
+    ? gpuState.sampleTexture(name, terrainUv)
+    : texture(gpuState.textures[name], terrainUv));
   return {
-    macroTint: texture(gpuState.textures.macroTint, terrainUv),
-    terrainShape: texture(gpuState.textures.terrainShape, terrainUv),
-    materialWeights: texture(gpuState.textures.materialWeights, terrainUv),
-    wetnessShoreline: texture(gpuState.textures.wetnessShoreline, terrainUv),
-    farColor: texture(gpuState.textures.farColor, terrainUv),
-    farNormal: texture(gpuState.textures.farNormal, terrainUv),
-    canopyWater: texture(gpuState.textures.canopyWater, terrainUv),
+    macroTint: sample('macroTint'),
+    terrainShape: sample('terrainShape'),
+    materialWeights: sample('materialWeights'),
+    wetnessShoreline: sample('wetnessShoreline'),
+    farColor: sample('farColor'),
+    farNormal: sample('farNormal'),
+    canopyWater: sample('canopyWater'),
   };
 }
 
@@ -300,6 +304,10 @@ export function createTerrainMaterialBakedSurface({
     color: select(gpuState.ready.greaterThan(0.5), publishedColor, proceduralColor),
     roughness: readyRoughness,
     normal: readyNormal,
+    /** 0..1 baked snow cover, for snow-only shading on top. */
+    snow: select(gpuState.ready.greaterThan(0.5), weights.a, float(0)),
+    /** 0..1 baked canopy over the ground, which shelters it from rain. */
+    canopy: select(gpuState.ready.greaterThan(0.5), samples.canopyWater.r, float(0)),
   };
 }
 

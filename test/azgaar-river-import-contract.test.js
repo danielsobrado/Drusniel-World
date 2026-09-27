@@ -88,3 +88,19 @@ test('Full JSON import accepts the documented -1 off-canvas river cell sentinel'
   assert.equal(fields.riverId[0], 7);
   assert.equal(fields.riverDistance[0], 0);
 });
+
+test('a fresh import records the active water domain so the loader accepts it', async () => {
+  const { assertCompatibleWaterDomainMetadata, resolveWaterDomainConfig } = await import(
+    '../src/editor/water/WaterConfig.js'
+  );
+  const waterDomain = resolveWaterDomainConfig({ cellSizeMeters: 2 });
+  const converted = importAzgaarFullJson(createDocument(), { ...createConfig(), waterDomain });
+  const generator = converted.world.generator;
+
+  assert.equal(generator.waterDomainVersion, waterDomain.version);
+  assert.doesNotThrow(() => assertCompatibleWaterDomainMetadata(generator, {
+    waterDomainVersion: waterDomain.version,
+    waterDomain,
+  }));
+  assert.equal(converted.world.baseTerrain.lakes.length, 0);
+});

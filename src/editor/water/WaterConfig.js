@@ -14,6 +14,8 @@ export const DEFAULT_WATER_DOMAIN_CONFIG = Object.freeze({
     shelfDepth: 4,
     maximumDepth: 24,
     maximumBedSlope: 0.75,
+    beachHeight: 1.8,
+    beachWidthMeters: 30,
   }),
   river: Object.freeze({
     minimumDepth: 0.8,
@@ -21,6 +23,29 @@ export const DEFAULT_WATER_DOMAIN_CONFIG = Object.freeze({
     widthDepthRatio: 0.18,
     bankExponent: 1.8,
     minimumGradient: 0.0002,
+    profileStepMeters: 100,
+    valleySlope: 0.7,
+    valleyReachMeters: 1500,
+    leveeHeight: 1,
+    leveeWidthMeters: 12,
+  }),
+  lake: Object.freeze({
+    minimumDepth: 1.5,
+    maximumDepth: 18,
+    shoreDepthMeters: 300,
+    bankHeight: 1.5,
+    bankWidthMeters: 60,
+    shoreSlope: 0.3,
+    shoreReachMeters: 3000,
+    shorelineNoiseMeters: 400,
+    shorelineNoiseScaleMeters: 2500,
+  }),
+  falls: Object.freeze({
+    enabled: true,
+    minimumHeight: 4,
+    maximumHeight: 30,
+    faceSlope: 1.2,
+    plungeDecayMeters: 40,
   }),
 });
 
@@ -51,12 +76,16 @@ function cloneDomain(domain) {
     shoreDistanceMeters: domain.shoreDistanceMeters,
     ocean: { ...domain.ocean },
     river: { ...domain.river },
+    lake: { ...domain.lake },
+    falls: { ...domain.falls },
   };
 }
 
 function freezeDomain(domain) {
   Object.freeze(domain.ocean);
   Object.freeze(domain.river);
+  Object.freeze(domain.lake);
+  Object.freeze(domain.falls);
   return Object.freeze(domain);
 }
 
@@ -99,6 +128,9 @@ export function validateWaterDomainDefinition(domain) {
       'Invalid water configuration: waterDomain.ocean.maximumDepth must cover shelfDepth.',
     );
   }
+  for (const field of ['beachHeight', 'beachWidthMeters']) {
+    assertNonNegative(domain.ocean[field], `waterDomain.ocean.${field}`);
+  }
   if (domain.ocean.maximumBedSlope > 1) {
     throw new Error(
       'Invalid water configuration: waterDomain.ocean.maximumBedSlope must be within (0, 1].',
@@ -119,15 +151,69 @@ export function validateWaterDomainDefinition(domain) {
     'widthDepthRatio',
     'bankExponent',
     'minimumGradient',
+    'profileStepMeters',
+    'valleySlope',
+    'valleyReachMeters',
+    'leveeWidthMeters',
   ]) {
     assertPositive(domain.river[field], `waterDomain.river.${field}`);
+  }
+  assertNonNegative(domain.river.leveeHeight, 'waterDomain.river.leveeHeight');
+  if (domain.river.valleyReachMeters <= domain.river.leveeWidthMeters) {
+    throw new Error(
+      'Invalid water configuration: waterDomain.river.valleyReachMeters must exceed leveeWidthMeters.',
+    );
   }
   if (domain.river.minimumDepth > domain.river.maximumDepth) {
     throw new Error(
       'Invalid water configuration: waterDomain.river.maximumDepth must cover minimumDepth.',
     );
   }
+  validateLakeDefinition(domain.lake);
+  validateFallsDefinition(domain.falls);
   return domain;
+}
+
+function validateLakeDefinition(lake) {
+  assertObject(lake, 'waterDomain.lake');
+  for (const field of [
+    'minimumDepth',
+    'maximumDepth',
+    'shoreDepthMeters',
+    'bankWidthMeters',
+    'shoreSlope',
+    'shoreReachMeters',
+    'shorelineNoiseScaleMeters',
+  ]) {
+    assertPositive(lake[field], `waterDomain.lake.${field}`);
+  }
+  if (lake.shoreReachMeters <= lake.bankWidthMeters) {
+    throw new Error(
+      'Invalid water configuration: waterDomain.lake.shoreReachMeters must exceed bankWidthMeters.',
+    );
+  }
+  assertNonNegative(lake.bankHeight, 'waterDomain.lake.bankHeight');
+  assertNonNegative(lake.shorelineNoiseMeters, 'waterDomain.lake.shorelineNoiseMeters');
+  if (lake.minimumDepth > lake.maximumDepth) {
+    throw new Error(
+      'Invalid water configuration: waterDomain.lake.maximumDepth must cover minimumDepth.',
+    );
+  }
+}
+
+function validateFallsDefinition(falls) {
+  assertObject(falls, 'waterDomain.falls');
+  if (typeof falls.enabled !== 'boolean') {
+    throw new Error('Invalid water configuration: waterDomain.falls.enabled must be boolean.');
+  }
+  for (const field of ['minimumHeight', 'maximumHeight', 'faceSlope', 'plungeDecayMeters']) {
+    assertPositive(falls[field], `waterDomain.falls.${field}`);
+  }
+  if (falls.minimumHeight > falls.maximumHeight) {
+    throw new Error(
+      'Invalid water configuration: waterDomain.falls.maximumHeight must cover minimumHeight.',
+    );
+  }
 }
 
 export function resolveWaterDomainConfig(value = runtimeWaterDomainConfig) {
@@ -137,6 +223,8 @@ export function resolveWaterDomainConfig(value = runtimeWaterDomainConfig) {
     ...source,
     ocean: { ...DEFAULT_WATER_DOMAIN_CONFIG.ocean, ...source.ocean },
     river: { ...DEFAULT_WATER_DOMAIN_CONFIG.river, ...source.river },
+    lake: { ...DEFAULT_WATER_DOMAIN_CONFIG.lake, ...source.lake },
+    falls: { ...DEFAULT_WATER_DOMAIN_CONFIG.falls, ...source.falls },
   });
   validateWaterDomainDefinition(resolved);
   return freezeDomain(resolved);
@@ -188,10 +276,11 @@ export function applyWaterDomainConfig(config, waterConfig) {
     }
   }
   assertObject(config.player, 'player');
-  const domain = {
+  // Sections a config file leaves out (lake, falls) take their defaults.
+  const domain = serializeWaterDomainConfig({
     ...structuredClone(waterConfig.waterDomain),
     cellSizeMeters: config.map?.tileSize ?? waterConfig.waterDomain.cellSizeMeters ?? 1,
-  };
+  });
   config.waterDomain = domain;
   config.player.water = structuredClone(waterConfig.player.water);
   setRuntimeWaterDomainConfig(domain);

@@ -1,6 +1,7 @@
 # Tiny Glade-style wall builder
 
-Status: **complete** — all nine phases landed 2026-07-27/28.
+Status: **complete** — all nine phases landed 2026-07-27/28. Phase 10, the
+stone look (rounded fieldstone as the new default), landed 2026-09-24.
 
 This folder is the execution plan for turning the live construction tool into a
 Tiny Glade-style procedural wall builder. It extends
@@ -31,6 +32,7 @@ The target is the reference game's wall workflow:
 | Editing while in player mode after ESC | 7 |
 | Walkable ramparts | 8 |
 | LOD and performance gates | 9 |
+| Chunky rounded stones, footing and capstones | 10 |
 
 ## Phase index
 
@@ -44,6 +46,7 @@ The target is the reference game's wall workflow:
 | [phase-7-player-mode-editing.md](phase-7-player-mode-editing.md) | 7 | Paused player mode, in-world editing, Escape ordering |
 | [phase-8-walkable-wall-tops.md](phase-8-walkable-wall-tops.md) | 8 | Construction ground provider, ramparts and ramps |
 | [phase-9-lod-and-performance.md](phase-9-lod-and-performance.md) | 9 | Three-band LOD, counters, perf gates |
+| [phase-10-rounded-fieldstone.md](phase-10-rounded-fieldstone.md) | 10 | Rounded pillow stones, footing and capstone courses, new default style |
 
 Each phase is independently shippable and independently verifiable. Phase 7 only
 depends on Phase 1, so it can be pulled forward at any time.

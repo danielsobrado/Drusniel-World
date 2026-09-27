@@ -126,6 +126,7 @@ export function buildPerfReport({
   collisionConfig = null,
   collisionStatus = null,
   postProcessingCapture = null,
+  settle = null,
 }) {
   const frames = profiler.getFrames();
   const summary = profiler.summarize();
@@ -222,6 +223,7 @@ export function buildPerfReport({
       yawDegrees: config.yawDegrees,
       pitchDegrees: config.pitchDegrees,
       warmupSeconds: config.warmupSeconds,
+      settle: config.settle ? (settle ?? { settled: false, waitedSeconds: null, blockers: [] }) : null,
       durationSeconds: config.durationSeconds,
       warmupFrames: config.warmupFrames ?? null,
       measureFrames: config.measureFrames ?? null,

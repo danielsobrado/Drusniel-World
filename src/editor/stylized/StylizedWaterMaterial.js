@@ -36,6 +36,11 @@ import { resolveWaterQualityFeatures } from '../water/WaterQuality.js';
 import { assignWaterMaterialData } from '../../render/postprocessing/PostProcessingMaterialData.js';
 import { stylizedFbm2 } from './StylizedNoiseNodes.js';
 import { createSurfaceClassNodes } from './SurfaceMaskNodes.js';
+import { createWaterfallFoamNode } from './WaterfallShading.js';
+import { createSeaSurfaceNodes } from './SeaSurfaceShading.js';
+import { createRainRippleNode } from './RainRippleShading.js';
+import { seaStateUniforms } from '../water/seaState.js';
+import { skyLightUniforms } from './sky/skyLight.js';
 
 const CAUSTIC_RING_RADIUS = 0.4;
 const CAUSTIC_AA_SCALE = 1.25;
@@ -128,6 +133,13 @@ export function createStylizedWaterMaterial({
   chunkWorldSize,
   time,
   config,
+  // Per-chunk phase of each swell component at the chunk centre (SeaSwell), and
+  // the sun the swell's slopes are shaded against. Without them there is no swell.
+  seaPhaseOrigin = null,
+  sunDirection = null,
+  // The chunk's origin corner in whole metres on cell axes, for patterns that
+  // must stay exact at planet scale (rain rings).
+  rippleOrigin = null,
   // Build-time opt-out. Sampling the viewport colour and depth textures makes
   // the renderer copy both buffers for the whole frame, and it does so as soon
   // as a material carrying those nodes is used at all — hiding the mesh does
@@ -166,8 +178,11 @@ export function createStylizedWaterMaterial({
   const fallbackFlow = vec2(water.flowX, water.flowZ);
   let currentFlow = fallbackFlow;
   let currentStrength = float(0);
+  let fallPlunge = null;
   if (quality.flow) {
-    const encodedFlow = texture(waterFlowTexture, fieldUv).rg;
+    const flowSample = texture(waterFlowTexture, fieldUv);
+    fallPlunge = flowSample.ba;
+    const encodedFlow = flowSample.rg;
     const decodedCellFlow = encodedFlow.mul(2).sub(1);
     const decodedFlow = vec2(decodedCellFlow.x, decodedCellFlow.y.negate());
     currentStrength = clamp(length(decodedFlow), 0, 1);
@@ -193,6 +208,20 @@ export function createStylizedWaterMaterial({
     ))),
   );
   const noiseFac = surfaceNoise.x.add(surfaceNoise.y).mul(0.5);
+  const sea = water.sea?.enabled && quality.flow && seaPhaseOrigin && sunDirection
+    ? createSeaSurfaceNodes({
+      terrainUv,
+      chunkWorldSize,
+      surfaceWorldHeight: waterField.g.add(waterSurfaceOrigin),
+      waterDepth,
+      waterCoverage,
+      currentStrength,
+      time,
+      phaseOrigin: seaPhaseOrigin,
+      sunDirection,
+      config: water.sea,
+    })
+    : null;
   const distort = surfaceNoise.sub(0.5).mul(water.distortAmount);
   const sampleUv = worldXZ.mul(water.scale)
     .add(surfaceOffset)
@@ -278,7 +307,15 @@ export function createStylizedWaterMaterial({
       underwaterBlend.mul(optics.underwaterTintStrength),
     );
     surfaceDetailMix = float(optics.surfaceDetailStrength).mul(fade).mul(waterlineFade);
-    surfaceReflection = pow(oneMinus(viewCosine), FRESNEL_POWER)
+    // Reflection follows the swell's slopes; absorption keeps the flat path length.
+    const reflectionCosine = sea
+      ? clamp(
+        abs(dot(viewVector, sea.normal)).div(max(length(viewVector), 1e-4)),
+        optics.minimumViewCosine,
+        1,
+      )
+      : viewCosine;
+    surfaceReflection = pow(oneMinus(reflectionCosine), FRESNEL_POWER)
       .mul(quality.fresnelStrength)
       .mul(oneMinus(underwaterBlend))
       .mul(fade)
@@ -310,6 +347,20 @@ export function createStylizedWaterMaterial({
       .mul(noiseBreakup)
       .mul(foam.intensity * quality.foamStrength)
       .mul(waterCoverage);
+  }
+
+  // Whitewater is opaque, so it also lifts the sheet's alpha — applied after
+  // the refraction branch, which resets alpha to coverage.
+  let whitewater = null;
+  if (quality.foam && water.foam.enabled && fallPlunge && water.waterfall.enabled) {
+    whitewater = createWaterfallFoamNode({
+      fallPlunge,
+      flow: currentFlow,
+      worldXZ,
+      time,
+      config: water.waterfall,
+    }).mul(waterCoverage);
+    foamAmount = max(foamAmount, whitewater);
   }
 
   if (enableRefraction && quality.refraction && water.refraction.enabled) {
@@ -421,12 +472,32 @@ export function createStylizedWaterMaterial({
     color = color.add(colorNode(water.highlightColor).mul(causticAmount));
   }
 
+  if (sea) color = sea.shade(color, colorNode(water.highlightColor));
+
+  if (water.rainRipples?.enabled && quality.flow && rippleOrigin) {
+    const ripple = createRainRippleNode({
+      localMeters: vec2(terrainUv.x, terrainUv.y).mul(chunkWorldSize),
+      originMeters: rippleOrigin,
+      time,
+      rain: seaStateUniforms.rain,
+    });
+    color = color.add(colorNode(water.highlightColor)
+      .mul(ripple.mul(water.rainRipples.strength).mul(waterCoverage).mul(waterlineFade)));
+  }
+
   if (quality.fresnelStrength > 0) {
+    // The reflected sky takes the current look's tint (dusk, night, overcast).
     color = mix(
       color,
-      colorNode(water.highlightColor),
+      colorNode(water.highlightColor).mul(skyLightUniforms.reflectionTint),
       clamp(surfaceReflection, 0, 1),
     );
+  }
+
+  if (sea && quality.foam && water.foam.enabled) {
+    const whitecap = sea.whitecap().mul(waterCoverage);
+    foamAmount = max(foamAmount, whitecap);
+    whitewater = whitewater ? max(whitewater, whitecap) : whitecap;
   }
 
   if (quality.foam && water.foam.enabled) {
@@ -436,6 +507,7 @@ export function createStylizedWaterMaterial({
       clamp(foamAmount, 0, 1),
     );
   }
+  if (whitewater) alpha = max(alpha, clamp(whitewater, 0, 1).mul(waterlineFade));
 
   // The offset lifts the sheet clear of the bed so shallow water cannot z-fight
   // with it. Applied at full strength it also floats the sheet over the beach:
@@ -445,8 +517,9 @@ export function createStylizedWaterMaterial({
   // what made the bank polygonal. Tapering the lift out as the body thins sets
   // the sheet down onto the bed exactly at the waterline, so the terrain
   // occludes the rest per pixel and the bank follows the contour, not the grid.
-  const surfaceHeight = waterField.g.add(waterSurfaceOrigin)
+  let surfaceHeight = waterField.g.add(waterSurfaceOrigin)
     .add(float(water.heightOffset).mul(waterlineFade));
+  if (sea) surfaceHeight = surfaceHeight.add(sea.displacement);
   const material = new THREE.MeshBasicNodeMaterial({
     transparent: true,
     depthWrite: false,
@@ -454,7 +527,8 @@ export function createStylizedWaterMaterial({
     // visible from underwater. Do not set FrontSide here.
   });
   material.positionNode = positionLocal.add(vec3(0, 0, surfaceHeight));
-  material.colorNode = color;
+  // Unlit, so it dims with the sky's light itself.
+  material.colorNode = color.mul(skyLightUniforms.brightness);
   material.opacityNode = alpha;
   material.alphaTest = 0.02;
   return assignWaterMaterialData(material);

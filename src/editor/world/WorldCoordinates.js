@@ -108,6 +108,15 @@ export function worldToCell(worldX, worldZ, tileSize) {
   return Object.freeze({ x, z });
 }
 
+/** Where a world position falls in cell space before `worldToCell` floors it. */
+export function worldToCellPoint(worldX, worldZ, tileSize) {
+  if (!Number.isFinite(worldX) || !Number.isFinite(worldZ)) {
+    throw new Error('World position must be finite.');
+  }
+  assertPositiveFiniteTileSize(tileSize);
+  return Object.freeze({ x: worldX / tileSize, z: -worldZ / tileSize });
+}
+
 export function cellCenterToWorld(cellX, cellZ, tileSize) {
   assertSafeCellCoordinate(cellX, 'cellX');
   assertSafeCellCoordinate(cellZ, 'cellZ');

@@ -4,6 +4,7 @@ import { packCourse } from '../../workshop/ProceduralWorkshopCoursePacker.js';
 import { createRandom, mixSeed } from '../../workshop/ProceduralRandom.js';
 import { layoutOpening, openingHalfWidthAt, survivingIntervals } from './OpeningLayout.js';
 import {
+  MIN_SPLIT_HEIGHT,
   createBedField,
   jointTilt,
   resolveCellCorners,
@@ -14,6 +15,8 @@ import {
 import { clampJointWidths, sampleJointWidths } from './JointWidthField.js';
 import { layoutMerlon } from './MerlonOrnament.js';
 import { CONSTRUCTION_SUPPORT_ROLE } from './ConstructionSupportRoles.js';
+import { DEFAULT_COPING } from './ConstructionStyleCatalog.js';
+import { createWallCourseTable } from './WallCourseTable.js';
 import {
   createRuinDamageField,
   isProtectedFooting,
@@ -55,10 +58,10 @@ const WIDTH_SAFETY = 1.75;
 export const MAX_MODULE_STONES = 280;
 export const MAX_CONSTRUCTION_STONES = 6000;
 
-/** Depth of the coping course that finishes a formal wall top. */
-const COPING_HEIGHT = 0.16;
-/** How far coping oversails the wall face, as a fraction of thickness. */
-const COPING_OVERSAIL = 1.14;
+// The coping course that finishes a formal wall top — its height, how far it
+// oversails the wall face as a fraction of thickness, and how long its stones
+// run against the field's target width — comes from the style's `coping`
+// (`DEFAULT_COPING` for styles built outside the catalogue).
 
 const SHAPE_HASH = 0x27d4eb2d;
 const BOUNDARY_HASH = 0x1b873593;
@@ -135,6 +138,29 @@ export function chordSagitta(width, curvature) {
   const half = width / 2;
   if (half >= radius) return radius;
   return radius - Math.sqrt(radius * radius - half * half);
+}
+
+/**
+ * The arc range one course occupies inside one module.
+ *
+ * Modules partition the wall, but their boundary wanders per course so the
+ * seam zigzags like any other joint instead of stacking into a vertical line.
+ * The shift depends only on `seed`, the course and the style's nominal
+ * `targetWidth` — never on the curvature-limited width of one module — so the
+ * two modules at a seam compute the same boundary and meet flush. The wall's
+ * real ends stay hard edges.
+ *
+ * Exported so the coarse LOD can tell which part of a stone lies under the
+ * neighbouring module's stones.
+ */
+export function moduleCourseRange({ seed, targetWidth, arcRange, wallRange, course }) {
+  const [s0, s1] = arcRange;
+  const [wallStart, wallEnd] = wallRange;
+  const shift = (hashUnit(seed ^ BOUNDARY_HASH, course) - 0.5) * 2 * BOUNDARY_WANDER * targetWidth;
+  return [
+    s0 <= wallStart + 1e-6 ? wallStart : s0 + shift,
+    s1 >= wallEnd - 1e-6 ? wallEnd : s1 + shift,
+  ];
 }
 
 /**
@@ -263,16 +289,29 @@ export function packCurvedWall({
   // the silhouette is made of blocks rather than a thin wavy cap. Ruined and
   // crenellated crowns likewise own their own endings.
   const coped = usesCopingCourse(topStyle);
-  const copingHeight = coped ? COPING_HEIGHT : 0;
+  const coping = style.coping ?? DEFAULT_COPING;
+  const copingHeight = coped ? coping.height : 0;
   const bodyHeightAt = (s) => Math.max(0.12, topHeightAt(s) - copingHeight);
 
   const bodyMax = Math.max(0.12, maxTop - copingHeight);
   const courseHeight = courseHeightOverride ?? style.courseHeight;
-  // Ceil, not round: the top course is trimmed to the wall profile by
-  // `resolveCellCorners`, so overshooting costs nothing and rounding down would
-  // leave up to half a course of bare wall under the coping.
-  const courses = Math.max(1, Math.ceil(bodyMax / courseHeight));
   const heightScale = heightReference ?? maxTop;
+  // Course grid, with a taller footing course when the style has one. Sized
+  // from wall-wide values only, so modules either side of a seam agree.
+  const footing = style.footing ?? null;
+  const courseTable = createWallCourseTable({
+    courseHeight,
+    footing,
+    wallHeight: heightScale,
+    bodyHeight: bodyMax,
+  });
+  const courses = courseTable.count;
+  const footingTargetWidth = footing
+    ? Math.max(
+      targetWidth,
+      Math.min(targetWidth * footing.widthRatio, curvatureLimit / WIDTH_SAFETY),
+    )
+    : targetWidth;
   const random = createRandom(mixSeed(seed, seedOffset));
   const shapeSeed = mixSeed(seed ^ SHAPE_HASH, seedOffset);
   const baseIndex = seedOffset * INDEX_STRIDE;
@@ -295,24 +334,22 @@ export function packCurvedWall({
   // only make splinters.
   const splitChance = (style.splitChance ?? 0) * Math.min(1, targetWidth / style.targetWidth);
 
-  const [wallStart, wallEnd] = wallRange ?? [s0, s1];
-  // Shared by both modules at a boundary, so it may depend only on `seed` and
-  // the course index. Scaling by the local `targetWidth` would break that:
-  // that value is curvature-limited per module, so two modules either side of a
-  // bend would shift by different amounts and stop meeting at all.
-  const boundaryOffset = (course) => (
-    (hashUnit(seed ^ BOUNDARY_HASH, course) - 0.5) * 2 * BOUNDARY_WANDER * style.targetWidth
-  );
-  const courseRange = (course) => {
-    const shift = boundaryOffset(course);
-    return [
-      s0 <= wallStart + 1e-6 ? wallStart : s0 + shift,
-      s1 >= wallEnd - 1e-6 ? wallEnd : s1 + shift,
-    ];
-  };
+  const wall = wallRange ?? [s0, s1];
+  const [wallStart, wallEnd] = wall;
+  const courseRange = (course) => moduleCourseRange({
+    seed,
+    targetWidth: style.targetWidth,
+    arcRange,
+    wallRange: wall,
+    course,
+  });
 
   for (let course = 0; course < courses; course += 1) {
-    const y = (course + 0.5) * courseHeight;
+    const y = courseTable.centerAt(course);
+    // A footing course is taller, packed from longer cells and rarely split, so
+    // it reads as a row of big stones the wall stands on.
+    const isFooting = course === 0 && courseTable.footingHeight > 0;
+    const thisCourseHeight = courseTable.heightOf(course);
     const [courseStart, courseEnd] = courseRange(course);
     // Split the course around the openings and pack each surviving span
     // separately, so stone edges land flush on the jamb line rather than
@@ -332,7 +369,7 @@ export function packCurvedWall({
       const midpoint = from + spanWidth / 2;
       const packed = packCourse({
         span: spanWidth,
-        targetWidth,
+        targetWidth: isFooting ? footingTargetWidth : targetWidth,
         minWidth: style.minWidth,
         random,
         // Translate the course below's joints into this span's local frame so
@@ -360,7 +397,7 @@ export function packCurvedWall({
     const tiltAt = (jointS) => (
       plumbJoints.some((plumb) => Math.abs(plumb - jointS) < 1e-6)
         ? 0
-        : jointTilt(seed, course, jointS, courseHeight, tiltAmount)
+        : jointTilt(seed, course, jointS, thisCourseHeight, tiltAmount)
     );
 
     for (const stone of packedStones) {
@@ -381,10 +418,11 @@ export function packCurvedWall({
         { courseIndex: course, s0: s - stone.width / 2, s1: s + stone.width / 2 },
         {
           seed,
-          chance: splitChance,
+          chance: isFooting ? footing.splitChance : splitChance,
           maxDepth: style.splitMaxDepth ?? 2,
           minWidth: style.minWidth,
-          courseHeight,
+          minHeight: style.splitMinHeight ?? MIN_SPLIT_HEIGHT,
+          courseHeight: thisCourseHeight,
         },
       );
 
@@ -398,6 +436,7 @@ export function packCurvedWall({
       const resolved = resolveLeafFaces(leaves, {
         bedOffset,
         courseHeight,
+        courseBaseAt: courseTable.baseAt,
         ceilingAt: bodyHeightAt,
         minHeight: MIN_LEAF_HEIGHT,
         resolveTilt: tiltAt,
@@ -504,6 +543,7 @@ export function packCurvedWall({
 
         stones.push(Object.freeze({
           category: 'field',
+          ...(isFooting ? { footing: true } : {}),
           s: leafCenter,
           y: face.anchorY,
           offsetNormal: straddle + faceOffset,
@@ -528,7 +568,11 @@ export function packCurvedWall({
           }),
           width: face.width * safeScaleX,
           height: face.height * safeScaleY,
-          depth: thickness * depthScale,
+          // A footing stone stands proud of both faces by the plinth, the
+          // ledge a wall's base course throws its shadow line from.
+          depth: isFooting
+            ? thickness * depthScale + footing.plinth * 2
+            : thickness * depthScale,
           yaw: frame.yaw,
           roll: 0,
           stableIndex: index,
@@ -617,7 +661,7 @@ export function packCurvedWall({
     const copingMidpoint = copingStart + copingSpan / 2;
     const packed = packCourse({
       span: copingSpan,
-      targetWidth: Math.min(targetWidth * 1.15, curvatureLimit / WIDTH_SAFETY),
+      targetWidth: Math.min(targetWidth * coping.widthRatio, curvatureLimit / WIDTH_SAFETY),
       minWidth: style.minWidth,
       random,
       // `previousJoints` is kept in absolute arc coordinates so it can be
@@ -647,7 +691,7 @@ export function packCurvedWall({
         height: copingHeight,
         // Coping oversails the face, which is what throws the shadow line that
         // reads as a finished top.
-        depth: thickness * COPING_OVERSAIL,
+        depth: thickness * coping.oversail,
         // `roll` is applied about the block's own local Z *before* the yaw
         // swings it onto the path — see the Euler-order note in the builder.
         roll: slopeAt(s),

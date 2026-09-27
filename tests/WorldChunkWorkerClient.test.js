@@ -15,7 +15,8 @@ class FakeWorker {
   }
 
   addEventListener(type, handler) {
-    this.listeners[type].push(handler);
+    // Any event a real Worker dispatches (the client also listens for messageerror).
+    (this.listeners[type] ??= []).push(handler);
   }
 
   postMessage(data) {

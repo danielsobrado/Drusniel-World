@@ -4,7 +4,9 @@ import { createCurveArcTable } from '../masonry/CurveArcTable.js';
 import { buildModuleMasonry } from '../compile/ConstructionMasonryBuilder.js';
 import { CONSTRUCTION_MATERIAL_SLOT } from './ConstructionMaterialSlots.js';
 import { createConstructionMaterials, releaseConstructionMaterials } from './ConstructionMaterials.js';
-import { coarsePlacements, moduleProjectedPixels } from './ConstructionLod.js';
+import { ConstructionShellMaterials } from './ConstructionShellMaterials.js';
+import { applyShellDetail, loadShellDetailTexture } from './ConstructionShellDetail.js';
+import { coarsePlacementsForModule, moduleProjectedPixels } from './ConstructionLod.js';
 import {
   evaluateBuildRequest,
   moduleBuildKey,
@@ -44,6 +46,16 @@ const ORIGIN_QUANTUM = 64;
  */
 const MODULE_BUILD_BUDGET_MS = 4;
 const MODULE_BUILD_COUNT = 1;
+
+/** Per-module counters only the rounded pillow-stone builder reports. */
+const ROUNDED_STAT_KEYS = Object.freeze([
+  'roundedStones',
+  'roundedTriangles',
+  'roundedFallbacks',
+  'roundedShrunk',
+  'roundedBuildMs',
+  'footingStones',
+]);
 
 function quantizeOrigin(value) {
   return Math.round(value / ORIGIN_QUANTUM) * ORIGIN_QUANTUM;
@@ -141,13 +153,18 @@ export class ConstructionView {
       buildMs: 0,
       stoneBuildMs: 0,
       mortarBuildMs: 0,
+      ...Object.fromEntries(ROUNDED_STAT_KEYS.map((key) => [key, 0])),
     };
-    this.wallMaterial = new THREE.MeshStandardNodeMaterial({
+    this.shellDetail = loadShellDetailTexture();
+    this.wallMaterial = applyShellDetail(new THREE.MeshStandardNodeMaterial({
       color: '#8d8879',
       roughness: 0.92,
       metalness: 0,
       side: THREE.DoubleSide,
-    });
+    }), this.shellDetail);
+    // Rounded styles get a ribbon tinted to their own stone; soft styles keep
+    // `wallMaterial` itself.
+    this.shellMaterials = new ConstructionShellMaterials(this.wallMaterial);
     this.selectedMaterial = new THREE.MeshStandardNodeMaterial({
       color: '#d1ad58',
       roughness: 0.84,
@@ -288,7 +305,7 @@ export class ConstructionView {
     }
     const shellMesh = new THREE.Mesh(
       buildWallGeometry(record, this.terrainView, entry.origin),
-      record.id === this.selectedId ? this.selectedMaterial : this.wallMaterial,
+      record.id === this.selectedId ? this.selectedMaterial : this.shellMaterials.forRecord(record),
     );
     shellMesh.name = `construction-shell:${record.id}`;
     shellMesh.userData.constructionId = record.id;
@@ -302,7 +319,7 @@ export class ConstructionView {
 
   applyResidentMaterials(entry, selected) {
     if (!entry.materials) return;
-    const shell = selected ? this.selectedMaterial : this.wallMaterial;
+    const shell = selected ? this.selectedMaterial : this.shellMaterials.forRecord(entry.record);
     for (const resident of entry.modules.values()) {
       for (const mesh of resident.meshes) {
         mesh.material = residentMaterial(mesh, entry.materials, selected);
@@ -318,7 +335,9 @@ export class ConstructionView {
   applySelectionMaterial(constructionId, entry) {
     const selected = constructionId === this.selectedId;
     if (entry.shellMesh) {
-      entry.shellMesh.material = selected ? this.selectedMaterial : this.wallMaterial;
+      entry.shellMesh.material = selected
+        ? this.selectedMaterial
+        : this.shellMaterials.forRecord(entry.record);
     }
     this.applyResidentMaterials(entry, selected);
   }
@@ -444,7 +463,7 @@ export class ConstructionView {
     if (!geometry) return;
     const material = entry.record.id === this.selectedId
       ? this.selectedMaterial
-      : this.wallMaterial;
+      : this.shellMaterials.forRecord(entry.record);
     if (entry.shellMesh) {
       entry.group.remove(entry.shellMesh);
       entry.shellMesh.geometry.dispose();
@@ -491,7 +510,9 @@ export class ConstructionView {
     }
     const mesh = new THREE.Mesh(
       geometry,
-      entry.record.id === this.selectedId ? this.selectedMaterial : this.wallMaterial,
+      entry.record.id === this.selectedId
+        ? this.selectedMaterial
+        : this.shellMaterials.forRecord(entry.record),
     );
     mesh.name = `construction-shell:${entry.record.id}:${module.id}`;
     mesh.userData.constructionId = entry.record.id;
@@ -610,9 +631,11 @@ export class ConstructionView {
         if (band !== previousVisible) {
           this.stats.lodTransitionsStarted += 1;
           this.stats.lodTransitions += 1;
+          // Any band that draws masonry needs a build of that band — including
+          // a module that has never been built, which is every module that was
+          // in the far band when its plan landed.
           const needsRebuild = (
             (band === 'near' || band === 'coarse')
-            && resident.builtBand
             && resident.builtBand !== band
           );
           if (needsRebuild) {
@@ -672,6 +695,13 @@ export class ConstructionView {
   buildModule(entry, module) {
     const resident = entry.modules.get(module.id);
     if (!resident) return;
+    // A module in the far band shows its ribbon and needs no masonry. Building
+    // it anyway only had the result discarded below; `updateLod` queues the
+    // build once the module comes back into a band that draws stones.
+    if (resident.requestedBand === 'shell') {
+      resident.pendingBuildKey = null;
+      return;
+    }
     // Prefer the LOD band updateLod already chose; default to near so the first
     // build is full detail until the camera has had a frame to classify it.
     const lodBand = (resident.requestedBand ?? resident.band) === 'coarse'
@@ -690,12 +720,22 @@ export class ConstructionView {
     ) {
       this.stats.staleBuildsDiscarded += 1;
       resident.pendingBuildKey = null;
+      // The band or revision moved on while this job waited its turn — builds
+      // drain one per frame and `updateLod` runs in between. Queue what is
+      // wanted now: `updateLod` only re-queues modules that were built once,
+      // so dropping a first build here left the module on its ribbon for good.
+      if (resident.hash === module.contentHash) {
+        this.enqueueModuleBuild(entry.record.id, module, lodBand);
+      }
       return;
     }
-    const source = module.placements ?? [];
     const placements = lodBand === 'coarse'
-      ? coarsePlacements(source, { styleKey: entry.record.style?.key })
-      : source;
+      ? coarsePlacementsForModule({
+        record: entry.record,
+        module,
+        totalLength: entry.plan?.totalLength,
+      })
+      : module.placements ?? [];
     const built = placements.length
       ? buildModuleMasonry(placements, {
         record: entry.record,
@@ -837,6 +877,13 @@ export class ConstructionView {
     this.stats.lodReductionMs = lodReductionMs;
     this.stats.stoneBuildMs = stoneBuildMs;
     this.stats.mortarBuildMs = mortarBuildMs;
+    for (const key of ROUNDED_STAT_KEYS) {
+      let total = 0;
+      for (const entry of this.entries.values()) {
+        for (const other of entry.modules.values()) total += other.stats?.[key] ?? 0;
+      }
+      this.stats[key] = total;
+    }
   }
 
   /** True once every resident module can show a ribbon for its own arc. */
@@ -1148,7 +1195,9 @@ export class ConstructionView {
     this.clearDraft();
     for (const id of [...this.entries.keys()]) this.removeRecord(id);
     this.scene.remove(this.root);
+    this.shellMaterials.dispose();
     this.wallMaterial.dispose();
+    this.shellDetail?.dispose();
     this.selectedMaterial.dispose();
     this.previewMaterial.dispose();
     this.invalidPreviewMaterial.dispose();

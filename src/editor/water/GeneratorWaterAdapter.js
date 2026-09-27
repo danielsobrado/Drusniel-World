@@ -6,6 +6,7 @@ import {
 import { WaterTerrainModel } from './WaterTerrainModel.js';
 
 const WATER_ADAPTER_MARKER = Symbol('water-domain-adapter');
+const WATER_TILE_ID = 0;
 
 function assertGenerator(generator) {
   if (!generator || typeof generator.sampleHeight !== 'function'
@@ -24,6 +25,9 @@ function createModel({ generator, config, sampleBaseHeight, sampleBaseTile }) {
     sampleBaseTile,
     isBaseRiverCell: typeof generator.isRiver === 'function'
       ? generator.isRiver.bind(generator)
+      : null,
+    resolveLakeLevel: typeof generator.lakeSurfaceHeight === 'function'
+      ? generator.lakeSurfaceHeight.bind(generator)
       : null,
   });
 }
@@ -75,6 +79,11 @@ export function ensureWaterDomainGenerator(generator, metadata = {}) {
     sampleWater: {
       value(cellX, cellZ) {
         return model.sampleWater(cellX, cellZ);
+      },
+    },
+    sampleTile: {
+      value(cellX, cellZ) {
+        return model.isLakeCell(cellX, cellZ) ? WATER_TILE_ID : baseSampleTile(cellX, cellZ);
       },
     },
     toMetadata: {

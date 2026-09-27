@@ -1,6 +1,10 @@
 import { createAzgaarBiomeDefinitions } from '../AzgaarBiomeCatalog.js';
 import { deriveAzgaarWorldGuidance } from './AzgaarWorldGuidance.js';
 import { decodeMacroField, encodeMacroField } from './MacroAtlasCodec.js';
+import { createLakeCellOverrides, createLakeData } from './AzgaarLakes.js';
+import { resolveMountainRidges } from '../world/MountainRidges.js';
+import { resolveTrailGrading } from '../world/TrailGrading.js';
+import { createRouteData } from './AzgaarRoutes.js';
 
 const MACRO_SOURCE_KIND = 'azgaar-macro-v2';
 const MACRO_SOURCE_VERSION = 2;
@@ -445,6 +449,7 @@ export function createAzgaarMacroWorldSource(document, config, options = {}) {
   const sourceBiomeIds = observedBiomeIds(document);
   const lookup = buildGridCellLookup(document.grid);
   const packByGrid = buildPackByGrid(document.pack);
+  const lakeCells = createLakeCellOverrides(document);
 
   for (let y = 0; y < summary.atlasHeight; y += 1) {
     const normalizedY = (y + 0.5) / summary.atlasHeight;
@@ -457,11 +462,14 @@ export function createAzgaarMacroWorldSource(document, config, options = {}) {
         normalizedY * document.info.height,
       );
       const index = y * summary.atlasWidth + x;
-      raw.elevation[index] = clamp(Math.round(Number(packCell?.h ?? gridCell.h ?? 0)), 0, 100);
+      const lakeCell = lakeCells.get(packCell?.f);
+      raw.elevation[index] = lakeCell?.elevation
+        ?? clamp(Math.round(Number(packCell?.h ?? gridCell.h ?? 0)), 0, 100);
       raw.temperature[index] = clamp(Math.round(Number(gridCell.temp ?? 0)), -128, 127);
       raw.precipitation[index] = clamp(Math.round(Number(gridCell.prec ?? 0)), 0, 255);
       raw.waterDistance[index] = clamp(Math.round(Number(packCell?.t ?? gridCell.t ?? 0)), -128, 127);
-      raw.biomeId[index] = clamp(Math.round(Number(packCell?.biome ?? 0)), 0, 255);
+      raw.biomeId[index] = lakeCell?.biome
+        ?? clamp(Math.round(Number(packCell?.biome ?? 0)), 0, 255);
       raw.featureId[index] = clamp(Math.round(Number(packCell?.f ?? gridCell.f ?? 0)), 0, 0xffffffff);
       raw.riverId[index] = clamp(Math.round(Number(packCell?.r ?? 0)), 0, 0xffff);
       raw.riverFlux[index] = clamp(Math.round(Number(packCell?.fl ?? 0)), 0, 0xffff);
@@ -533,10 +541,14 @@ export function createAzgaarMacroWorldSource(document, config, options = {}) {
       seaLevel: config.world.seaLevel,
       verticalExaggeration: resolvePositive(config.import?.azgaarVerticalExaggeration, 1),
       reliefExponent: resolvePositive(config.import?.azgaarReliefExponent, 1),
+      ridges: resolveMountainRidges(config.import?.azgaarRidges),
+      trails: resolveTrailGrading(config.import?.azgaarTrails),
       guidanceDetail: terrainGuidanceDetail(guidanceConfig),
     },
     biomes: biomeDefinitions,
     rivers,
+    lakes: createLakeData(document, summary.atlasWidth, summary.atlasHeight),
+    routes: createRouteData(document, summary.atlasWidth, summary.atlasHeight),
   };
 }
 

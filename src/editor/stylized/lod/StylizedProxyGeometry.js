@@ -3,13 +3,17 @@ import {
   attribute,
   clamp,
   dot,
+  modelWorldMatrix,
+  positionGeometry,
   positionLocal,
   sin,
   vec2,
   vec3,
+  vec4,
 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { treeWindTimeFor } from '../forest/TreeWindTime.js';
+import { sampleWorldWind } from '../../weather/wind/worldWindState.js';
 
 const TWO_PI = Math.PI * 2;
 
@@ -40,15 +44,19 @@ function makeTreeLeafMaterial(color, config, bounds, side = THREE.FrontSide) {
   if (!time || !bounds || !Array.isArray(wind?.direction)) return material;
   const minimumY = bounds.min.y;
   const height = Math.max(0.001, bounds.max.y - minimumY);
-  const normalizedHeight = clamp(positionLocal.y.sub(minimumY).div(height), 0, 1);
+  // Prototype height, not `positionLocal`: that is already placed by the instance
+  // matrix when a position node runs (see preInstancePosition).
+  const normalizedHeight = clamp(positionGeometry.y.sub(minimumY).div(height), 0, 1);
   const heightMask = normalizedHeight.mul(normalizedHeight);
-  const windDirection = vec2(wind.direction[0], wind.direction[1]);
+  const worldWind = sampleWorldWind(modelWorldMatrix.mul(vec4(positionLocal, 1)).xz);
+  const windDirection = worldWind.direction;
+  const gustScale = worldWind.envelope.clamp(0.35, 3.5);
   const phase = attribute('instanceDither', 'vec3').y.mul(TWO_PI);
   const wave = sin(dot(positionLocal.xz, windDirection).mul(wind.frequency)
     .add(time.mul(wind.speed))
     .add(phase));
-  const sway = windDirection.mul(wave.mul(config.trees.windStrength).mul(heightMask));
-  const dip = wave.abs().mul(config.trees.windStrength).mul(config.trees.dip).mul(heightMask);
+  const sway = windDirection.mul(wave.mul(config.trees.windStrength).mul(heightMask).mul(gustScale));
+  const dip = wave.abs().mul(config.trees.windStrength).mul(config.trees.dip).mul(heightMask).mul(gustScale);
   material.positionNode = positionLocal.add(vec3(sway.x, dip.negate(), sway.y));
   return material;
 }

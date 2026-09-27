@@ -1,5 +1,6 @@
 const WATER_FIELD_CHANNELS = 4;
-const WATER_FLOW_CHANNELS = 2;
+/** Flow texture texels: RG the current, B the fall weight, A the plunge weight. */
+export const WATER_FLOW_CHANNELS = 4;
 const WATER_FIELD_HALO = 1;
 const DIAGONAL_WEIGHT = Math.SQRT1_2;
 
@@ -68,6 +69,10 @@ export function decodeWaterFlowComponent(value) {
   return Math.max(-1, Math.min(1, Number(value) / 255 * 2 - 1));
 }
 
+export function encodeWaterUnit(value) {
+  return Math.round(Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0)) * 255);
+}
+
 /**
  * True when any vertex of an encoded field carries water coverage.
  *
@@ -112,9 +117,15 @@ function resolveDrySurfaceHeight(samples, sampleWidth, localX, localZ, fallback)
   return totalWeight > 0 ? weightedSurface / totalWeight : fallback;
 }
 
+/**
+ * A dry vertex's current, fall and plunge, from its wet neighbours — so the
+ * sheet's edge carries the same whitewater as the water it borders.
+ */
 function resolveDryFlow(samples, sampleWidth, localX, localZ) {
   let weightedX = 0;
   let weightedZ = 0;
+  let weightedFall = 0;
+  let weightedPlunge = 0;
   let totalWeight = 0;
   const centerX = localX + WATER_FIELD_HALO;
   const centerZ = localZ + WATER_FIELD_HALO;
@@ -131,14 +142,20 @@ function resolveDryFlow(samples, sampleWidth, localX, localZ) {
       const weight = neighbor.coverage * distanceWeight;
       weightedX += (Number.isFinite(neighbor.flowX) ? neighbor.flowX : 0) * weight;
       weightedZ += (Number.isFinite(neighbor.flowZ) ? neighbor.flowZ : 0) * weight;
+      weightedFall += (neighbor.fall ?? 0) * weight;
+      weightedPlunge += (neighbor.plunge ?? 0) * weight;
       totalWeight += weight;
     }
   }
-  if (totalWeight <= 0) return { x: 0, z: 0 };
+  if (totalWeight <= 0) return { x: 0, z: 0, fall: 0, plunge: 0 };
   const x = weightedX / totalWeight;
   const z = weightedZ / totalWeight;
   const length = Math.hypot(x, z);
-  return length > 1e-8 ? { x: x / length, z: z / length } : { x: 0, z: 0 };
+  const fall = weightedFall / totalWeight;
+  const plunge = weightedPlunge / totalWeight;
+  return length > 1e-8
+    ? { x: x / length, z: z / length, fall, plunge }
+    : { x: 0, z: 0, fall, plunge };
 }
 
 export function createWaterField({
@@ -219,7 +236,7 @@ export function createWaterField({
         ? sample.depth
         : Math.max(0, surfaceHeights[vertexIndex] - sample.bedHeight);
       const flow = sample.coverage > 0
-        ? { x: sample.flowX, z: sample.flowZ }
+        ? { x: sample.flowX, z: sample.flowZ, fall: sample.fall, plunge: sample.plunge }
         : resolveDryFlow(samples, sampleWidth, localX, localZ);
       pixels[index] = floatToHalf(sample.coverage);
       pixels[index + 1] = floatToHalf(surfaceHeights[vertexIndex] - surfaceOrigin);
@@ -227,6 +244,8 @@ export function createWaterField({
       pixels[index + 3] = floatToHalf(sample.shoreDistance);
       flowPixels[flowIndex] = encodeWaterFlowComponent(flow.x);
       flowPixels[flowIndex + 1] = encodeWaterFlowComponent(flow.z);
+      flowPixels[flowIndex + 2] = encodeWaterUnit(flow.fall);
+      flowPixels[flowIndex + 3] = encodeWaterUnit(flow.plunge);
     }
   }
   return Object.freeze({ pixels, flowPixels, width, height, surfaceOrigin });

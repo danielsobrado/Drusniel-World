@@ -45,6 +45,73 @@ water:
     intersectionDepth: 0.28
     intersectionSoftness: 0.38
     intersectionStrength: 0.82
+  # River falls and their plunge pools (placed by waterDomain.falls). Drawn with
+  # the foam, so only at the qualities that draw foam.
+  waterfall:
+    enabled: true
+    # Metres per second the strands stream down a fall face.
+    fallSpeed: 6
+    # One tile of the strand texture spans this many metres across and along.
+    strandWidthMeters: 10
+    strandLengthMeters: 4
+    # Share of a fall face whitened by strands, plus an even white veil over all of it.
+    faceCoverage: 0.75
+    faceAeration: 0.35
+    # Share of the plunge pool whitened right below a fall, fading downstream.
+    plungeCoverage: 0.7
+    plungeSpeed: 0.8
+    plungeScaleMeters: 3
+    # Spray over the falls nearest the viewer: at most mistMaxActive of them,
+    # each within mistDrawDistance metres.
+    mistEnabled: true
+    mistDrawDistance: 650
+    mistMaxActive: 6
+    mistIntensity: 1
+  # Open-sea swell: only water at the world's sea level with no current swells,
+  # and it fades out in the shallows so the waterline stays put.
+  sea:
+    enabled: true
+    # Offshore crest height in metres; a storm multiplies it by stormScale.
+    amplitude: 0.9
+    stormScale: 1.65
+    choppiness: 4
+    # No swell in water shallower than this; never taller than depthRatio of the depth.
+    shallowDepth: 1.5
+    depthRatio: 0.42
+    # How much the unlit sheet brightens toward the sun on wave faces, and lifts at crests.
+    slopeShading: 0.55
+    crestLift: 0.12
+    # Normalised crest height where whitecaps start, calm and in a storm.
+    whitecapThreshold: 0.8
+    stormWhitecapThreshold: 0.45
+  # Where the ground meets the sea: a swash film that runs up the sand and back
+  # each wave, a foam line on its front, and wet sand behind it. Keyed on height
+  # above sea level, so it follows any coast; lakes and rivers get none.
+  coast:
+    enabled: true
+    # Seconds per wave, and how far above still water it runs up the sand.
+    period: 7.5
+    runupHeight: 1.1
+    # Depth in the shallows where the foam line forms.
+    breakDepth: 0.5
+    frontBand: 0.08
+    foamCore: 0.02
+    foamWidth: 0.12
+    breakupStrength: 0.3
+    # How fast the wash memory of earlier waves dries, and the always-damp band.
+    washDecay: 4
+    dampHeight: 0.9
+    wetDarkening: 0.5
+    wetRoughness: 0.28
+    filmRoughness: 0.08
+    filmTint: '#8ccad0'
+    filmTintStrength: 0.18
+    foamColor: '#edf8fb'
+    foamStrength: 0.85
+  # Rain rings on every water surface, as dense and bright as the rain is heavy.
+  rainRipples:
+    enabled: true
+    strength: 0.45
   caustics:
     # The voronoi web concentrates its light into thin lines instead of
     # spreading it over a blob, so it needs a *lower* intensity than the old

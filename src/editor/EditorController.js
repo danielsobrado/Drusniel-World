@@ -29,6 +29,10 @@ import {
   flattenTop,
 } from './construction/masonry/WallTopEdit.js';
 import { createWallTopProfile } from './construction/masonry/WallTopProfile.js';
+import {
+  DEFAULT_CONSTRUCTION_STYLE_KEY,
+  constructionStyle,
+} from './construction/masonry/ConstructionStyleCatalog.js';
 import { cutFeatureStyle, resolveCutStroke, resolveWindowGroup, WINDOW_LINK_ARC } from './construction/ConstructionCutStroke.js';
 
 /** Commit a raise/lower burst as one history entry once the keys settle. */
@@ -1127,6 +1131,7 @@ export class EditorController {
 
   constructionDraftRecord(path, id) {
     const numericId = Number.parseInt(String(id).match(/[0-9]+/)?.[0] ?? '1', 10);
+    const style = constructionStyle(DEFAULT_CONSTRUCTION_STYLE_KEY);
     return {
       version: 1,
       id,
@@ -1134,11 +1139,14 @@ export class EditorController {
       seed: numericId,
       kind: 'wall',
       label: `Curved wall ${numericId}`,
-      style: { key: 'coursed-rubble', version: 1 },
+      style: { key: style.key, version: 1 },
       dimensions: {
         height: this.constructionHeight,
         thickness: this.constructionThickness,
       },
+      // Explicit, so the schema's own fallback keeps meaning what it meant for
+      // walls saved before the style chose how a new wall starts out.
+      ...(style.defaultTop ? { top: { style: style.defaultTop } } : {}),
       path,
       features: path.features,
     };

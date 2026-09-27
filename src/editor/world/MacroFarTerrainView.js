@@ -8,6 +8,7 @@ import {
   oneMinus,
   positionWorld,
   smoothstep,
+  uniform,
   vec3,
 } from 'three/tsl';
 import { createWorldGenerator } from './WorldGeneratorFactory.js';
@@ -25,11 +26,6 @@ const FALLBACK_COLOR = '#3b4a57';
 const DEFAULT_ROCK_COLOR = '#8d9195';
 const DEFAULT_SCREE_COLOR = '#6d7175';
 const DEFAULT_SNOW_COLOR = '#e8eef2';
-
-function colorNode(value) {
-  const color = new THREE.Color(value);
-  return vec3(color.r, color.g, color.b);
-}
 
 /**
  * Coarse distant-terrain backdrop for imported Azgaar worlds. Streamed chunks
@@ -89,6 +85,8 @@ export class MacroFarTerrainView {
     this.snowLine = Number(farConfig.snowLine ?? 26);
     this.snowFade = Math.max(0.001, Number(farConfig.snowFade ?? 8));
     this.snowSlopeMax = Math.max(0.001, Number(farConfig.snowSlopeMax ?? 0.55));
+    // Snow at any height by terrain tile (Azgaar biome id), as in the near bake.
+    this.snowBiomeCover = { ...(farConfig.snowBiomeCover ?? {}) };
     this.rockSlopeStart = Math.max(0, Number(farConfig.rockSlopeStart ?? 0.18));
     this.rockSlopeFull = Math.max(
       this.rockSlopeStart + 0.001,
@@ -141,15 +139,19 @@ export class MacroFarTerrainView {
   createMaterial(config) {
     const aerial = config.stylizedSurface?.sky?.aerial;
     if (!aerial || !(aerial.strength > 0)) {
-      return new THREE.MeshLambertNodeMaterial({ vertexColors: true, fog: true });
+      return new THREE.MeshLambertNodeMaterial({ vertexColors: true, fog: true, side: THREE.DoubleSide });
     }
 
     // colorNode replaces the built-in vertex-colour path, so the attribute is
     // read explicitly and vertexColors stays off to avoid applying it twice.
-    const material = new THREE.MeshLambertNodeMaterial({ fog: true });
-    const horizon = colorNode(
+    const material = new THREE.MeshLambertNodeMaterial({ fog: true, side: THREE.DoubleSide });
+    // A uniform so the haze follows the sky's look (setFogColor).
+    this.horizonBase = new THREE.Color(
       aerial.horizonColor ?? config.stylizedSurface?.sky?.fogColor ?? '#8ecef2',
     );
+    this.fogBase = new THREE.Color(config.stylizedSurface?.sky?.fogColor ?? '#8ecef2');
+    this.horizonColor = uniform(this.horizonBase.clone());
+    const horizon = this.horizonColor;
     const distanceHaze = smoothstep(
       aerial.startDistance ?? this.innerRadius,
       aerial.endDistance ?? this.radius,
@@ -333,8 +335,12 @@ export class MacroFarTerrainView {
       green += (this.rockColor.g - green) * rockAmount;
       blue += (this.rockColor.b - blue) * rockAmount;
 
-      // Snow settles above the snow line but not on faces too steep to hold it.
-      const altitude = Math.min(1, Math.max(0, (height - this.snowLine) / this.snowFade));
+      // Snow settles above the snow line, and on snowy biomes at any height, but
+      // not on faces too steep to hold it.
+      const altitude = Math.max(
+        Math.min(1, Math.max(0, (height - this.snowLine) / this.snowFade)),
+        this.snowBiomeCover[job.tileIds[index]] ?? 0,
+      );
       const snowAmount = altitude * Math.min(1, Math.max(
         0,
         1 - slope / this.snowSlopeMax,
@@ -385,6 +391,21 @@ export class MacroFarTerrainView {
     this.mesh.visible = true;
     this.job = null;
     return true;
+  }
+
+  /**
+   * Tint the haze as the scene fog changes colour (a new time of day or
+   * weather). The configured horizon keeps its relation to the configured fog.
+   */
+  setFogColor(fogColor) {
+    if (!this.horizonColor) return;
+    const fog = new THREE.Color(fogColor);
+    const ratio = (channel) => (this.fogBase[channel] > 1e-4 ? fog[channel] / this.fogBase[channel] : 1);
+    this.horizonColor.value.setRGB(
+      Math.min(1, this.horizonBase.r * ratio('r')),
+      Math.min(1, this.horizonBase.g * ratio('g')),
+      Math.min(1, this.horizonBase.b * ratio('b')),
+    );
   }
 
   isActive() {

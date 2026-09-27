@@ -335,6 +335,15 @@ export function createWeatherController(deps) {
       meadowWeather.applySettings(currentMeadowSettings());
       return true;
     },
+    /**
+     * Light snowfall over snow country (0..1) whatever the weather, unless the
+     * weather is already rain, a storm or a sandstorm.
+     */
+    setRegionalSnow(amount) {
+      if (disposed) return;
+      const wet = ['rain', 'storm', 'sandstorm'].includes(settings.weatherMode);
+      snowWeather.setRegionalSnow(wet ? 0 : amount);
+    },
     update(deltaSeconds, elapsedSeconds, cameraPosition, effectCenter) {
       if (disposed) return;
       if (deps.getCamera) sandstormWeather.camera = deps.getCamera();

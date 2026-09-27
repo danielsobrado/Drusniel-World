@@ -63,6 +63,7 @@ const STYLE_PETALS = Object.freeze({
   ashlar: { color: '#c9c3b6', glyph: icon('bond-ashlar', { size: 16 }) },
   'random-rubble': { color: '#b3aca0', glyph: icon('bond-random-rubble', { size: 16 }) },
   'dry-stone': { color: '#9d968b', glyph: icon('bond-dry-stone', { size: 16 }) },
+  'rounded-fieldstone': { color: '#e4ddd0', glyph: icon('bond-rounded-fieldstone', { size: 16 }) },
 });
 const STYLE_PETAL_FALLBACK = Object.freeze({
   color: '#b3aca0',

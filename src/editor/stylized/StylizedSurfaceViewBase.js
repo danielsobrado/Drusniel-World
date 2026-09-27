@@ -185,6 +185,7 @@ export class StylizedSurfaceView {
         terrainSlot,
         terrainView,
         config,
+        sunDirection,
       }))
       : [];
     for (const slot of this.slots) slot.mesh.receiveShadow = true;

@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three/webgpu';
 import { beveledBox } from '../src/editor/workshop/ProceduralWorkshopGeometry.js';
-import { applyUnitShading } from '../src/editor/workshop/ProceduralWorkshopMaterials.js';
+import {
+  STONE_PALETTES,
+  applyUnitShading,
+  stoneUnitAlbedo,
+} from '../src/editor/workshop/ProceduralWorkshopMaterials.js';
+import { stoneSurfaceProfile } from '../src/editor/workshop/ProceduralWorkshopStoneSurfaceConfig.js';
 
 function recipe(style) {
   return Object.freeze({
@@ -90,4 +95,21 @@ test('neutral imported-albedo mode carries no palette hue', () => {
     assert.equal(colors[vertex], colors[vertex + 2]);
   }
   geometry.dispose();
+});
+
+test('stoneUnitAlbedo picks a stable colour inside the palette and brightness range', () => {
+  const unitRecipe = recipe('warm-fieldstone');
+  const palette = STONE_PALETTES['warm-fieldstone'];
+  const { brightnessMin, brightnessMax } = stoneSurfaceProfile('warm-fieldstone').unitShading;
+  const stops = [...palette.ramp, palette.outlier];
+  for (let stableIndex = 0; stableIndex < 64; stableIndex += 1) {
+    const colour = stoneUnitAlbedo(unitRecipe, stableIndex);
+    assert.ok(colour instanceof Float32Array);
+    assert.deepEqual([...colour], [...stoneUnitAlbedo(unitRecipe, stableIndex)]);
+    for (let channel = 0; channel < 3; channel += 1) {
+      const low = Math.min(...stops.map((stop) => stop[channel])) / 255 * brightnessMin;
+      const high = Math.max(...stops.map((stop) => stop[channel])) / 255 * brightnessMax;
+      assert.ok(colour[channel] >= low - 1e-6 && colour[channel] <= high + 1e-6);
+    }
+  }
 });

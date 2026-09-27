@@ -57,12 +57,15 @@ When a run finishes, the report is available as:
 | `x`, `z` | `0` | Spawn pose (render-space) |
 | `yaw`, `pitch` | `0` | Look angles in degrees |
 | `warmup` | `2` | Seconds to settle streaming before measuring |
+| `settle` | off | After `warmup`, keep warming up until collision is ready, terrain has stopped loading and the wall build queue is empty for 60 frames running; the report's `scenario.settle` records the wait, or what it timed out on |
+| `settleTimeout` | `120` | Seconds `settle` may wait past `warmup` before measuring anyway |
 | `duration` | `12` (`20` for `chunk-cross`) | Measured motion seconds |
 | `speed` | `run` | `walk` or `run` |
 | `hitchMs` | `~33.3` | Frame-dt threshold that counts as a hitch |
 | `autostart` | `1` | Start as soon as stylized assets are ready |
 | `download` | `1` | Auto-download the JSON report when done |
 | `density` | `standard` | `standard`, `dense-forest`, `high-grass`, or `dense-mixed` QA load envelope |
+| `constructionStyle` | default style | Wall style key for the `construction-ring` walls (and the castle captures that reuse them); an unknown key falls back to the default |
 
 ### Scenarios
 
@@ -73,8 +76,25 @@ When a run finishes, the report is available as:
 | `diagonal` | Hold `W`+`D` |
 | `chunk-cross` | Long forward run intended to cross chunk boundaries |
 | `object-town` | Deterministic 64/256-building masonry town; set `buildings=64` or `256` |
-| `construction-ring` | Twelve deterministic 96 m wall constructions around a clear movement corridor |
+| `construction-ring` | Twelve deterministic 96 m wall constructions around a clear movement corridor (see the note below before using it to measure walls) |
 | `water-acceptance` | External phase driver: dry → swim → dive → surface → dry |
+
+**Measuring walls with `construction-ring`.** The walls run from z = -48 to 48,
+and the default spawn (0, -24) faces -z, so the player leaves the corridor in
+about two seconds and spends the rest of the run with every wall behind the
+camera: the default run measures terrain streaming, not walls. To measure walls,
+approach them instead and compare styles with `constructionStyle`:
+
+```bash
+npm run qa:perf -- --headed --qa construction-ring --x 0 --z -100 --yaw 180   --warmup 40 --duration 12 --settle --constructionStyle coursed-rubble
+```
+
+From z = -100 a 12 s run crosses every wall LOD band and ends inside the
+corridor. Use `--settle`: the first frame compiles for 25–30 s, and a time
+based warmup that ends inside that stall starts measuring with streaming and
+collision still in flight. On 2026-09-26 one such run recorded 29 frames at
+3 FPS with the player standing still, waiting for collision. Discard a run
+whose `scenario.settle.settled` is false.
 
 Density profiles are QA-only multipliers applied before worker and stylized
 systems are created. `dense-forest` doubles tree placement/candidate budgets,

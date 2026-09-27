@@ -9619,18 +9619,1910 @@
           }
         }
       }
+    },
+    {
+      "scene": "/assets/characters/drusniel-dark-elf.glb",
+      "source": "assets/extracted/characters/drusniel-dark-elf.glb",
+      "output": "public/assets/characters/drusniel-dark-elf.glb",
+      "profile": "standard",
+      "optimizerArgs": [
+        "-cc",
+        "-kn",
+        "-km",
+        "-ke",
+        "-vpf",
+        "-tq",
+        "8",
+        "-tl",
+        "color,normal",
+        "1024",
+        "-tl",
+        "attrib",
+        "512",
+        "-tj",
+        "1",
+        "-tc",
+        "color,attrib",
+        "-tu",
+        "normal"
+      ],
+      "cacheKey": "384500fb5e1abe57a9d71319b9e864f8f6dccc27635bff6ecd63e1e2f96b935a",
+      "sourceSha256": "ae11086c58a56d45e20b28d5d7ee43b8ce13d8d4a14912ff6047bc55c496160e",
+      "outputSha256": "f8f0326ead088d6a322ea7e4fd5e847ca00fbde10451e7692fc5a97ef01d3b8e",
+      "sourceBytes": 2981624,
+      "outputBytes": 879920,
+      "gzipBytes": 786860,
+      "brotliBytes": 783027,
+      "sourceStats": {
+        "scenes": 1,
+        "nodes": 30,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 2,
+        "images": 2,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 31077,
+        "renderedTriangles": 31077,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "BakedMaterial": 31077
+        },
+        "sceneBounds": {
+          "min": [
+            -0.38892871141433716,
+            0,
+            -0.18736504018306732
+          ],
+          "max": [
+            0.3881756067276001,
+            1.7000000476837158,
+            0.19760717451572418
+          ]
+        },
+        "bufferBytes": 2946584,
+        "logicalAccessorBytes": 2501258,
+        "logicalVertexBytes": 2291848,
+        "logicalIndexBytes": 186462,
+        "geometryBufferBytes": 2478312,
+        "imageBufferBytes": 445314,
+        "nodeNames": [
+          "Armature",
+          "Head",
+          "Hips",
+          "LeftArm",
+          "LeftFoot",
+          "LeftForeArm",
+          "LeftHand",
+          "LeftHand_End",
+          "LeftLeg",
+          "LeftShoulder",
+          "LeftToeBase",
+          "LeftToe_end",
+          "LeftUpLeg",
+          "RightArm",
+          "RightFoot",
+          "RightForeArm",
+          "RightHand",
+          "RightHand_End",
+          "RightLeg",
+          "RightShoulder",
+          "RightToeBase",
+          "RightToe_end",
+          "RightUpLeg",
+          "Spine",
+          "Spine01",
+          "Spine02",
+          "head_end",
+          "headfront",
+          "neck",
+          "output_unwrapped"
+        ],
+        "materialNames": [
+          "BakedMaterial"
+        ],
+        "animationNames": [
+          "Running",
+          "Walking"
+        ],
+        "extensionsUsed": [
+          "EXT_texture_webp"
+        ],
+        "extensionsRequired": [
+          "EXT_texture_webp"
+        ]
+      },
+      "outputStats": {
+        "scenes": 1,
+        "nodes": 30,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 2,
+        "images": 2,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 31077,
+        "renderedTriangles": 31077,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "BakedMaterial": 31077
+        },
+        "sceneBounds": {
+          "min": [
+            -0.388931274,
+            0,
+            -0.187362671
+          ],
+          "max": [
+            0.388168335,
+            1.70001221,
+            0.197608948
+          ]
+        },
+        "bufferBytes": 2292228,
+        "logicalAccessorBytes": 1385908,
+        "logicalVertexBytes": 1188054,
+        "logicalIndexBytes": 186462,
+        "geometryBufferBytes": 1418518,
+        "imageBufferBytes": 282299,
+        "nodeNames": [
+          "Armature",
+          "Head",
+          "Hips",
+          "LeftArm",
+          "LeftFoot",
+          "LeftForeArm",
+          "LeftHand",
+          "LeftHand_End",
+          "LeftLeg",
+          "LeftShoulder",
+          "LeftToeBase",
+          "LeftToe_end",
+          "LeftUpLeg",
+          "RightArm",
+          "RightFoot",
+          "RightForeArm",
+          "RightHand",
+          "RightHand_End",
+          "RightLeg",
+          "RightShoulder",
+          "RightToeBase",
+          "RightToe_end",
+          "RightUpLeg",
+          "Spine",
+          "Spine01",
+          "Spine02",
+          "head_end",
+          "headfront",
+          "neck",
+          "output_unwrapped"
+        ],
+        "materialNames": [
+          "BakedMaterial"
+        ],
+        "animationNames": [
+          "Running",
+          "Walking"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu",
+          "KHR_texture_transform"
+        ],
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu"
+        ]
+      },
+      "officialValidation": {
+        "validatorVersion": "2.0.0-dev.3.10",
+        "errors": 0,
+        "warnings": 0,
+        "knownKtx2Limitations": 4,
+        "inheritedWarnings": 1,
+        "inheritedWarningCodes": [
+          "NODE_SKINNED_MESH_NON_ROOT"
+        ],
+        "infos": 4,
+        "hints": 0,
+        "drawCalls": 1,
+        "vertices": 44002,
+        "triangles": 31077
+      },
+      "report": {
+        "generator": "gltfpack 1.2",
+        "scene": {
+          "nodeCount": 30,
+          "meshCount": 1,
+          "materialCount": 1,
+          "textureCount": 2,
+          "animationCount": 2
+        },
+        "render": {
+          "drawCount": 1,
+          "instanceCount": 1,
+          "triangleCount": 31077
+        },
+        "data": {
+          "json": 17459,
+          "binary": 862316,
+          "buffers": {
+            "vertex": 541795,
+            "index": 31737,
+            "animation": 4970,
+            "transform": 1494,
+            "image": 282299
+          }
+        }
+      }
+    },
+    {
+      "scene": "/assets/characters/enanillo-dwarven.glb",
+      "source": "assets/extracted/characters/enanillo-dwarven.glb",
+      "output": "public/assets/characters/enanillo-dwarven.glb",
+      "profile": "standard",
+      "optimizerArgs": [
+        "-cc",
+        "-kn",
+        "-km",
+        "-ke",
+        "-vpf",
+        "-tq",
+        "8",
+        "-tl",
+        "color,normal",
+        "1024",
+        "-tl",
+        "attrib",
+        "512",
+        "-tj",
+        "1",
+        "-tc",
+        "color,attrib",
+        "-tu",
+        "normal"
+      ],
+      "cacheKey": "0c29a8d7c794f8724b56af71d5da4398d68d06f759ea503592bf5d84c9097cef",
+      "sourceSha256": "52bf5cbf70a89db4bb791982af54901cab3d00174729587d664c6159a7c80825",
+      "outputSha256": "25a95ac14561e3b1349ca1344ffd00450f9eaf8bcffb6486d7094ee36fe20ae2",
+      "sourceBytes": 5943200,
+      "outputBytes": 1362876,
+      "gzipBytes": 1167120,
+      "brotliBytes": 1164815,
+      "sourceStats": {
+        "scenes": 1,
+        "nodes": 26,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 1,
+        "images": 1,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 53777,
+        "renderedTriangles": 53777,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "Material_1": 53777
+        },
+        "sceneBounds": {
+          "min": [
+            -0.0048658232793400424,
+            -3.808992858139563e-10,
+            -0.0028678288414814568
+          ],
+          "max": [
+            0.004865360151260489,
+            0.0169999977126718,
+            0.0028673222020121902
+          ]
+        },
+        "bufferBytes": 5908088,
+        "logicalAccessorBytes": 5607516,
+        "logicalVertexBytes": 4938232,
+        "logicalIndexBytes": 645324,
+        "geometryBufferBytes": 5583556,
+        "imageBufferBytes": 300570,
+        "nodeNames": [
+          "Armature",
+          "Head",
+          "Hips",
+          "LeftArm",
+          "LeftFoot",
+          "LeftForeArm",
+          "LeftHand",
+          "LeftLeg",
+          "LeftShoulder",
+          "LeftToeBase",
+          "LeftUpLeg",
+          "RightArm",
+          "RightFoot",
+          "RightForeArm",
+          "RightHand",
+          "RightLeg",
+          "RightShoulder",
+          "RightToeBase",
+          "RightUpLeg",
+          "Spine",
+          "Spine01",
+          "Spine02",
+          "char1",
+          "head_end",
+          "headfront",
+          "neck"
+        ],
+        "materialNames": [
+          "Material_1"
+        ],
+        "animationNames": [
+          "Armature|running|baselayer",
+          "Armature|walking_man|baselayer"
+        ],
+        "extensionsUsed": [
+          "EXT_texture_webp",
+          "KHR_materials_ior",
+          "KHR_materials_specular"
+        ],
+        "extensionsRequired": [
+          "EXT_texture_webp"
+        ]
+      },
+      "outputStats": {
+        "scenes": 1,
+        "nodes": 26,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 1,
+        "images": 1,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 53777,
+        "renderedTriangles": 53777,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "Material_1": 53777
+        },
+        "sceneBounds": {
+          "min": [
+            -0.004865875132950745,
+            -3.808963726202796e-10,
+            -0.002867889336906433
+          ],
+          "max": [
+            0.004865417372960815,
+            0.01700012172599731,
+            0.002867278986919861
+          ]
+        },
+        "bufferBytes": 4634472,
+        "logicalAccessorBytes": 3195071,
+        "logicalVertexBytes": 2537811,
+        "logicalIndexBytes": 645324,
+        "geometryBufferBytes": 3277128,
+        "imageBufferBytes": 220014,
+        "nodeNames": [
+          "Armature",
+          "Head",
+          "Hips",
+          "LeftArm",
+          "LeftFoot",
+          "LeftForeArm",
+          "LeftHand",
+          "LeftLeg",
+          "LeftShoulder",
+          "LeftToeBase",
+          "LeftUpLeg",
+          "RightArm",
+          "RightFoot",
+          "RightForeArm",
+          "RightHand",
+          "RightLeg",
+          "RightShoulder",
+          "RightToeBase",
+          "RightUpLeg",
+          "Spine",
+          "Spine01",
+          "Spine02",
+          "char1",
+          "head_end",
+          "headfront",
+          "neck"
+        ],
+        "materialNames": [
+          "Material_1"
+        ],
+        "animationNames": [
+          "Armature|running|baselayer",
+          "Armature|walking_man|baselayer"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "KHR_materials_ior",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu",
+          "KHR_texture_transform"
+        ],
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu"
+        ]
+      },
+      "officialValidation": {
+        "validatorVersion": "2.0.0-dev.3.10",
+        "errors": 0,
+        "warnings": 0,
+        "knownKtx2Limitations": 2,
+        "inheritedWarnings": 1,
+        "inheritedWarningCodes": [
+          "NODE_SKINNED_MESH_NON_ROOT"
+        ],
+        "infos": 3,
+        "hints": 0,
+        "drawCalls": 1,
+        "vertices": 93993,
+        "triangles": 53777
+      },
+      "report": {
+        "generator": "gltfpack 1.2",
+        "scene": {
+          "nodeCount": 26,
+          "meshCount": 1,
+          "materialCount": 1,
+          "textureCount": 1,
+          "animationCount": 2
+        },
+        "render": {
+          "drawCount": 1,
+          "instanceCount": 1,
+          "triangleCount": 53777
+        },
+        "data": {
+          "json": 17319,
+          "binary": 1345408,
+          "buffers": {
+            "vertex": 1064311,
+            "index": 54516,
+            "animation": 5199,
+            "transform": 1360,
+            "image": 220014
+          }
+        }
+      }
+    },
+    {
+      "scene": "/assets/characters/radiant-paladin.glb",
+      "source": "assets/extracted/characters/radiant-paladin.glb",
+      "output": "public/assets/characters/radiant-paladin.glb",
+      "profile": "standard",
+      "optimizerArgs": [
+        "-cc",
+        "-kn",
+        "-km",
+        "-ke",
+        "-vpf",
+        "-tq",
+        "8",
+        "-tl",
+        "color,normal",
+        "1024",
+        "-tl",
+        "attrib",
+        "512",
+        "-tj",
+        "1",
+        "-tc",
+        "color,attrib",
+        "-tu",
+        "normal"
+      ],
+      "cacheKey": "5c4bec697cfa43ee45d508b2317a9b7d321c1d56bd9807bcb293eb3a72172683",
+      "sourceSha256": "6e2b6ec039613e30e80dc44d25b0f9a52bf0056f9129829dbbf67b79662289de",
+      "outputSha256": "065ec837df8af6a7eb2593126d9d74cdd26fb4ab816a60627122bb351fbcb654",
+      "sourceBytes": 1689272,
+      "outputBytes": 575024,
+      "gzipBytes": 519249,
+      "brotliBytes": 515805,
+      "sourceStats": {
+        "scenes": 1,
+        "nodes": 26,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 1,
+        "images": 1,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 28164,
+        "renderedTriangles": 28164,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "Material_1": 28164
+        },
+        "sceneBounds": {
+          "min": [
+            -0.004212328101419027,
+            -5.305790887955373e-10,
+            -0.0028004562228816088
+          ],
+          "max": [
+            0.004327620767184626,
+            0.016999998904764668,
+            0.0028008370965532103
+          ]
+        },
+        "bufferBytes": 1653904,
+        "logicalAccessorBytes": 1283884,
+        "logicalVertexBytes": 1091116,
+        "logicalIndexBytes": 168984,
+        "geometryBufferBytes": 1260100,
+        "imageBufferBytes": 370020,
+        "nodeNames": [
+          "Armature",
+          "Head",
+          "Hips",
+          "LeftArm",
+          "LeftFoot",
+          "LeftForeArm",
+          "LeftHand",
+          "LeftLeg",
+          "LeftShoulder",
+          "LeftToeBase",
+          "LeftUpLeg",
+          "RightArm",
+          "RightFoot",
+          "RightForeArm",
+          "RightHand",
+          "RightLeg",
+          "RightShoulder",
+          "RightToeBase",
+          "RightUpLeg",
+          "Spine",
+          "Spine01",
+          "Spine02",
+          "char1",
+          "head_end",
+          "headfront",
+          "neck"
+        ],
+        "materialNames": [
+          "Material_1"
+        ],
+        "animationNames": [
+          "Armature|running|baselayer",
+          "Armature|walking_man|baselayer"
+        ],
+        "extensionsUsed": [
+          "EXT_texture_webp",
+          "KHR_materials_ior",
+          "KHR_materials_specular"
+        ],
+        "extensionsRequired": [
+          "EXT_texture_webp"
+        ]
+      },
+      "outputStats": {
+        "scenes": 1,
+        "nodes": 26,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 1,
+        "images": 1,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 28164,
+        "renderedTriangles": 28164,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "Material_1": 28164
+        },
+        "sceneBounds": {
+          "min": [
+            -0.004212341217328491,
+            -5.305810073272176e-10,
+            -0.0028004454983901975
+          ],
+          "max": [
+            0.004327545074794006,
+            0.01700012172599731,
+            0.0028009032583801267
+          ]
+        },
+        "bufferBytes": 1325976,
+        "logicalAccessorBytes": 747461,
+        "logicalVertexBytes": 566541,
+        "logicalIndexBytes": 168984,
+        "geometryBufferBytes": 756508,
+        "imageBufferBytes": 256134,
+        "nodeNames": [
+          "Armature",
+          "Head",
+          "Hips",
+          "LeftArm",
+          "LeftFoot",
+          "LeftForeArm",
+          "LeftHand",
+          "LeftLeg",
+          "LeftShoulder",
+          "LeftToeBase",
+          "LeftUpLeg",
+          "RightArm",
+          "RightFoot",
+          "RightForeArm",
+          "RightHand",
+          "RightLeg",
+          "RightShoulder",
+          "RightToeBase",
+          "RightUpLeg",
+          "Spine",
+          "Spine01",
+          "Spine02",
+          "char1",
+          "head_end",
+          "headfront",
+          "neck"
+        ],
+        "materialNames": [
+          "Material_1"
+        ],
+        "animationNames": [
+          "Armature|running|baselayer",
+          "Armature|walking_man|baselayer"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "KHR_materials_ior",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu",
+          "KHR_texture_transform"
+        ],
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu"
+        ]
+      },
+      "officialValidation": {
+        "validatorVersion": "2.0.0-dev.3.10",
+        "errors": 0,
+        "warnings": 0,
+        "knownKtx2Limitations": 2,
+        "inheritedWarnings": 1,
+        "inheritedWarningCodes": [
+          "NODE_SKINNED_MESH_NON_ROOT"
+        ],
+        "infos": 3,
+        "hints": 0,
+        "drawCalls": 1,
+        "vertices": 20983,
+        "triangles": 28164
+      },
+      "report": {
+        "generator": "gltfpack 1.2",
+        "scene": {
+          "nodeCount": 26,
+          "meshCount": 1,
+          "materialCount": 1,
+          "textureCount": 1,
+          "animationCount": 2
+        },
+        "render": {
+          "drawCount": 1,
+          "instanceCount": 1,
+          "triangleCount": 28164
+        },
+        "data": {
+          "json": 17347,
+          "binary": 557532,
+          "buffers": {
+            "vertex": 264435,
+            "index": 30453,
+            "animation": 5149,
+            "transform": 1344,
+            "image": 256134
+          }
+        }
+      }
+    },
+    {
+      "scene": "/assets/characters/devout-cleric.glb",
+      "source": "assets/extracted/characters/devout-cleric.glb",
+      "output": "public/assets/characters/devout-cleric.glb",
+      "profile": "standard",
+      "optimizerArgs": [
+        "-cc",
+        "-kn",
+        "-km",
+        "-ke",
+        "-vpf",
+        "-tq",
+        "8",
+        "-tl",
+        "color,normal",
+        "1024",
+        "-tl",
+        "attrib",
+        "512",
+        "-tj",
+        "1",
+        "-tc",
+        "color,attrib",
+        "-tu",
+        "normal"
+      ],
+      "cacheKey": "6bbe9ab2c516a6dff3010d61541edb35dc354c0cf72ef45581844b33be1ae9b8",
+      "sourceSha256": "d8aa24e6982875dc36978746ff7b82a6e23bc9f387e6906291a7366426b70d75",
+      "outputSha256": "0e4b7e16fccf4c6860819877be290914731542bb77951a9eac6cea8954fb206a",
+      "sourceBytes": 3276112,
+      "outputBytes": 768868,
+      "gzipBytes": 670139,
+      "brotliBytes": 667155,
+      "sourceStats": {
+        "scenes": 1,
+        "nodes": 26,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 1,
+        "images": 1,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 43059,
+        "renderedTriangles": 43059,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "Material_1": 43059
+        },
+        "sceneBounds": {
+          "min": [
+            -0.005211065891137734,
+            -4.274084990320339e-10,
+            -0.0020128105130908513
+          ],
+          "max": [
+            0.005211200597631915,
+            0.016999998904764668,
+            0.0020133138743047285
+          ]
+        },
+        "bufferBytes": 3196272,
+        "logicalAccessorBytes": 2955686,
+        "logicalVertexBytes": 2248376,
+        "logicalIndexBytes": 258354,
+        "geometryBufferBytes": 2506732,
+        "imageBufferBytes": 240582,
+        "nodeNames": [
+          "Armature",
+          "Head",
+          "Hips",
+          "LeftArm",
+          "LeftFoot",
+          "LeftForeArm",
+          "LeftHand",
+          "LeftLeg",
+          "LeftShoulder",
+          "LeftToeBase",
+          "LeftUpLeg",
+          "RightArm",
+          "RightFoot",
+          "RightForeArm",
+          "RightHand",
+          "RightLeg",
+          "RightShoulder",
+          "RightToeBase",
+          "RightUpLeg",
+          "Spine",
+          "Spine01",
+          "Spine02",
+          "char1",
+          "head_end",
+          "headfront",
+          "neck"
+        ],
+        "materialNames": [
+          "Material_1"
+        ],
+        "animationNames": [
+          "Running",
+          "Walking"
+        ],
+        "extensionsUsed": [
+          "EXT_texture_webp",
+          "KHR_materials_ior",
+          "KHR_materials_specular"
+        ],
+        "extensionsRequired": [
+          "EXT_texture_webp"
+        ]
+      },
+      "outputStats": {
+        "scenes": 1,
+        "nodes": 26,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 1,
+        "images": 1,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 43059,
+        "renderedTriangles": 43059,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "Material_1": 43059
+        },
+        "sceneBounds": {
+          "min": [
+            -0.005211181525354004,
+            -4.2740793059702527e-10,
+            -0.0020127868257186887
+          ],
+          "max": [
+            0.005211181525354004,
+            0.01700012172599731,
+            0.0020133208757069396
+          ]
+        },
+        "bufferBytes": 2229924,
+        "logicalAccessorBytes": 1435313,
+        "logicalVertexBytes": 1165023,
+        "logicalIndexBytes": 258354,
+        "geometryBufferBytes": 1466526,
+        "imageBufferBytes": 200988,
+        "nodeNames": [
+          "Armature",
+          "Head",
+          "Hips",
+          "LeftArm",
+          "LeftFoot",
+          "LeftForeArm",
+          "LeftHand",
+          "LeftLeg",
+          "LeftShoulder",
+          "LeftToeBase",
+          "LeftUpLeg",
+          "RightArm",
+          "RightFoot",
+          "RightForeArm",
+          "RightHand",
+          "RightLeg",
+          "RightShoulder",
+          "RightToeBase",
+          "RightUpLeg",
+          "Spine",
+          "Spine01",
+          "Spine02",
+          "char1",
+          "head_end",
+          "headfront",
+          "neck"
+        ],
+        "materialNames": [
+          "Material_1"
+        ],
+        "animationNames": [
+          "Running",
+          "Walking"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "KHR_materials_ior",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu",
+          "KHR_texture_transform"
+        ],
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu"
+        ]
+      },
+      "officialValidation": {
+        "validatorVersion": "2.0.0-dev.3.10",
+        "errors": 0,
+        "warnings": 0,
+        "knownKtx2Limitations": 2,
+        "inheritedWarnings": 1,
+        "inheritedWarningCodes": [
+          "NODE_SKINNED_MESH_NON_ROOT"
+        ],
+        "infos": 3,
+        "hints": 0,
+        "drawCalls": 1,
+        "vertices": 43149,
+        "triangles": 43059
+      },
+      "report": {
+        "generator": "gltfpack 1.2",
+        "scene": {
+          "nodeCount": 26,
+          "meshCount": 1,
+          "materialCount": 1,
+          "textureCount": 1,
+          "animationCount": 2
+        },
+        "render": {
+          "drawCount": 1,
+          "instanceCount": 1,
+          "triangleCount": 43059
+        },
+        "data": {
+          "json": 17260,
+          "binary": 751460,
+          "buffers": {
+            "vertex": 498537,
+            "index": 45305,
+            "animation": 5238,
+            "transform": 1370,
+            "image": 200988
+          }
+        }
+      }
+    },
+    {
+      "scene": "/assets/characters/arcane-wizard.glb",
+      "source": "assets/extracted/characters/arcane-wizard.glb",
+      "output": "public/assets/characters/arcane-wizard.glb",
+      "profile": "standard",
+      "optimizerArgs": [
+        "-cc",
+        "-kn",
+        "-km",
+        "-ke",
+        "-vpf",
+        "-tq",
+        "8",
+        "-tl",
+        "color,normal",
+        "1024",
+        "-tl",
+        "attrib",
+        "512",
+        "-tj",
+        "1",
+        "-tc",
+        "color,attrib",
+        "-tu",
+        "normal"
+      ],
+      "cacheKey": "c6b33de2c04d8295feaf790b185e3c6254da4df6d8858c753b101933a4febb0e",
+      "sourceSha256": "ae49f2af8221617a3039c74ceabff58cd93b73745dc89e9d050ed4c5c4a8da37",
+      "outputSha256": "92df61c4b0332ea7a4d79d1185d28bb6f9da6f0eeaf2766a1d66b806614d9971",
+      "sourceBytes": 8197424,
+      "outputBytes": 1844664,
+      "gzipBytes": 1615641,
+      "brotliBytes": 1610337,
+      "sourceStats": {
+        "scenes": 1,
+        "nodes": 30,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 2,
+        "images": 2,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 88427,
+        "renderedTriangles": 88427,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "material.001": 88427
+        },
+        "sceneBounds": {
+          "min": [
+            -0.44115856289863586,
+            0,
+            -0.2282813936471939
+          ],
+          "max": [
+            0.44095703959465027,
+            1.7000000476837158,
+            0.22465763986110687
+          ]
+        },
+        "bufferBytes": 8162664,
+        "logicalAccessorBytes": 7572560,
+        "logicalVertexBytes": 6488560,
+        "logicalIndexBytes": 1061124,
+        "geometryBufferBytes": 7549684,
+        "imageBufferBytes": 590096,
+        "nodeNames": [
+          "Armature",
+          "Head",
+          "Hips",
+          "LeftArm",
+          "LeftFoot",
+          "LeftForeArm",
+          "LeftHand",
+          "LeftHand_End",
+          "LeftLeg",
+          "LeftShoulder",
+          "LeftToeBase",
+          "LeftToe_end",
+          "LeftUpLeg",
+          "RightArm",
+          "RightFoot",
+          "RightForeArm",
+          "RightHand",
+          "RightHand_End",
+          "RightLeg",
+          "RightShoulder",
+          "RightToeBase",
+          "RightToe_end",
+          "RightUpLeg",
+          "Spine",
+          "Spine01",
+          "Spine02",
+          "head_end",
+          "headfront",
+          "neck",
+          "output_unwrapped"
+        ],
+        "materialNames": [
+          "material.001"
+        ],
+        "animationNames": [
+          "Running",
+          "Walking"
+        ],
+        "extensionsUsed": [
+          "EXT_texture_webp"
+        ],
+        "extensionsRequired": [
+          "EXT_texture_webp"
+        ]
+      },
+      "outputStats": {
+        "scenes": 1,
+        "nodes": 30,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 2,
+        "images": 2,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 88427,
+        "renderedTriangles": 88427,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "material.001": 88427
+        },
+        "sceneBounds": {
+          "min": [
+            -0.441162109,
+            0,
+            -0.228279114
+          ],
+          "max": [
+            0.440963745,
+            1.70001221,
+            0.224655151
+          ]
+        },
+        "bufferBytes": 6389068,
+        "logicalAccessorBytes": 4437391,
+        "logicalVertexBytes": 3364875,
+        "logicalIndexBytes": 1061124,
+        "geometryBufferBytes": 4550624,
+        "imageBufferBytes": 310574,
+        "nodeNames": [
+          "Armature",
+          "Head",
+          "Hips",
+          "LeftArm",
+          "LeftFoot",
+          "LeftForeArm",
+          "LeftHand",
+          "LeftHand_End",
+          "LeftLeg",
+          "LeftShoulder",
+          "LeftToeBase",
+          "LeftToe_end",
+          "LeftUpLeg",
+          "RightArm",
+          "RightFoot",
+          "RightForeArm",
+          "RightHand",
+          "RightHand_End",
+          "RightLeg",
+          "RightShoulder",
+          "RightToeBase",
+          "RightToe_end",
+          "RightUpLeg",
+          "Spine",
+          "Spine01",
+          "Spine02",
+          "head_end",
+          "headfront",
+          "neck",
+          "output_unwrapped"
+        ],
+        "materialNames": [
+          "material.001"
+        ],
+        "animationNames": [
+          "Running",
+          "Walking"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu",
+          "KHR_texture_transform"
+        ],
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu"
+        ]
+      },
+      "officialValidation": {
+        "validatorVersion": "2.0.0-dev.3.10",
+        "errors": 0,
+        "warnings": 0,
+        "knownKtx2Limitations": 4,
+        "inheritedWarnings": 1,
+        "inheritedWarningCodes": [
+          "NODE_SKINNED_MESH_NON_ROOT"
+        ],
+        "infos": 4,
+        "hints": 0,
+        "drawCalls": 1,
+        "vertices": 124625,
+        "triangles": 88427
+      },
+      "report": {
+        "generator": "gltfpack 1.2",
+        "scene": {
+          "nodeCount": 30,
+          "meshCount": 1,
+          "materialCount": 1,
+          "textureCount": 2,
+          "animationCount": 2
+        },
+        "render": {
+          "drawCount": 1,
+          "instanceCount": 1,
+          "triangleCount": 88427
+        },
+        "data": {
+          "json": 17465,
+          "binary": 1827052,
+          "buffers": {
+            "vertex": 1420219,
+            "index": 89820,
+            "animation": 4892,
+            "transform": 1531,
+            "image": 310574
+          }
+        }
+      }
+    },
+    {
+      "scene": "/assets/characters/serpent-master.glb",
+      "source": "assets/extracted/characters/serpent-master.glb",
+      "output": "public/assets/characters/serpent-master.glb",
+      "profile": "standard",
+      "optimizerArgs": [
+        "-cc",
+        "-kn",
+        "-km",
+        "-ke",
+        "-vpf",
+        "-tq",
+        "8",
+        "-tl",
+        "color,normal",
+        "1024",
+        "-tl",
+        "attrib",
+        "512",
+        "-tj",
+        "1",
+        "-tc",
+        "color,attrib",
+        "-tu",
+        "normal"
+      ],
+      "cacheKey": "4421d8ad61261dcd107431782d27b4a9b4f8614bb6b4a0c7d2abd0ac893f7451",
+      "sourceSha256": "c07f0bce41567e68dffe46c04a10cb8a65a36c888154df676de886eb2b438c11",
+      "outputSha256": "1ec82c6f33bab1cb08e85489751bf872c8616b28226c831a8f4f0f6da8f89c07",
+      "sourceBytes": 3254708,
+      "outputBytes": 819384,
+      "gzipBytes": 734840,
+      "brotliBytes": 731458,
+      "sourceStats": {
+        "scenes": 1,
+        "nodes": 30,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 2,
+        "images": 2,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 30832,
+        "renderedTriangles": 30832,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "BakedMaterial": 30832
+        },
+        "sceneBounds": {
+          "min": [
+            -0.4966847896575928,
+            0,
+            -0.24264363944530487
+          ],
+          "max": [
+            0.49967730045318604,
+            1.7000000476837158,
+            0.23976494371891022
+          ]
+        },
+        "bufferBytes": 3209952,
+        "logicalAccessorBytes": 2668932,
+        "logicalVertexBytes": 2031536,
+        "logicalIndexBytes": 184992,
+        "geometryBufferBytes": 2216528,
+        "imageBufferBytes": 541012,
+        "nodeNames": [
+          "Armature",
+          "Head",
+          "Hips",
+          "LeftArm",
+          "LeftFoot",
+          "LeftForeArm",
+          "LeftHand",
+          "LeftHand_End",
+          "LeftLeg",
+          "LeftShoulder",
+          "LeftToeBase",
+          "LeftToe_end",
+          "LeftUpLeg",
+          "RightArm",
+          "RightFoot",
+          "RightForeArm",
+          "RightHand",
+          "RightHand_End",
+          "RightLeg",
+          "RightShoulder",
+          "RightToeBase",
+          "RightToe_end",
+          "RightUpLeg",
+          "Spine",
+          "Spine01",
+          "Spine02",
+          "head_end",
+          "headfront",
+          "neck",
+          "output_unwrapped"
+        ],
+        "materialNames": [
+          "BakedMaterial"
+        ],
+        "animationNames": [
+          "Running",
+          "Walking"
+        ],
+        "extensionsUsed": [
+          "EXT_texture_webp"
+        ],
+        "extensionsRequired": [
+          "EXT_texture_webp"
+        ]
+      },
+      "outputStats": {
+        "scenes": 1,
+        "nodes": 30,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 2,
+        "images": 2,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 30832,
+        "renderedTriangles": 30832,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "BakedMaterial": 30832
+        },
+        "sceneBounds": {
+          "min": [
+            -0.496688843,
+            0,
+            -0.242645264
+          ],
+          "max": [
+            0.499679565,
+            1.70001221,
+            0.239761353
+          ]
+        },
+        "bufferBytes": 2091364,
+        "logicalAccessorBytes": 1250545,
+        "logicalVertexBytes": 1054161,
+        "logicalIndexBytes": 184992,
+        "geometryBufferBytes": 1278196,
+        "imageBufferBytes": 306084,
+        "nodeNames": [
+          "Armature",
+          "Head",
+          "Hips",
+          "LeftArm",
+          "LeftFoot",
+          "LeftForeArm",
+          "LeftHand",
+          "LeftHand_End",
+          "LeftLeg",
+          "LeftShoulder",
+          "LeftToeBase",
+          "LeftToe_end",
+          "LeftUpLeg",
+          "RightArm",
+          "RightFoot",
+          "RightForeArm",
+          "RightHand",
+          "RightHand_End",
+          "RightLeg",
+          "RightShoulder",
+          "RightToeBase",
+          "RightToe_end",
+          "RightUpLeg",
+          "Spine",
+          "Spine01",
+          "Spine02",
+          "head_end",
+          "headfront",
+          "neck",
+          "output_unwrapped"
+        ],
+        "materialNames": [
+          "BakedMaterial"
+        ],
+        "animationNames": [
+          "Running",
+          "Walking"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu",
+          "KHR_texture_transform"
+        ],
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu"
+        ]
+      },
+      "officialValidation": {
+        "validatorVersion": "2.0.0-dev.3.10",
+        "errors": 0,
+        "warnings": 0,
+        "knownKtx2Limitations": 4,
+        "inheritedWarnings": 1,
+        "inheritedWarningCodes": [
+          "NODE_SKINNED_MESH_NON_ROOT"
+        ],
+        "infos": 4,
+        "hints": 0,
+        "drawCalls": 1,
+        "vertices": 39043,
+        "triangles": 30832
+      },
+      "report": {
+        "generator": "gltfpack 1.2",
+        "scene": {
+          "nodeCount": 30,
+          "meshCount": 1,
+          "materialCount": 1,
+          "textureCount": 2,
+          "animationCount": 2
+        },
+        "render": {
+          "drawCount": 1,
+          "instanceCount": 1,
+          "triangleCount": 30832
+        },
+        "data": {
+          "json": 17461,
+          "binary": 801776,
+          "buffers": {
+            "vertex": 457696,
+            "index": 31574,
+            "animation": 4912,
+            "transform": 1497,
+            "image": 306084
+          }
+        }
+      }
+    },
+    {
+      "scene": "/assets/characters/villager-rugged-blacks.glb",
+      "source": "assets/extracted/characters/villager-rugged-blacks.glb",
+      "output": "public/assets/characters/villager-rugged-blacks.glb",
+      "profile": "standard",
+      "optimizerArgs": [
+        "-cc",
+        "-kn",
+        "-km",
+        "-ke",
+        "-vpf",
+        "-tq",
+        "8",
+        "-tl",
+        "color,normal",
+        "1024",
+        "-tl",
+        "attrib",
+        "512",
+        "-tj",
+        "1",
+        "-tc",
+        "color,attrib",
+        "-tu",
+        "normal"
+      ],
+      "cacheKey": "56ac4486937717b0f61b380ad4f7d845bd254c6c343aca7e8ccf1f6779dc95df",
+      "sourceSha256": "892213ae027614af23886c0f737708771cd8088c10a9ffc0bcbbca9d5e63f9f2",
+      "outputSha256": "6f0796f7f31d213d8d5c6b185526f36e117ece552b27afa32047c07aafced365",
+      "sourceBytes": 2886348,
+      "outputBytes": 1969564,
+      "gzipBytes": 1886542,
+      "brotliBytes": 1884128,
+      "sourceStats": {
+        "scenes": 1,
+        "nodes": 30,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 3,
+        "images": 3,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 40865,
+        "renderedTriangles": 40865,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "Material_0": 40865
+        },
+        "sceneBounds": {
+          "min": [
+            -0.41211235523223877,
+            0,
+            -0.1647331565618515
+          ],
+          "max": [
+            0.41116786003112793,
+            1.7000000476837158,
+            0.16264887154102325
+          ]
+        },
+        "bufferBytes": 2852944,
+        "logicalAccessorBytes": 2205874,
+        "logicalVertexBytes": 1937048,
+        "logicalIndexBytes": 245190,
+        "geometryBufferBytes": 2182240,
+        "imageBufferBytes": 647062,
+        "nodeNames": [
+          "Mesh_0",
+          "headfront",
+          "mixamorig:Head",
+          "mixamorig:HeadTop_End",
+          "mixamorig:Hips",
+          "mixamorig:LeftArm",
+          "mixamorig:LeftFoot",
+          "mixamorig:LeftForeArm",
+          "mixamorig:LeftHand",
+          "mixamorig:LeftHandMiddle4",
+          "mixamorig:LeftLeg",
+          "mixamorig:LeftShoulder",
+          "mixamorig:LeftToeBase",
+          "mixamorig:LeftToe_End",
+          "mixamorig:LeftUpLeg",
+          "mixamorig:Neck",
+          "mixamorig:RightArm",
+          "mixamorig:RightFoot",
+          "mixamorig:RightForeArm",
+          "mixamorig:RightHand",
+          "mixamorig:RightHandMiddle4",
+          "mixamorig:RightLeg",
+          "mixamorig:RightShoulder",
+          "mixamorig:RightToeBase",
+          "mixamorig:RightToe_End",
+          "mixamorig:RightUpLeg",
+          "mixamorig:Spine",
+          "mixamorig:Spine1",
+          "mixamorig:Spine2",
+          "target_character"
+        ],
+        "materialNames": [
+          "Material_0"
+        ],
+        "animationNames": [
+          "Running",
+          "Walking"
+        ],
+        "extensionsUsed": [
+          "EXT_texture_webp"
+        ],
+        "extensionsRequired": [
+          "EXT_texture_webp"
+        ]
+      },
+      "outputStats": {
+        "scenes": 1,
+        "nodes": 30,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 3,
+        "images": 3,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 40865,
+        "renderedTriangles": 40865,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "Material_0": 40865
+        },
+        "sceneBounds": {
+          "min": [
+            -0.412109375,
+            0,
+            -0.164733887
+          ],
+          "max": [
+            0.41116333,
+            1.70001221,
+            0.162651062
+          ]
+        },
+        "bufferBytes": 3120144,
+        "logicalAccessorBytes": 1140385,
+        "logicalVertexBytes": 883035,
+        "logicalIndexBytes": 245190,
+        "geometryBufferBytes": 1156710,
+        "imageBufferBytes": 1506122,
+        "nodeNames": [
+          "Mesh_0",
+          "headfront",
+          "mixamorig:Head",
+          "mixamorig:HeadTop_End",
+          "mixamorig:Hips",
+          "mixamorig:LeftArm",
+          "mixamorig:LeftFoot",
+          "mixamorig:LeftForeArm",
+          "mixamorig:LeftHand",
+          "mixamorig:LeftHandMiddle4",
+          "mixamorig:LeftLeg",
+          "mixamorig:LeftShoulder",
+          "mixamorig:LeftToeBase",
+          "mixamorig:LeftToe_End",
+          "mixamorig:LeftUpLeg",
+          "mixamorig:Neck",
+          "mixamorig:RightArm",
+          "mixamorig:RightFoot",
+          "mixamorig:RightForeArm",
+          "mixamorig:RightHand",
+          "mixamorig:RightHandMiddle4",
+          "mixamorig:RightLeg",
+          "mixamorig:RightShoulder",
+          "mixamorig:RightToeBase",
+          "mixamorig:RightToe_End",
+          "mixamorig:RightUpLeg",
+          "mixamorig:Spine",
+          "mixamorig:Spine1",
+          "mixamorig:Spine2",
+          "target_character"
+        ],
+        "materialNames": [
+          "Material_0"
+        ],
+        "animationNames": [
+          "Running",
+          "Walking"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu",
+          "KHR_texture_transform"
+        ],
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu"
+        ]
+      },
+      "officialValidation": {
+        "validatorVersion": "2.0.0-dev.3.10",
+        "errors": 0,
+        "warnings": 0,
+        "knownKtx2Limitations": 6,
+        "inheritedWarnings": 1,
+        "inheritedWarningCodes": [
+          "NODE_SKINNED_MESH_NON_ROOT"
+        ],
+        "infos": 5,
+        "hints": 0,
+        "drawCalls": 1,
+        "vertices": 28485,
+        "triangles": 40865
+      },
+      "report": {
+        "generator": "gltfpack 1.2",
+        "scene": {
+          "nodeCount": 30,
+          "meshCount": 1,
+          "materialCount": 1,
+          "textureCount": 3,
+          "animationCount": 2
+        },
+        "render": {
+          "drawCount": 1,
+          "instanceCount": 1,
+          "triangleCount": 40865
+        },
+        "data": {
+          "json": 18146,
+          "binary": 1951272,
+          "buffers": {
+            "vertex": 393961,
+            "index": 44531,
+            "animation": 5188,
+            "transform": 1452,
+            "image": 1506122
+          }
+        }
+      }
+    },
+    {
+      "scene": "/assets/characters/goblin-gribble-thornhide.glb",
+      "source": "assets/extracted/characters/goblin-gribble-thornhide.glb",
+      "output": "public/assets/characters/goblin-gribble-thornhide.glb",
+      "profile": "standard",
+      "optimizerArgs": [
+        "-cc",
+        "-kn",
+        "-km",
+        "-ke",
+        "-vpf",
+        "-tq",
+        "8",
+        "-tl",
+        "color,normal",
+        "1024",
+        "-tl",
+        "attrib",
+        "512",
+        "-tj",
+        "1",
+        "-tc",
+        "color,attrib",
+        "-tu",
+        "normal"
+      ],
+      "cacheKey": "fcb8dd9ca490a21f3a4668e299eae68eaf09bf321cc18f7bb85d7b5bc6db7356",
+      "sourceSha256": "95e8b84f296bd416f6e6c925561d4cb71dbd678d3037cd31722d17e36530df34",
+      "outputSha256": "3d4b01a4453620b013218018b4330baac93fcadcbbd2b3aec215008b3c043d6c",
+      "sourceBytes": 3303444,
+      "outputBytes": 2090392,
+      "gzipBytes": 1998582,
+      "brotliBytes": 1995307,
+      "sourceStats": {
+        "scenes": 1,
+        "nodes": 30,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 3,
+        "images": 3,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 47458,
+        "renderedTriangles": 47458,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "Material_0": 47458
+        },
+        "sceneBounds": {
+          "min": [
+            -0.4666502773761749,
+            0,
+            -0.21166785061359406
+          ],
+          "max": [
+            0.4657919108867645,
+            1.7000000476837158,
+            0.21346186101436615
+          ]
+        },
+        "bufferBytes": 3270080,
+        "logicalAccessorBytes": 2618140,
+        "logicalVertexBytes": 2309756,
+        "logicalIndexBytes": 284748,
+        "geometryBufferBytes": 2594504,
+        "imageBufferBytes": 651932,
+        "nodeNames": [
+          "Mesh_0",
+          "headfront",
+          "mixamorig:Head",
+          "mixamorig:HeadTop_End",
+          "mixamorig:Hips",
+          "mixamorig:LeftArm",
+          "mixamorig:LeftFoot",
+          "mixamorig:LeftForeArm",
+          "mixamorig:LeftHand",
+          "mixamorig:LeftHandMiddle4",
+          "mixamorig:LeftLeg",
+          "mixamorig:LeftShoulder",
+          "mixamorig:LeftToeBase",
+          "mixamorig:LeftToe_End",
+          "mixamorig:LeftUpLeg",
+          "mixamorig:Neck",
+          "mixamorig:RightArm",
+          "mixamorig:RightFoot",
+          "mixamorig:RightForeArm",
+          "mixamorig:RightHand",
+          "mixamorig:RightHandMiddle4",
+          "mixamorig:RightLeg",
+          "mixamorig:RightShoulder",
+          "mixamorig:RightToeBase",
+          "mixamorig:RightToe_End",
+          "mixamorig:RightUpLeg",
+          "mixamorig:Spine",
+          "mixamorig:Spine1",
+          "mixamorig:Spine2",
+          "target_character"
+        ],
+        "materialNames": [
+          "Material_0"
+        ],
+        "animationNames": [
+          "Running",
+          "Walking"
+        ],
+        "extensionsUsed": [
+          "EXT_texture_webp"
+        ],
+        "extensionsRequired": [
+          "EXT_texture_webp"
+        ]
+      },
+      "outputStats": {
+        "scenes": 1,
+        "nodes": 30,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 3,
+        "images": 3,
+        "skins": 1,
+        "animations": 2,
+        "triangles": 47458,
+        "renderedTriangles": 47458,
+        "drawParts": 1,
+        "materialTriangleCounts": {
+          "Material_0": 47458
+        },
+        "sceneBounds": {
+          "min": [
+            -0.466644287,
+            0,
+            -0.211669922
+          ],
+          "max": [
+            0.465789795,
+            1.70001221,
+            0.21346283
+          ]
+        },
+        "bufferBytes": 3455936,
+        "logicalAccessorBytes": 1349885,
+        "logicalVertexBytes": 1052977,
+        "logicalIndexBytes": 284748,
+        "geometryBufferBytes": 1371692,
+        "imageBufferBytes": 1548126,
+        "nodeNames": [
+          "Mesh_0",
+          "headfront",
+          "mixamorig:Head",
+          "mixamorig:HeadTop_End",
+          "mixamorig:Hips",
+          "mixamorig:LeftArm",
+          "mixamorig:LeftFoot",
+          "mixamorig:LeftForeArm",
+          "mixamorig:LeftHand",
+          "mixamorig:LeftHandMiddle4",
+          "mixamorig:LeftLeg",
+          "mixamorig:LeftShoulder",
+          "mixamorig:LeftToeBase",
+          "mixamorig:LeftToe_End",
+          "mixamorig:LeftUpLeg",
+          "mixamorig:Neck",
+          "mixamorig:RightArm",
+          "mixamorig:RightFoot",
+          "mixamorig:RightForeArm",
+          "mixamorig:RightHand",
+          "mixamorig:RightHandMiddle4",
+          "mixamorig:RightLeg",
+          "mixamorig:RightShoulder",
+          "mixamorig:RightToeBase",
+          "mixamorig:RightToe_End",
+          "mixamorig:RightUpLeg",
+          "mixamorig:Spine",
+          "mixamorig:Spine1",
+          "mixamorig:Spine2",
+          "target_character"
+        ],
+        "materialNames": [
+          "Material_0"
+        ],
+        "animationNames": [
+          "Running",
+          "Walking"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu",
+          "KHR_texture_transform"
+        ],
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "KHR_mesh_quantization",
+          "KHR_texture_basisu"
+        ]
+      },
+      "officialValidation": {
+        "validatorVersion": "2.0.0-dev.3.10",
+        "errors": 0,
+        "warnings": 0,
+        "knownKtx2Limitations": 6,
+        "inheritedWarnings": 1,
+        "inheritedWarningCodes": [
+          "NODE_SKINNED_MESH_NON_ROOT"
+        ],
+        "infos": 5,
+        "hints": 0,
+        "drawCalls": 1,
+        "vertices": 33967,
+        "triangles": 47458
+      },
+      "report": {
+        "generator": "gltfpack 1.2",
+        "scene": {
+          "nodeCount": 30,
+          "meshCount": 1,
+          "materialCount": 1,
+          "textureCount": 3,
+          "animationCount": 2
+        },
+        "render": {
+          "drawCount": 1,
+          "instanceCount": 1,
+          "triangleCount": 47458
+        },
+        "data": {
+          "json": 18159,
+          "binary": 2072084,
+          "buffers": {
+            "vertex": 465954,
+            "index": 51407,
+            "animation": 5140,
+            "transform": 1439,
+            "image": 1548126
+          }
+        }
+      }
     }
   ],
   "totals": {
-    "sourceBytes": 43200008,
-    "outputBytes": 26449984,
-    "gzipBytes": 25745746,
-    "brotliBytes": 25742578,
-    "logicalSourceVertexBytes": 10178880,
-    "logicalOutputVertexBytes": 3933021,
-    "logicalSourceIndexBytes": 1212840,
-    "logicalOutputIndexBytes": 880236,
-    "savedBytes": 16750024,
-    "reductionRatio": 0.387732
+    "sourceBytes": 74732140,
+    "outputBytes": 36760676,
+    "gzipBytes": 35124719,
+    "brotliBytes": 35094610,
+    "logicalSourceVertexBytes": 33515352,
+    "logicalOutputVertexBytes": 15745498,
+    "logicalSourceIndexBytes": 4248018,
+    "logicalOutputIndexBytes": 3915414,
+    "savedBytes": 37971464,
+    "reductionRatio": 0.508101
   }
 }

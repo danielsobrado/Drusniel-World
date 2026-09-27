@@ -13,6 +13,29 @@ import:
   # Both default to 1 (no rescale) when omitted.
   azgaarVerticalExaggeration: 48
   azgaarReliefExponent: 1.5
+  # Ridged crests, spurs and gullies on high ground (world/MountainRidges.js),
+  # stamped into the world at import: re-import for a change to apply.
+  # heightMeters is crest over gully at full strength; the relief fractions
+  # (0 coast … 1 highest peak) set where ridges begin and reach full strength.
+  # Remove the block to import smooth mountains.
+  azgaarRidges:
+    heightMeters: 90
+    startRelief: 0.3
+    fullRelief: 0.65
+  # Azgaar roads and trails graded into walkable paths (world/TrailGrading.js):
+  # the ground along each is cut and filled toward a profile no steeper than
+  # maxGrade, within maxCut/maxFill, with banks that widen with the cut.
+  # Stamped at import like the ridges; remove the block to import ungraded.
+  azgaarTrails:
+    roadWidthMeters: 6
+    trailWidthMeters: 3
+    maxGrade: 0.14
+    stepMeters: 8
+    arcMeters: 1024
+    maxCutMeters: 10
+    maxFillMeters: 4
+    shoulderMeters: 3
+    bankSlope: 1.4
 world:
   seed: 918273
   generatorVersion: 1
@@ -51,14 +74,18 @@ world:
     # Origin-snap rebuilds are sliced this many rings per frame into a back
     # buffer, then swapped, so a snap cannot spike a frame or tear the mesh.
     rebuildRowsPerFrame: 24
-    # Slope reveals rock then bare stone; snow settles above the line but not on
-    # faces too steep to hold it.
+    # Slope reveals rock then bare stone; snow settles above the line, and on
+    # tundra and glacier at any height, but not on faces too steep to hold it.
+    # Keep in step with config/terrain-material-bake.yaml classification.
     rockColor: '#8d9195'
     screeColor: '#6d7175'
     snowColor: '#e8eef2'
-    snowLine: 26
-    snowFade: 8
+    snowLine: 700
+    snowFade: 250
     snowSlopeMax: 0.55
+    snowBiomeCover:
+      10: 0.7
+      11: 1
     rockSlopeStart: 0.18
     rockSlopeFull: 0.62
 camera:
@@ -1154,6 +1181,15 @@ stylizedSurface:
     # Share of the distant grass cover that survives under canopy. 0 restores the
     # old behaviour, where wooded ground past startDistance was drawn bare.
     forestRetention: 0.5
+  # Rain soaks exposed ground: it darkens and turns smooth enough to catch the
+  # sun. Snow and canopy shelter it. Full rain soaks dry ground in wetSeconds;
+  # it dries over drySeconds after the rain stops.
+  wetness:
+    wetSeconds: 40
+    drySeconds: 240
+    darkening: 0.3
+    wetRoughness: 0.55
+    canopyShelter: 0.7
   sky:
     enabled: true
     # Half-resolution, low-tap screen-space light shafts. The effect is routed
@@ -1230,8 +1266,20 @@ stylizedSurface:
     cloudCeiling: 0.75
     cloudRimFalloff: 8
     cloudRimStrength: 0.2
+    # Cloud shadows on terrain, grass and trees: each surface loses this share of
+    # its sunlight where the dome shows a cloud in front of the sun. Ambient
+    # light is untouched. Disabled compiles no cloud nodes into the materials.
+    cloudShadows:
+      enabled: true
+      strength: 0.45
     groundLightColor: '#6f784d'
     ambientIntensity: 2.0
+    # Share of highColor's saturation the sky light keeps, at the same
+    # luminance (1 = the zenith colour itself). The light a surface gets from
+    # the sky includes the pale horizon and the clouds, so it is far less
+    # saturated than the zenith; the zenith colour turned every face out of the
+    # sun slate blue. Looks may override it.
+    ambientSaturation: 0.45
     directionalColor: '#fff3dc'
     directionalIntensity: 3.0
     lightDistance: 220
@@ -1343,14 +1391,27 @@ weather:
   intensity: 0.7
   windX: -0.42
   windZ: 0.18
+  # The world wind field grass and flowers sway to (src/editor/weather/wind/).
+  # Advected gust fronts, turbulence and a bounded warp, rendered once per frame
+  # into a 384 m texture around the camera. The weather's wind sets the
+  # prevailing direction and intensity; with weather off it blows along
+  # stylizedSurface.wind.direction. Any key of DEFAULT_WIND_FIELD may be
+  # overridden here, e.g. `baseStrength` or `large: { speed }`.
+  windField: {}
 
-# The player's drow. Fully procedural — no authored mesh, no rig file, no
-# animation data. Press V while walking to swing out to third person.
+# The player's character. Press V while walking to swing out to third person.
 character:
   enabled: true
-  # The near plane clips the cowl away, so first person shows your own robe,
-  # boots and hands looking down, plus your shadow.
+  # Who the player walks as: a key of `roster` below, or `drow` for the fully
+  # procedural drow with its simulated robe (no authored mesh or animation).
+  hero: drusniel
+  # The first-person near plane clips the head away, so looking down shows your
+  # own body, boots and hands, plus your shadow.
   visibleInFirstPerson: true
+  # Soft occlusion under an authored hero's body and each sole, lying on the
+  # slope, so the figure stays grounded when the sun throws its real shadow
+  # long and sideways. Fades as the body or a foot leaves the ground.
+  contactShadow: true
   thirdPerson:
     distance: 3.4
     pivotHeight: 1.45
@@ -1358,6 +1419,133 @@ character:
     minDistance: 0.85
     clearance: 0.38
     damping: 11
+  # Authored, rigged characters (Meshy exports on the shared humanoid rig; see
+  # src/editor/character/glb/humanoidRig.js). Every entry is published by
+  # `npm run optimize:runtime-assets`, so changing `hero` needs no asset rebuild.
+  # The model streams in after the first frame and never blocks startup.
+  roster:
+    drusniel:
+      name: Drusniel
+      title: Dark Elf in the Wilds
+      scene: /assets/characters/drusniel-dark-elf.glb
+      # Sole to crown, metres. The export stands 1.70 m; the procedural drow
+      # stood about 1.85 m and the first-person eye sits at player.eyeHeight.
+      targetHeight: 1.85
+      clips:
+        walk: Walking
+        run: Running
+      # Ground each clip covers per second at its authored rate, in body
+      # heights. Drives the stride so the feet stay planted: the clip phase
+      # advances by distance travelled, never by time alone.
+      clipSpeedInHeights:
+        walk: 0.85
+        run: 2.4
+      # Strip the small net drift the clips carry on the hips, so gameplay
+      # stays the sole owner of world motion.
+      rootMotion:
+        inPlace: true
+        nodes: [Hips, Armature]
+        axes: [x, z]
+      locomotion:
+        # player.walkSpeed is 9 m/s and the sprint 16.2 m/s, far past the run
+        # clip's authored 4.4 m/s. Past this playback multiple the cadence
+        # would blur, so the feet slide a little instead.
+        maxTimeScale: 3.2
+        minTimeScale: 0.5
+        # Sculling cycles per second while treading water. The swim itself is
+        # posed procedurally (no rig ships a swim clip): a front crawl when
+        # moving, treading water when still, head-down when diving.
+        swimCadence: 0.55
+      # Plant each foot on the ground under it and bend the knee on slopes.
+      footPlacement: true
+    enanillo:
+      name: Enanillo
+      title: Dwarven Delver
+      # Short and stout; the older centimetre armature.
+      scene: /assets/characters/enanillo-dwarven.glb
+      targetHeight: 1.26
+      clips:
+        walk: 'Armature|walking_man|baselayer'
+        run: 'Armature|running|baselayer'
+      clipSpeedInHeights: { walk: 0.85, run: 2.4 }
+      rootMotion: { inPlace: true, nodes: [Hips, Armature], axes: [x, z] }
+      locomotion: { maxTimeScale: 3.2, minTimeScale: 0.5, swimCadence: 0.55 }
+      footPlacement: true
+    paladin:
+      name: Paladin
+      title: Radiant Paladin
+      scene: /assets/characters/radiant-paladin.glb
+      targetHeight: 1.85
+      clips:
+        walk: 'Armature|walking_man|baselayer'
+        run: 'Armature|running|baselayer'
+      clipSpeedInHeights: { walk: 0.85, run: 2.4 }
+      rootMotion: { inPlace: true, nodes: [Hips, Armature], axes: [x, z] }
+      locomotion: { maxTimeScale: 3.2, minTimeScale: 0.5, swimCadence: 0.55 }
+      footPlacement: true
+    cleric:
+      name: Cleric
+      title: Devout of the Grove
+      scene: /assets/characters/devout-cleric.glb
+      targetHeight: 1.8
+      clips:
+        walk: 'Walking'
+        run: 'Running'
+      clipSpeedInHeights: { walk: 0.85, run: 2.4 }
+      rootMotion: { inPlace: true, nodes: [Hips, Armature], axes: [x, z] }
+      locomotion: { maxTimeScale: 3.2, minTimeScale: 0.5, swimCadence: 0.55 }
+      footPlacement: true
+    wizard:
+      name: Wizard
+      title: Arcane Wanderer
+      # The heaviest mesh on the roster (88k triangles).
+      scene: /assets/characters/arcane-wizard.glb
+      targetHeight: 1.8
+      clips:
+        walk: 'Walking'
+        run: 'Running'
+      clipSpeedInHeights: { walk: 0.85, run: 2.4 }
+      rootMotion: { inPlace: true, nodes: [Hips, Armature], axes: [x, z] }
+      locomotion: { maxTimeScale: 3.2, minTimeScale: 0.5, swimCadence: 0.55 }
+      footPlacement: true
+    serpent:
+      name: Serpent Master
+      title: Keeper of Coils
+      scene: /assets/characters/serpent-master.glb
+      targetHeight: 1.85
+      clips:
+        walk: 'Walking'
+        run: 'Running'
+      clipSpeedInHeights: { walk: 0.85, run: 2.4 }
+      rootMotion: { inPlace: true, nodes: [Hips, Armature], axes: [x, z] }
+      locomotion: { maxTimeScale: 3.2, minTimeScale: 0.5, swimCadence: 0.55 }
+      footPlacement: true
+    villager:
+      name: Villager
+      title: Rugged Farmhand
+      # Mixamo-named rig (mixamorig: bones).
+      scene: /assets/characters/villager-rugged-blacks.glb
+      targetHeight: 1.75
+      clips:
+        walk: 'Walking'
+        run: 'Running'
+      clipSpeedInHeights: { walk: 0.85, run: 2.4 }
+      rootMotion: { inPlace: true, nodes: [Hips, Armature], axes: [x, z] }
+      locomotion: { maxTimeScale: 3.2, minTimeScale: 0.5, swimCadence: 0.55 }
+      footPlacement: true
+    goblin:
+      name: Gribble
+      title: Thornhide Goblin
+      # Mixamo-named rig; a species just under human height.
+      scene: /assets/characters/goblin-gribble-thornhide.glb
+      targetHeight: 1.62
+      clips:
+        walk: 'Walking'
+        run: 'Running'
+      clipSpeedInHeights: { walk: 0.85, run: 2.4 }
+      rootMotion: { inPlace: true, nodes: [Hips, Armature], axes: [x, z] }
+      locomotion: { maxTimeScale: 3.2, minTimeScale: 0.5, swimCadence: 0.55 }
+      footPlacement: true
 
 # Walk-mode spell VFX (keys 1–6). Earth is VFX-only — no CLOD terrain dig.
 spells:

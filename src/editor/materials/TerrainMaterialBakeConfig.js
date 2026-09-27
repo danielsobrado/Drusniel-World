@@ -150,6 +150,21 @@ function normalizeClassification(source) {
   assertFinite(source.snowLine, 'classification.snowLine');
   assertPositive(source.snowFade, 'classification.snowFade');
   assertPositive(source.snowSlopeMax, 'classification.snowSlopeMax');
+  assertPositive(source.snowPatchScale, 'classification.snowPatchScale');
+  for (const field of ['snowPatchStrength', 'snowWindShift', 'snowConcavity']) {
+    if (!Number.isFinite(source[field]) || source[field] < 0) {
+      throw new Error(`Invalid terrain material bake configuration: classification.${field} must be non-negative.`);
+    }
+  }
+  const cover = source.snowBiomeCover;
+  if (!cover || typeof cover !== 'object' || Array.isArray(cover)) {
+    throw new Error('Invalid terrain material bake configuration: classification.snowBiomeCover must map tile ids to cover.');
+  }
+  for (const [tileId, value] of Object.entries(cover)) {
+    if (!/^\d+$/.test(tileId) || !Number.isFinite(value) || value < 0 || value > 1) {
+      throw new Error('Invalid terrain material bake configuration: classification.snowBiomeCover values must be within [0, 1].');
+    }
+  }
   assertPositive(source.shorelineRadiusCells, 'classification.shorelineRadiusCells');
   assertPositive(source.wetnessRadiusCells, 'classification.wetnessRadiusCells');
   if (source.wetnessRadiusCells > source.shorelineRadiusCells) {

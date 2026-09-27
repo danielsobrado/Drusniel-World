@@ -240,13 +240,18 @@ export function splitCell(cell, {
 export function resolveCellCorners(cell, {
   bedOffset,
   courseHeight,
+  // Base height of a course when the grid is not uniform — a taller footing
+  // course (`WallCourseTable`). Null keeps the uniform `course * courseHeight`.
+  courseBaseAt = null,
   tiltLeft = 0,
   tiltRight = 0,
   ceilingAt = null,
   flattenCeiling = true,
   minHeight = 0.08,
 }) {
-  const bedAt = (course, s) => course * courseHeight + bedOffset(course, s);
+  const bedAt = courseBaseAt
+    ? (course, s) => courseBaseAt(course) + bedOffset(course, s)
+    : (course, s) => course * courseHeight + bedOffset(course, s);
 
   /**
    * A point at height fraction `v` on the head joint at `jointS`.

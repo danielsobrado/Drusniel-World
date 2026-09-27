@@ -126,9 +126,13 @@ function validateDescriptor(descriptor, index) {
  *   rotation?: number[],
  *   uvDensity?: number,
  * }>} descriptors
+ * @param {object} [options]
+ * @param {(descriptor: object, x: number, z: number) => number} [options.drape]
+ *   vertical offset for a transformed vertex, so a core can follow the same
+ *   ground its draped stones do. Omitted, positions are used as given.
  * @returns {THREE.BufferGeometry | null}
  */
-export function buildMortarCoreGeometry(descriptors) {
+export function buildMortarCoreGeometry(descriptors, { drape = null } = {}) {
   if (!descriptors || descriptors.length === 0) return null;
 
   for (let index = 0; index < descriptors.length; index += 1) {
@@ -203,6 +207,7 @@ export function buildMortarCoreGeometry(descriptors) {
       for (let cornerIndex = 0; cornerIndex < 4; cornerIndex += 1) {
         const localPoint = local[face.corners[cornerIndex]];
         point.set(localPoint[0], localPoint[1], localPoint[2]).applyMatrix4(matrix);
+        if (drape) point.y += drape(descriptor, point.x, point.z);
         const vertex = vertexOffset;
         positions[vertex * 3] = point.x;
         positions[vertex * 3 + 1] = point.y;

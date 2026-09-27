@@ -3,6 +3,7 @@ import test from 'node:test';
 import { constructionCollisionSource } from '../src/editor/collision/providers/ConstructionCollisionSource.js';
 import { ConstructionStore } from '../src/editor/construction/ConstructionStore.js';
 import { ensureConstructionPerfQaFixture } from '../src/editor/construction/ConstructionPerfQaFixture.js';
+import { DEFAULT_CONSTRUCTION_STYLE_KEY } from '../src/editor/construction/masonry/ConstructionStyleCatalog.js';
 import { parseQaParams } from '../src/editor/performance/qa/parseQaParams.js';
 
 test('construction-ring QA fixture creates a deterministic wall corridor', () => {
@@ -20,6 +21,22 @@ test('construction-ring QA fixture creates a deterministic wall corridor', () =>
   );
   assert.ok(first.every((record) => record.path.anchors[0].position[1] === -48));
   assert.ok(first.every((record) => record.path.anchors[1].position[1] === 48));
+  constructionCollisionSource.clear();
+});
+
+test('construction-ring walls take a requested style, falling back to the default', () => {
+  constructionCollisionSource.clear();
+  const coursed = ensureConstructionPerfQaFixture(
+    new ConstructionStore(),
+    '?qa=construction-ring&constructionStyle=coursed-rubble',
+  );
+  assert.ok(coursed.every((record) => record.style.key === 'coursed-rubble'));
+  constructionCollisionSource.clear();
+  const unknown = ensureConstructionPerfQaFixture(
+    new ConstructionStore(),
+    '?qa=construction-ring&constructionStyle=no-such-style',
+  );
+  assert.ok(unknown.every((record) => record.style.key === DEFAULT_CONSTRUCTION_STYLE_KEY));
   constructionCollisionSource.clear();
 });
 

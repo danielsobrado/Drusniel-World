@@ -1,4 +1,5 @@
 import { createRiverSurfaceSegments } from './RiverSurfaceProfile.js';
+import { reachFallAt, reachPlungeAt, reachSurfaceAt } from './RiverReachProfile.js';
 
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -34,6 +35,7 @@ export class RiverChannel {
     sampleBaseHeight,
     seaLevel,
     config,
+    lakeLevelAt = null,
     blockSize = 64,
   }) {
     if (!Number.isInteger(blockSize) || blockSize < 1) {
@@ -41,25 +43,48 @@ export class RiverChannel {
     }
     this.config = config;
     this.blockSize = blockSize;
-    this.segments = createRiverSurfaceSegments({ source, sampleBaseHeight, seaLevel, config });
+    this.segments = createRiverSurfaceSegments({
+      source,
+      sampleBaseHeight,
+      seaLevel,
+      config,
+      lakeLevelAt,
+    });
     this.index = new Map();
     this.buildIndex();
   }
 
+  /**
+   * Bucket each segment into the blocks its buffered centre line crosses.
+   *
+   * Not its bounding box: an imported river reach runs for a hundred kilometres,
+   * often diagonally, and its box holds hundreds of thousands of blocks — enough
+   * across a whole Azgaar map to overflow a Map. Walking the line in half-block
+   * steps touches only the blocks the channel can actually reach.
+   */
   buildIndex() {
+    const blockSize = this.blockSize;
+    const step = blockSize * 0.5;
     for (const segment of this.segments) {
       const margin = segment.radiusCells + 1;
-      const minX = blockCoordinate(Math.min(segment.ax, segment.bx) - margin, this.blockSize);
-      const maxX = blockCoordinate(Math.max(segment.ax, segment.bx) + margin, this.blockSize);
-      const minZ = blockCoordinate(Math.min(segment.az, segment.bz) - margin, this.blockSize);
-      const maxZ = blockCoordinate(Math.max(segment.az, segment.bz) + margin, this.blockSize);
-      for (let blockZ = minZ; blockZ <= maxZ; blockZ += 1) {
-        for (let blockX = minX; blockX <= maxX; blockX += 1) {
-          const key = `${blockX}:${blockZ}`;
-          const bucket = this.index.get(key) ?? [];
-          bucket.push(segment);
-          this.index.set(key, bucket);
+      // The channel's own margin plus the half step a sample can sit between walked points.
+      const reach = Math.ceil((margin + step * 0.5) / blockSize);
+      const keys = new Set();
+      const steps = Math.max(1, Math.ceil(segment.length / step));
+      for (let index = 0; index <= steps; index += 1) {
+        const t = index / steps;
+        const blockX = blockCoordinate(segment.ax + segment.dx * t, blockSize);
+        const blockZ = blockCoordinate(segment.az + segment.dz * t, blockSize);
+        for (let offsetZ = -reach; offsetZ <= reach; offsetZ += 1) {
+          for (let offsetX = -reach; offsetX <= reach; offsetX += 1) {
+            keys.add(`${blockX + offsetX}:${blockZ + offsetZ}`);
+          }
         }
+      }
+      for (const key of keys) {
+        const bucket = this.index.get(key);
+        if (bucket) bucket.push(segment);
+        else this.index.set(key, [segment]);
       }
     }
   }
@@ -83,8 +108,7 @@ export class RiverChannel {
       const radial = clamp(1 - sample.distance / segment.radiusCells, 0, 1);
       const influence = smoothstep(radial);
       if (influence <= 0) continue;
-      const localSurface = segment.startSurface
-        + (segment.endSurface - segment.startSurface) * sample.amount;
+      const localSurface = reachSurfaceAt(segment.profile, sample.amount);
       const localBed = localSurface
         - segment.channelDepth * radial ** this.config.river.bankExponent;
       bedHeight = Math.min(bedHeight, localBed);
@@ -92,6 +116,7 @@ export class RiverChannel {
           || (influence === selected.influence && localSurface < selected.surfaceHeight)) {
         selected = {
           segment,
+          amount: sample.amount,
           influence,
           surfaceHeight: localSurface,
           shoreDistance: (segment.radiusCells - sample.distance) * this.config.cellSizeMeters,
@@ -108,6 +133,8 @@ export class RiverChannel {
       shoreDistance: selected.shoreDistance,
       flowX: selected.segment.flowX,
       flowZ: selected.segment.flowZ,
+      fall: reachFallAt(selected.segment.profile, selected.amount),
+      plunge: reachPlungeAt(selected.segment.profile, selected.amount),
     });
   }
 

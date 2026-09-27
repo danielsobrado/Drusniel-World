@@ -12,7 +12,14 @@ const WEATHER_MODES = Object.freeze([
  * Compact weather toggles for walk-mode. Settings live in editor.config.yaml
  * under `weather:` and can be overridden live via this panel.
  */
-export function createWeatherUi({ root = document.body, settings, onChange } = {}) {
+export function createWeatherUi({
+  root = document.body,
+  settings,
+  onChange,
+  timePresets = null,
+  timePreset = null,
+  onTimeChange = null,
+} = {}) {
   const panel = document.createElement('div');
   panel.className = 'weather-panel';
   panel.setAttribute('aria-label', 'Weather');
@@ -35,6 +42,23 @@ export function createWeatherUi({ root = document.body, settings, onChange } = {
       <input data-weather="windZ" type="range" min="-3" max="3" step="0.05" />
     </label>
   `;
+
+  // Time of day (sky presets), above the weather it combines with.
+  if (timePresets?.length) {
+    const row = document.createElement('label');
+    row.className = 'weather-panel-row';
+    row.innerHTML = '<span>Time</span><select data-weather="time"></select>';
+    const timeSelect = row.querySelector('select');
+    for (const preset of timePresets) {
+      const option = document.createElement('option');
+      option.value = preset.value;
+      option.textContent = preset.label;
+      timeSelect.append(option);
+    }
+    if (timePreset) timeSelect.value = timePreset;
+    timeSelect.addEventListener('change', () => onTimeChange?.(timeSelect.value));
+    panel.querySelector('.weather-panel-title').after(row);
+  }
 
   const modeSelect = panel.querySelector('[data-weather="mode"]');
   for (const mode of WEATHER_MODES) {

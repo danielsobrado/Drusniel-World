@@ -73,6 +73,13 @@ test('controller restores renderer tone mapping when post is disabled', () => {
     postProcessingStore,
   });
 
+  // Nothing is taken over until the graph actually renders: a pipeline that
+  // never runs (or fails to build) leaves the base renderer as it was.
+  assert.equal(renderer.toneMapping, THREE.ACESFilmicToneMapping);
+  assert.equal(renderer.toneMappingExposure, 1.12);
+
+  // What each render path does before drawing through the graph.
+  controller.takeRendererOutputOwnership();
   assert.equal(renderer.toneMapping, THREE.NoToneMapping);
   assert.equal(renderer.toneMappingExposure, 1);
 

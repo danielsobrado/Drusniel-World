@@ -1,6 +1,13 @@
 import { constructionJointProfile } from '../config/ConstructionJointProfiles.generated.js';
+import { constructionStyle } from '../masonry/ConstructionStyleCatalog.js';
 import { scaleCorners } from '../masonry/CourseLattice.js';
-import { coverageWithinSpan } from '../masonry/RuinSupportIntervals.js';
+import { moduleCourseRange } from '../masonry/CurvedCoursePacker.js';
+import {
+  courseCoversPlacement,
+  placementSpan,
+  spanCoveredBy,
+  stretchToCourseAbove,
+} from './ConstructionCoarseStretch.js';
 
 const CORNER_DIRECTIONS = [
   [-1, -1],
@@ -8,8 +15,6 @@ const CORNER_DIRECTIONS = [
   [1, 1],
   [-1, 1],
 ];
-const MIN_STRETCH_COVERAGE_RATIO = 0.98;
-const MAX_STRETCH_GAP = 0.05;
 
 function cornerBounds(corners) {
   let minX = Infinity;
@@ -32,22 +37,37 @@ function cornerBounds(corners) {
   };
 }
 
-function mergeCornerRing(group, key, s, y) {
+/**
+ * The outer quad of a split cell's leaves, in world coordinates, or null when a
+ * leaf lacks the ring.
+ *
+ * Each corner is the leaf corner furthest along that corner's diagonal. Taking
+ * the furthest arc position first, as this used to, picked the lower leaf's
+ * top-right corner whenever the head joint leaned left — its corner sits a
+ * little further along the wall than the upper leaf's — so a horizontally split
+ * cell merged into a stone whose top sloped down to mid-course, opening a wedge
+ * of mortar above it at every coarse LOD.
+ */
+function outerCornerRing(group, key) {
   if (!group.every((leaf) => Array.isArray(leaf[key]))) return null;
-  const world = CORNER_DIRECTIONS.map(([alongS, alongY], slot) => {
+  return CORNER_DIRECTIONS.map(([alongS, alongY], slot) => {
     let best = null;
+    let bestScore = -Infinity;
     for (const leaf of group) {
       const point = [leaf.s + leaf[key][slot][0], leaf.y + leaf[key][slot][1]];
-      if (!best
-        || point[0] * alongS > best[0] * alongS + 1e-12
-        || (Math.abs(point[0] - best[0]) <= 1e-12
-          && point[1] * alongY > best[1] * alongY)) {
+      const score = point[0] * alongS + point[1] * alongY;
+      if (score > bestScore + 1e-12) {
         best = point;
+        bestScore = score;
       }
     }
     return best;
   });
-  return world.map(([cornerS, cornerY]) => [cornerS - s, cornerY - y]);
+}
+
+function mergeCornerRing(group, key, s, y) {
+  const world = outerCornerRing(group, key);
+  return world ? world.map(([cornerS, cornerY]) => [cornerS - s, cornerY - y]) : null;
 }
 
 export function selectDominantPlacement(leaves) {
@@ -61,19 +81,7 @@ export function selectDominantPlacement(leaves) {
 }
 
 function mergeCellLeaves(group) {
-  const corners = CORNER_DIRECTIONS.map(([alongS, alongY], slot) => {
-    let best = null;
-    for (const leaf of group) {
-      const point = [leaf.s + leaf.corners[slot][0], leaf.y + leaf.corners[slot][1]];
-      if (!best
-        || point[0] * alongS > best[0] * alongS + 1e-12
-        || (Math.abs(point[0] - best[0]) <= 1e-12
-          && point[1] * alongY > best[1] * alongY)) {
-        best = point;
-      }
-    }
-    return best;
-  });
+  const corners = outerCornerRing(group, 'corners');
 
   let minS = Infinity;
   let maxS = -Infinity;
@@ -88,6 +96,19 @@ function mergeCellLeaves(group) {
   const s = (minS + maxS) / 2;
   const y = (minY + maxY) / 2;
   const dominant = selectDominantPlacement(group);
+  // The merged stone occupies every leaf's arc, so its span must too: keeping
+  // only the dominant leaf's span made a vertically split cell look half empty
+  // to the coverage test, and the course below it then refused to stretch.
+  const spans = group.map(placementSpan);
+  const support = dominant.support
+    ? Object.freeze({
+      ...dominant.support,
+      span: Object.freeze([
+        Math.min(...spans.map(([from]) => from)),
+        Math.max(...spans.map(([, to]) => to)),
+      ]),
+    })
+    : dominant.support;
   const mergedMortarCorners = mergeCornerRing(group, 'mortarCorners', s, y);
   const jointWidths = dominant.jointWidths ? { ...dominant.jointWidths } : null;
   const packedWidth = mergedMortarCorners
@@ -96,6 +117,7 @@ function mergeCellLeaves(group) {
 
   return {
     ...dominant,
+    support,
     s,
     y,
     corners: corners.map(([cornerS, cornerY]) => [cornerS - s, cornerY - y]),
@@ -140,21 +162,6 @@ function mergeSplitCells(field) {
   return merged;
 }
 
-function stretchOverGap(placement, step) {
-  if (!(step > 0)) return placement;
-  const height = placement.height + step;
-  const scaleY = height / placement.height;
-  return {
-    ...placement,
-    y: placement.y + step / 2,
-    height,
-    ...(placement.corners ? { corners: scaleCorners(placement.corners, 1, scaleY) } : {}),
-    ...(placement.mortarCorners
-      ? { mortarCorners: scaleCorners(placement.mortarCorners, 1, scaleY) }
-      : {}),
-  };
-}
-
 export function amplifyCoarseJoints(placement, profile) {
   if (!placement.corners || !placement.jointWidths || !placement.mortarCorners) {
     return placement;
@@ -190,24 +197,6 @@ export function amplifyCoarseJoints(placement, profile) {
   };
 }
 
-function placementSpan(placement) {
-  if (Array.isArray(placement.support?.span)) return placement.support.span;
-  const width = placement.packedWidth ?? placement.width ?? 0;
-  return [placement.s - width / 2, placement.s + width / 2];
-}
-
-function courseCoversPlacement(placement, above) {
-  if (!above || above.length === 0 || placement.ruin?.damageVoid) return false;
-  const [s0, s1] = placementSpan(placement);
-  const width = Math.max(0, s1 - s0);
-  // Legacy fixtures and non-lattice callers may omit horizontal dimensions. The
-  // old reducer stretched those inputs unconditionally, so retain that contract.
-  if (!(width > 0)) return true;
-  const coverage = coverageWithinSpan(s0, s1, above.map(placementSpan));
-  return coverage.ratio >= MIN_STRETCH_COVERAGE_RATIO
-    && coverage.largestGap <= Math.min(MAX_STRETCH_GAP, width * 0.08);
-}
-
 function courseMeanY(course) {
   return course.reduce((total, placement) => total + placement.y, 0) / course.length;
 }
@@ -224,12 +213,25 @@ function courseIndexSpan(course) {
   return { minimum, maximum };
 }
 
-export function coarsePlacements(placements, { styleKey = null } = {}) {
+/**
+ * @param options.styleKey joint profile the coarse joints are amplified with
+ * @param options.courseRangeAt optional `(courseIndex) => [from, to]`, the arc
+ *   range each course occupies in this module (`moduleCourseRange`). With it, a
+ *   stone at a module edge is not refused a stretch just because the course
+ *   above continues in the next module, and a dropped stone that no stretched
+ *   stone below replaces — over an arch, beside a jamb — is kept instead of
+ *   leaving a hole. Ignored for ruined walls, where a gap in the course above
+ *   across the seam may be a real void.
+ */
+export function coarsePlacements(placements, { styleKey = null, courseRangeAt = null } = {}) {
   if (!Array.isArray(placements) || placements.length === 0) return placements ?? [];
   const field = [];
   const rest = [];
   for (const placement of placements) {
-    if (placement.category === 'field') field.push(placement);
+    // Footing stones are a course of their own height: pairing them with the
+    // course above would stretch them by the wrong step, and there are few
+    // enough of them to keep whole.
+    if (placement.category === 'field' && !placement.footing) field.push(placement);
     else rest.push(placement);
   }
   if (field.length === 0) return placements;
@@ -245,6 +247,13 @@ export function coarsePlacements(placements, { styleKey = null } = {}) {
 
   const jointProfile = constructionJointProfile(styleKey);
   const ordered = [...courses.values()].sort((a, b) => courseMeanY(a) - courseMeanY(b));
+  const moduleAware = typeof courseRangeAt === 'function'
+    && !placements.some((placement) => placement.ruin);
+  // The arc range a course occupies in this module, when the caller knows it.
+  const ownedRange = (stones) => {
+    const courseIndex = stones?.[0]?.courseIndex;
+    return moduleAware && Number.isInteger(courseIndex) ? courseRangeAt(courseIndex) : null;
+  };
   const merged = [];
 
   for (let index = 0; index < ordered.length; index += 2) {
@@ -261,12 +270,50 @@ export function coarsePlacements(placements, { styleKey = null } = {}) {
       if (!ruinGap) step = Math.max(0, courseMeanY(above) - courseMeanY(course));
     }
 
+    const aboveRange = ownedRange(above);
+    const stretchedSpans = [];
     for (const placement of course) {
-      const mayStretch = !ruinGap && courseCoversPlacement(placement, above);
-      const stretched = stretchOverGap(placement, mayStretch ? step : 0);
+      const mayStretch = !ruinGap && courseCoversPlacement(placement, above, aboveRange);
+      const stretched = mayStretch ? stretchToCourseAbove(placement, above, step) : placement;
+      if (mayStretch) stretchedSpans.push(placementSpan(placement));
       merged.push(amplifyCoarseJoints(stretched, jointProfile));
+    }
+    if (moduleAware && above && !ruinGap) {
+      // A dropped stone only disappears where stretched stones below take its
+      // place. Where they do not, keeping it overlaps a stretched neighbour a
+      // little, which reads far better at this range than the mortar a hole
+      // would show.
+      const courseRange = ownedRange(course);
+      for (const placement of above) {
+        if (!spanCoveredBy(placementSpan(placement), stretchedSpans, courseRange)) {
+          merged.push(amplifyCoarseJoints(placement, jointProfile));
+        }
+      }
     }
   }
 
   return [...rest, ...merged];
+}
+
+/**
+ * Coarse placements for one planned module, aware of where its seams run.
+ *
+ * @param options.record the construction record the module was planned from
+ * @param options.module a plan module (`placements`, `pathInterval`)
+ * @param options.totalLength the planned wall's arc length
+ */
+export function coarsePlacementsForModule({ record, module, totalLength }) {
+  const style = constructionStyle(record.style.key);
+  const arcRange = module.pathInterval ?? [0, totalLength];
+  const wallRange = [0, totalLength ?? arcRange[1]];
+  return coarsePlacements(module.placements ?? [], {
+    styleKey: record.style.key,
+    courseRangeAt: (course) => moduleCourseRange({
+      seed: record.seed,
+      targetWidth: style.targetWidth,
+      arcRange,
+      wallRange,
+      course,
+    }),
+  });
 }

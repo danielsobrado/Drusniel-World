@@ -1,0 +1,431 @@
+# Ambient air of each biome (stylized/ambient/): GPU particle fields per
+# region, spindrift plumes off snowy crests, breath in the cold, and the weights
+# of effects inside other materials (blown snow and sand streaks, grass gust
+# sheen, frost). Ported from grass-test's public/ambient-effects.yaml and
+# converted from its ~2.8 units per metre to metres
+# (scratchpad convert_ambient_yaml.py); keep the two in step when re-syncing.
+#
+# Every effect's strength = its region's weight at the focus
+#   x its preset weight (`presets`, else `presetDefault`, else 1)
+#   x (wind / windReference) ^ windResponse,
+# eased at fadeRate per second. Regions: any, snow, sand, surf, jungle, water
+# (lake or river nearby), lake (on a lake), meadow (open ground and none of the
+# others). Preset names are grass-test's; stylized/ambient/ambientPresets.js
+# maps this world's times of day and weather onto them.
+#
+# Plumes are re-tuned for this world's mountains, not converted: crests here
+# stand hundreds of metres apart (MountainRidges), so the scan step, prominence
+# radius and spacing are metres at that scale, and the crests must stand above
+# the terrain's snow line.
+ambientEffects:
+  enabled: true
+  fadeRate: 0.8
+  regionInterval: 0.2
+  windReference: 0.6
+  gust:
+    strength: 0.4
+    period: 9
+  quality:
+    performance: 0.35
+    balanced: 0.6
+    high: 1
+    ultra: 1
+  fields:
+    diamondDust:
+      region: snow
+      presets:
+        rainy: 0
+        moonlight: 0.3
+        windy: 0.6
+      count: 2600
+      area: 20.0
+      base: focus
+      height:
+      - -1.0714
+      - 8.5714
+      rise: -0.1071
+      wind:
+        source: snow
+        speed: 0.4286
+      wander:
+        radius: 0.3929
+        frequency: 0.45
+      size:
+      - 0.0143
+      - 0.0321
+      shape: glint
+      color: '#f5fbff'
+      scatter: 3
+      backlit: 0.15
+      blending: additive
+      twinkle: 3
+      nearFade: 0.4286
+    spindrift:
+      region: snow
+      presets:
+        calm: 0.2
+        bowed: 0.5
+        sunny: 0.7
+        goldenHour: 0.6
+        moonlight: 0.6
+        rainy: 0.8
+        windy: 1
+      windResponse: 1
+      count: 6000
+      area: 20.0
+      height:
+      - 0.0
+      - 0.6429
+      hop:
+        length: 2.1429
+        rate: 1.1
+        spread: 18
+      gusts:
+        scale: 0.14
+        threshold: -0.1
+        speed: 2.1429
+      wind:
+        source: snow
+        speed: 0.8929
+        follow: 0.6
+      wander:
+        radius: 0.1071
+        frequency: 1.3
+      size:
+      - 0.0089
+      - 0.0214
+      stretch: 4
+      shape: streak
+      color: '#e8f0fa'
+      brightness: 2.2
+      opacity: 0.9
+      scatter: 1.4
+      nearFade: 0.4286
+      soft: 0.0179
+    blowingSand:
+      region: sand
+      presets:
+        calm: 0.1
+        sunny: 0.45
+        goldenHour: 0.4
+        bowed: 0.5
+        moonlight: 0.25
+        rainy: 0
+        windy: 1
+      windResponse: 1
+      count: 5000
+      area: 20.0
+      height:
+      - 0.0
+      - 0.5
+      hop:
+        length: 1.4286
+        rate: 1.4
+        spread: 14
+      gusts:
+        scale: 0.168
+        threshold: 0.05
+        speed: 1.7857
+      wind:
+        speed: 0.7143
+        follow: 0.7
+      wander:
+        radius: 0.0893
+        frequency: 1.4
+      size:
+      - 0.0071
+      - 0.0161
+      stretch: 4
+      shape: streak
+      color: '#d9c29a'
+      brightness: 1.15
+      opacity: 0.45
+      scatter: 0.8
+      nearFade: 0.5357
+      soft: 0.0893
+    surfSpray:
+      region: surf
+      presets:
+        calm: 0.4
+        moonlight: 0.6
+        rainy: 0.8
+        windy: 1
+      count: 420
+      area: 64.2857
+      base: sea
+      height:
+      - 0.0
+      - 2.1429
+      rise: 0.1786
+      wind:
+        speed: 0.5357
+      wander:
+        radius: 0.7143
+        frequency: 0.15
+      size:
+      - 1.0714
+      - 2.8571
+      shape: puff
+      color: '#eef5f8'
+      brightness: 1.6
+      opacity: 0.16
+      scatter: 1.6
+      nearFade: 1.4286
+      soft: 0.4286
+    pollen:
+      region: meadow
+      presets:
+        goldenHour: 0.8
+        sunny: 0.5
+        calm: 0.6
+        windy: 0.3
+        bowed: 0.4
+        rainy: 0
+        moonlight: 0
+      count: 600
+      area: 22.8571
+      height:
+      - 0.2143
+      - 3.2143
+      rise: 0.0536
+      wind:
+        speed: 0.3214
+      wander:
+        radius: 0.4286
+        frequency: 0.25
+      size:
+      - 0.0179
+      - 0.0357
+      color: '#fff1c4'
+      brightness: 1
+      opacity: 0.6
+      scatter: 2.5
+      backlit: 0.12
+      nearFade: 0.5357
+    seeds:
+      region: meadow
+      presets:
+        windy: 1
+        sunny: 0.7
+        goldenHour: 0.7
+        calm: 0.35
+        bowed: 0.6
+        rainy: 0
+        moonlight: 0
+      windResponse: 0.5
+      count: 220
+      area: 32.1429
+      height:
+      - 0.4286
+      - 5.0
+      rise: 0.0893
+      wind:
+        speed: 0.9286
+        follow: 0.8
+      wander:
+        radius: 0.7857
+        frequency: 0.2
+      size:
+      - 0.0786
+      - 0.1357
+      shape: fluff
+      color: '#fbfaf2'
+      scatter: 2
+      nearFade: 0.7143
+    fireflies:
+      region:
+      - meadow
+      - water
+      - jungle
+      presetDefault: 0
+      presets:
+        moonlight: 1
+      count: 520
+      area: 30.0
+      floor: lake
+      height:
+      - 0.1786
+      - 1.9643
+      wander:
+        radius: 0.5714
+        frequency: 0.22
+      size:
+      - 0.1071
+      - 0.1786
+      shape: firefly
+      color: '#c8ff6a'
+      lighting: emissive
+      emissive: 6
+      blending: additive
+      blink:
+        rate: 1.3
+        sharpness: 5
+      nearFade: 0.2857
+    spores:
+      region: jungle
+      presets:
+        rainy: 0.4
+        moonlight: 0.5
+        windy: 0.6
+      count: 1500
+      area: 22.8571
+      height:
+      - 0.2143
+      - 4.2857
+      rise: 0.0357
+      wind:
+        speed: 0.125
+      wander:
+        radius: 0.5
+        frequency: 0.18
+      size:
+      - 0.0179
+      - 0.0393
+      color: '#f3f7dc'
+      scatter: 3
+      backlit: 0.25
+      blink:
+        rate: 0.5
+        sharpness: 1.5
+      nearFade: 0.3571
+    canopyShafts:
+      region: jungle
+      presets:
+        rainy: 0
+        moonlight: 0.15
+        goldenHour: 1.2
+      count: 42
+      area: 39.2857
+      height:
+      - 0.0
+      - 0.0
+      length: 12.8571
+      size:
+      - 0.8929
+      - 2.1429
+      shape: shaft
+      color: '#fff0c8'
+      opacity: 0.09
+      scatter: 2.5
+      blending: additive
+      nearFade: 1.0714
+    midges:
+      region: water
+      presets:
+        goldenHour: 1
+        calm: 1
+        sunny: 0.6
+        moonlight: 0.4
+        bowed: 0.4
+        windy: 0.1
+        rainy: 0
+      count: 1200
+      swarm:
+        members: 40
+        radius: 0.3214
+        frequency: 3.5
+      area: 28.5714
+      floor: lake
+      height:
+      - 0.4286
+      - 1.6071
+      wander:
+        radius: 0.5357
+        frequency: 0.1
+      size:
+      - 0.0125
+      - 0.0214
+      color: '#2d2a24'
+      scatter: 2.5
+      backlit: 0.5
+      nearFade: 0.2857
+    lakeMist:
+      region: lake
+      presetDefault: 0.25
+      presets:
+        calm: 1
+        goldenHour: 0.8
+        moonlight: 1
+        rainy: 0.7
+        windy: 0
+      count: 110
+      area: 85.7143
+      base: lake
+      height:
+      - 0.0714
+      - 0.7857
+      wind:
+        speed: 0.2143
+      wander:
+        radius: 1.0714
+        frequency: 0.05
+      size:
+      - 3.2143
+      - 7.1429
+      shape: puff
+      color: '#e6edf2'
+      brightness: 1.5
+      opacity: 0.24
+      scatter: 1.2
+      nearFade: 2.1429
+      soft: 0.5357
+  plumes:
+    enabled: true
+    presets:
+      calm: 0.2
+      bowed: 0.5
+      moonlight: 0.5
+      rainy: 0.6
+      windy: 1
+    windResponse: 0.5
+    anchors: 12
+    puffs: 16
+    step: 30
+    prominenceRadius: 150
+    minProminence: 15
+    spacing: 250
+    length: 60
+    rise: 10
+    size:
+    - 4
+    - 16
+    lifetime: 10
+    opacity: 0.3
+    brightness: 1.8
+  breath:
+    enabled: true
+    minSnow: 0.35
+    period: 3.4
+    runningPeriod: 1.7
+    puffsPerBreath: 4
+    lifetime: 1.6
+    size:
+    - 0.05
+    - 0.3
+    speed: 0.2857
+    opacity: 0.55
+    presets:
+      rainy: 0.7
+  snowStreaks:
+    strength: 1
+    windResponse: 1
+    presets:
+      calm: 0.3
+      windy: 1.2
+  sandStreaks:
+    strength: 1
+    windResponse: 1
+    presets:
+      calm: 0.2
+      rainy: 0
+      windy: 1.2
+  grassGustSheen:
+    strength: 0.5
+    presets:
+      rainy: 0.3
+      moonlight: 0.4
+  frost:
+    strength: 0.55
+    presets:
+      rainy: 0.8
+      moonlight: 1.2

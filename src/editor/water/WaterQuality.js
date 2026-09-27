@@ -1,6 +1,8 @@
 import { validateWaterOpticsConfig } from './WaterOptics.js';
 import { validateWaterRefractionConfig } from './WaterRefraction.js';
 import { validateWaterFoamConfig } from './WaterFoam.js';
+import { validateWaterfallConfig } from './WaterfallConfig.js';
+import { validateCoastConfig, validateRainRipplesConfig, validateSeaConfig } from './SeaConfig.js';
 import { validateProjectedWaterCausticsConfig } from './ProjectedWaterCaustics.js';
 
 export const WATER_QUALITY_LOW = 'low';
@@ -107,6 +109,10 @@ export function validateWaterVisualConfig(waterConfig) {
   validateWaterOpticsConfig(waterConfig.optics);
   validateWaterRefractionConfig(waterConfig.refraction);
   validateWaterFoamConfig(waterConfig.foam);
+  validateWaterfallConfig(waterConfig.waterfall);
+  validateSeaConfig(waterConfig.sea);
+  validateCoastConfig(waterConfig.coast);
+  validateRainRipplesConfig(waterConfig.rainRipples);
 
   const caustics = waterConfig.caustics;
   if (!caustics || typeof caustics !== 'object' || Array.isArray(caustics)) {

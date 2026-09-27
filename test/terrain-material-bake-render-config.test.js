@@ -37,6 +37,10 @@ test('streamed terrain material palette stays aligned with the macro far terrain
   assert.equal(config.classification.snowLine, editorConfig.world.farTerrain.snowLine);
   assert.equal(config.classification.snowFade, editorConfig.world.farTerrain.snowFade);
   assert.equal(config.classification.snowSlopeMax, editorConfig.world.farTerrain.snowSlopeMax);
+  assert.deepEqual(
+    { ...config.classification.snowBiomeCover },
+    { ...editorConfig.world.farTerrain.snowBiomeCover },
+  );
 });
 
 test('terrain material bake render config rejects overlapping LOD bands and malformed colors', () => {

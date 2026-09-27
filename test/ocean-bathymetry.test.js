@@ -73,3 +73,23 @@ test('ocean bed samples are deterministic', () => {
   const model = createModel();
   assert.equal(model.sampleHeight(28.25, -7.5), model.sampleHeight(28.25, -7.5));
 });
+
+test('low land by the sea rises into a beach, higher ground is untouched', () => {
+  const low = new WaterTerrainModel({
+    seed: 17,
+    seaLevel: 0,
+    config,
+    // Flat coastal plain lying right at sea level.
+    sampleBaseHeight: (x) => (x < 0 ? 0 : -3),
+    sampleBaseTile: (x) => (x < 0 ? 4 : 0),
+  });
+  const { beachHeight, beachWidthMeters } = config.ocean;
+  assert.equal(low.sampleHeight(0, 0), -3, 'the shoreline vertex keeps its base height');
+  const near = low.sampleHeight(-3, 0);
+  const mid = low.sampleHeight(-15, 0);
+  const far = low.sampleHeight(-(beachWidthMeters + 5), 0);
+  assert.ok(near > 0 && near < mid && mid < far, 'the beach rises away from the sea');
+  assert.ok(Math.abs(far - beachHeight) < 1e-9);
+  // Ground already above the berm keeps its own height.
+  assert.equal(createModel().sampleHeight(-10, 0), 3);
+});

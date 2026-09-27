@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { projectedUvAt, WORKSHOP_UV_DENSITY } from './WorkshopProjectedUv.js';
 
 function ensureUv(geometry) {
   if (!geometry.getAttribute('uv')) {
@@ -65,25 +66,25 @@ export function transformGeometry(geometry, {
   return geometry;
 }
 
-export function applyWorkshopProjectedUv(geometry, density = 0.58) {
+export { projectedUvAt, WORKSHOP_UV_DENSITY };
+
+export function applyWorkshopProjectedUv(geometry, density = WORKSHOP_UV_DENSITY) {
   if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
   const position = geometry.getAttribute('position');
   const normal = geometry.getAttribute('normal');
   const uv = new Float32Array(position.count * 2);
   for (let index = 0; index < position.count; index += 1) {
-    const normalX = Math.abs(normal.getX(index));
-    const normalY = Math.abs(normal.getY(index));
-    const normalZ = Math.abs(normal.getZ(index));
-    if (normalX >= normalY && normalX >= normalZ) {
-      uv[index * 2] = position.getZ(index) * density;
-      uv[index * 2 + 1] = position.getY(index) * density;
-    } else if (normalY >= normalX && normalY >= normalZ) {
-      uv[index * 2] = position.getX(index) * density;
-      uv[index * 2 + 1] = position.getZ(index) * density;
-    } else {
-      uv[index * 2] = position.getX(index) * density;
-      uv[index * 2 + 1] = position.getY(index) * density;
-    }
+    projectedUvAt(
+      uv,
+      index * 2,
+      position.getX(index),
+      position.getY(index),
+      position.getZ(index),
+      normal.getX(index),
+      normal.getY(index),
+      normal.getZ(index),
+      density,
+    );
   }
   geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   return geometry;

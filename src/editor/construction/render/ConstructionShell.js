@@ -85,68 +85,95 @@ export function shellSectionPoints(sampled, fromFraction = 0, toFraction = 1) {
   return section;
 }
 
+/** Cross-section of the ribbon at one sampled point, origin-local. */
+function shellSection(entry, { halfWidth, nominalHeight, terrainView, origin, heightAt }) {
+  const centerHeight = terrainView.getCanonicalHeight(entry.x, entry.z) ?? 0;
+  const wallHeight = typeof heightAt === 'function'
+    ? Math.max(0, heightAt(entry.distance))
+    : nominalHeight;
+  return {
+    distance: entry.distance,
+    left: [entry.x + entry.normalX * halfWidth - origin.x, entry.z + entry.normalZ * halfWidth - origin.z],
+    right: [entry.x - entry.normalX * halfWidth - origin.x, entry.z - entry.normalZ * halfWidth - origin.z],
+    bottom: centerHeight - FOUNDATION_OVERLAP,
+    top: centerHeight + wallHeight,
+    wallHeight,
+  };
+}
+
 /**
  * Extrude one run of sampled points into the closed ribbon, origin-local.
+ *
+ * Every face has its own vertices, so the top reads as a top rather than a
+ * rounded tube, and UVs are wall-local metres: `u` along the path (absolute arc
+ * length, so neighbouring module shells continue the pattern), `v` up the
+ * faces from the ground and across the top. The stone-detail material
+ * (`ConstructionShellDetail`) sets the tile size.
  *
  * @param points from `shellSectionPoints`; the caller decides how much of the
  *   path a given shell covers.
- */
-/**
- * Extrude one run of sampled points into the closed ribbon, origin-local.
- *
  * @param options.heightAt optional wall-height function of absolute arc length
  *   `entry.distance`. Ruined shells pass the survivor envelope so far LOD
  *   follows the resolved crown instead of the nominal record height.
  */
 export function buildShellGeometry(points, { record, terrainView, origin, heightAt = null }) {
   if (!points || points.length < 2) return null;
+  const thickness = record.dimensions.thickness;
+  const sections = points.map((entry) => shellSection(entry, {
+    halfWidth: thickness / 2,
+    nominalHeight: record.dimensions.height,
+    terrainView,
+    origin,
+    heightAt,
+  }));
   const positions = [];
+  const uvs = [];
   const indices = [];
-  const halfWidth = record.dimensions.thickness / 2;
-  const nominalHeight = record.dimensions.height;
-  for (const entry of points) {
-    const leftX = entry.x + entry.normalX * halfWidth - origin.x;
-    const leftZ = entry.z + entry.normalZ * halfWidth - origin.z;
-    const rightX = entry.x - entry.normalX * halfWidth - origin.x;
-    const rightZ = entry.z - entry.normalZ * halfWidth - origin.z;
-    const centerHeight = terrainView.getCanonicalHeight(entry.x, entry.z) ?? 0;
-    const bottom = centerHeight - FOUNDATION_OVERLAP;
-    const wallHeight = typeof heightAt === 'function'
-      ? Math.max(0, heightAt(entry.distance))
-      : nominalHeight;
-    const top = centerHeight + wallHeight;
-    positions.push(
-      leftX, bottom, leftZ,
-      rightX, bottom, rightZ,
-      leftX, top, leftZ,
-      rightX, top, rightZ,
-    );
-  }
-
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const current = index * 4;
-    const next = current + 4;
-    indices.push(
-      current, current + 2, next + 2,
-      current, next + 2, next,
-      current + 1, next + 1, next + 3,
-      current + 1, next + 3, current + 3,
-      current + 2, current + 3, next + 3,
-      current + 2, next + 3, next + 2,
-      current, next, next + 1,
-      current, next + 1, current + 1,
-    );
-  }
-  const last = (points.length - 1) * 4;
-  indices.push(
-    0, 1, 3,
-    0, 3, 2,
-    last, last + 2, last + 3,
-    last, last + 3, last + 1,
+  const vertex = ([x, z], y, u, v) => {
+    positions.push(x, y, z);
+    uvs.push(u, v);
+    return uvs.length / 2 - 1;
+  };
+  // Two vertex rows per face, wound so the computed normals face outward.
+  const face = (rowA, rowB) => {
+    const a = sections.map(rowA);
+    const b = sections.map(rowB);
+    for (let index = 0; index < sections.length - 1; index += 1) {
+      indices.push(a[index], b[index], b[index + 1], a[index], b[index + 1], a[index + 1]);
+    }
+  };
+  const base = -FOUNDATION_OVERLAP;
+  face(
+    (section) => vertex(section.left, section.bottom, section.distance, base),
+    (section) => vertex(section.left, section.top, section.distance, section.wallHeight),
   );
+  face(
+    (section) => vertex(section.right, section.top, section.distance, section.wallHeight),
+    (section) => vertex(section.right, section.bottom, section.distance, base),
+  );
+  face(
+    (section) => vertex(section.left, section.top, section.distance, section.wallHeight),
+    (section) => vertex(section.right, section.top, section.distance, section.wallHeight + thickness),
+  );
+  face(
+    (section) => vertex(section.right, section.bottom, section.distance, base - thickness),
+    (section) => vertex(section.left, section.bottom, section.distance, base),
+  );
+  const cap = (section, flip) => {
+    const leftBottom = vertex(section.left, section.bottom, 0, base);
+    const rightBottom = vertex(section.right, section.bottom, thickness, base);
+    const rightTop = vertex(section.right, section.top, thickness, section.wallHeight);
+    const leftTop = vertex(section.left, section.top, 0, section.wallHeight);
+    indices.push(...(flip
+      ? [leftBottom, leftTop, rightTop, leftBottom, rightTop, rightBottom]
+      : [leftBottom, rightBottom, rightTop, leftBottom, rightTop, leftTop]));
+  };
+  cap(sections[0], false);
+  cap(sections.at(-1), true);
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();

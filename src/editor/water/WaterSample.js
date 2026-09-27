@@ -38,6 +38,8 @@ export function createWaterSample({
   shoreDistance = 0,
   flowX = 0,
   flowZ = 0,
+  fall = 0,
+  plunge = 0,
   flags = WATER_SAMPLE_FLAG_NONE,
 }) {
   if (!WATER_KINDS.includes(kind)) {
@@ -51,6 +53,10 @@ export function createWaterSample({
   assertFinite(shoreDistance, 'shoreDistance');
   if (coverage < 0 || coverage > 1) {
     throw new Error('Water sample coverage must be within [0, 1].');
+  }
+  for (const [value, name] of [[fall, 'fall'], [plunge, 'plunge']]) {
+    assertFinite(value, name);
+    if (value < 0 || value > 1) throw new Error(`Water sample ${name} must be within [0, 1].`);
   }
   if (shoreDistance < 0) {
     throw new Error('Water sample shoreDistance must be non-negative.');
@@ -74,6 +80,10 @@ export function createWaterSample({
     shoreDistance: kind === WATER_KIND_NONE ? 0 : shoreDistance,
     flowX: kind === WATER_KIND_NONE ? 0 : flow.x,
     flowZ: kind === WATER_KIND_NONE ? 0 : flow.z,
+    /** 0..1: how much of this point is the face of a waterfall. */
+    fall: kind === WATER_KIND_NONE ? 0 : fall,
+    /** 0..1: churn in the plunge pool below a fall. */
+    plunge: kind === WATER_KIND_NONE ? 0 : plunge,
     flags,
   });
 }

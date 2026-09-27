@@ -2,14 +2,17 @@ import {
   CONSTRUCTION_RECORD_VERSION,
   CUBIC_BEZIER_PATH_VERSION,
 } from './ConstructionSchema.js';
-import { DEFAULT_CONSTRUCTION_STYLE_KEY } from './masonry/ConstructionStyleCatalog.js';
+import {
+  DEFAULT_CONSTRUCTION_STYLE_KEY,
+  isConstructionStyleKey,
+} from './masonry/ConstructionStyleCatalog.js';
 
 const WALL_X_POSITIONS = Object.freeze([
   -36, -30, -24, -18, -12, -6,
   6, 12, 18, 24, 30, 36,
 ]);
 
-function wallRecord(x, index) {
+function wallRecord(x, index, styleKey) {
   const id = `construction-ring-wall-${index}`;
   return {
     version: CONSTRUCTION_RECORD_VERSION,
@@ -19,7 +22,7 @@ function wallRecord(x, index) {
     kind: 'wall',
     label: `Construction ring wall ${index + 1}`,
     style: {
-      key: DEFAULT_CONSTRUCTION_STYLE_KEY,
+      key: styleKey,
       version: 1,
       materials: {},
     },
@@ -63,8 +66,12 @@ export function ensureConstructionPerfQaFixture(store, search = '') {
     || capture === 'night-emissive'
     || params.get('fixture') === 'construction-ring';
   if (!needsRing) return [];
+  // `constructionStyle` lets a frame-rate A/B compare wall styles on the same
+  // corridor without editing the default.
+  const requested = params.get('constructionStyle');
+  const styleKey = isConstructionStyleKey(requested) ? requested : DEFAULT_CONSTRUCTION_STYLE_KEY;
   return WALL_X_POSITIONS.map((x, index) => (
     store.get(`construction-ring-wall-${index}`)
-      ?? store.add(wallRecord(x, index))
+      ?? store.add(wallRecord(x, index, styleKey))
   ));
 }

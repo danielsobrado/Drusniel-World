@@ -132,6 +132,26 @@ export const STONE_PALETTES = Object.freeze({
     outlier: [150, 132, 96],
     outlierChance: 0.12,
   }),
+  /**
+   * Light, warm field stone for `rounded-fieldstone`: cream, beige, sand and a
+   * cool grey-green, so neighbouring pillow stones separate by hue as well as by
+   * their shadowed joints. Brighter than `soft-limestone`, far calmer than
+   * `limestone`.
+   */
+  'warm-fieldstone': defineStonePalette({
+    base: [204, 190, 164],
+    warm: [218, 204, 176],
+    color: '#ccbea4',
+    ramp: [
+      [204, 190, 164],
+      [216, 205, 184],
+      [190, 181, 164],
+      [211, 190, 154],
+      [184, 182, 166],
+    ],
+    outlier: [156, 146, 128],
+    outlierChance: 0.05,
+  }),
 });
 
 /**
@@ -465,6 +485,42 @@ function unitPalette(recipe, family) {
 }
 
 /**
+ * The albedo half of `applyUnitShading`: one unit's ramp colour times its
+ * brightness lane, written into `out`.
+ *
+ * Shared with meshers that write vertex colours straight into typed arrays, so
+ * a construction stone and a workshop stone with the same seed, index and
+ * palette pick the same colour. `out` defaults to a `Float32Array` because that
+ * is the precision `applyUnitShading` has always stored the unit colour at.
+ */
+export function stoneUnitAlbedo(recipe, stableIndex, {
+  family = 'stone',
+  out = new Float32Array(3),
+} = {}) {
+  const palette = unitPalette(recipe, family);
+  const hash = mixSeed(recipe.seed, stableIndex);
+  const tintLane = (hash & 255) / 255;
+  const outlierLane = ((hash >>> 8) & 255) / 255;
+  const shading = stoneSurfaceProfile(recipe.style).unitShading;
+  const brightness = THREE.MathUtils.lerp(
+    shading.brightnessMin,
+    shading.brightnessMax,
+    tintLane,
+  );
+  for (let channel = 0; channel < 3; channel += 1) {
+    out[channel] = rampColor(palette, tintLane, outlierLane, channel) * brightness;
+  }
+  return out;
+}
+
+/** Weathering subtracted from a unit's colour: strongest near the ground. */
+export function stoneUnitWeathering(recipe, heightRatio = 0.5) {
+  return recipe.weathering
+    * (1 - heightRatio)
+    * stoneSurfaceProfile(recipe.style).unitShading.weatheringStrength;
+}
+
+/**
  * Write per-unit vertex colours: curated hue variation plus baked crevice
  * occlusion.
  *
@@ -488,15 +544,7 @@ export function applyUnitShading(geometry, recipe, {
   depth = 0.3,
   neutral = hasImportedAlbedoFamily(recipe, family),
 } = {}) {
-  const palette = unitPalette(recipe, family);
-  const hash = mixSeed(recipe.seed, stableIndex);
-  const tintLane = (hash & 255) / 255;
-  const outlierLane = ((hash >>> 8) & 255) / 255;
-  const surface = stoneSurfaceProfile(recipe.style);
-  const shading = surface.unitShading;
-  const weather = recipe.weathering
-    * (1 - heightRatio)
-    * shading.weatheringStrength;
+  const weather = stoneUnitWeathering(recipe, heightRatio);
 
   const position = geometry.getAttribute('position');
   if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
@@ -511,16 +559,7 @@ export function applyUnitShading(geometry, recipe, {
     * THREE.MathUtils.clamp(-protrusion / Math.max(1e-4, depth), 0, 1);
 
   const unit = new Float32Array(3);
-  if (!neutral) {
-    const brightness = THREE.MathUtils.lerp(
-      shading.brightnessMin,
-      shading.brightnessMax,
-      tintLane,
-    );
-    for (let channel = 0; channel < 3; channel += 1) {
-      unit[channel] = rampColor(palette, tintLane, outlierLane, channel) * brightness;
-    }
-  }
+  if (!neutral) stoneUnitAlbedo(recipe, stableIndex, { family, out: unit });
 
   const colors = new Float32Array(position.count * 3);
   for (let vertex = 0; vertex < position.count; vertex += 1) {

@@ -241,6 +241,10 @@ export function parseQaParams(search = '') {
       capture?.pitchDegrees ?? defaults.pitchDegrees ?? 0,
     ),
     warmupSeconds: Math.max(0, readNumber(params, 'warmup', defaults.warmup ?? 2)),
+    // Keep warming up past `warmup` until streaming, collision and wall builds
+    // have settled (PerfQaSettleGate), for at most `settleTimeout` seconds.
+    settle: readBoolean(params, 'settle', false),
+    settleTimeoutSeconds: Math.max(1, readNumber(params, 'settleTimeout', 120)),
     durationSeconds: Math.max(0.5, readNumber(params, 'duration', defaults.duration ?? 12)),
     warmupFrames: useFrameBudget ? Math.max(0, Math.floor(warmupFramesRaw)) : null,
     measureFrames: useFrameBudget ? Math.max(1, Math.floor(measureFramesRaw)) : null,
@@ -308,6 +312,7 @@ export function createMovementPlan(config) {
         id: 'warmup',
         label: 'Warmup (settle streaming)',
         durationSeconds: config.warmupSeconds,
+        settle: Boolean(config.settle),
         keys: Object.freeze([]),
         record: false,
       }),

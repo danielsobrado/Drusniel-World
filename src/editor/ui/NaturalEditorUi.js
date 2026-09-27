@@ -1,4 +1,7 @@
 import './NaturalEditorUi.css';
+import './NaturalGladeChrome.css';
+import './NaturalGladeDrawer.css';
+import './NaturalGladeTerrainPanel.css';
 import { naturalEditorIcon } from './NaturalEditorIcons.js';
 import { NaturalEditorPreferences } from './NaturalEditorPreferences.js';
 import { NATURAL_EDITOR_UI_CONFIG } from './NaturalEditorUiConfig.generated.js';

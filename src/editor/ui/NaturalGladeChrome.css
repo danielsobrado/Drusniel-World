@@ -1,0 +1,401 @@
+@import '../player/hud/gladeTheme.css';
+
+/*
+ * Tiny Glade skin for the editor chrome (tokens in player/hud/gladeTheme.css).
+ *
+ * Everything snaps to one grid: 16px gutters, a 38px top row at 14px, a bottom
+ * row at 16px, and the drawer and weather card fitted between them. Tools are
+ * compact icon tiles; their names only surface as tooltips.
+ */
+.editor-shell[data-natural-ui-installed="true"] {
+  --glade-top: 14px;
+  --glade-row: 38px;
+  --glade-gutter: 16px;
+  --glade-under-top: calc(var(--glade-top) + var(--glade-row) + 12px);
+}
+
+/* ── Top row ─────────────────────────────────────────────────────────────── */
+
+.editor-shell[data-natural-ui-installed="true"] .natural-top-chrome {
+  top: var(--glade-top);
+  right: var(--glade-gutter);
+  left: var(--glade-gutter);
+  font-family: var(--glade-font);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-brand,
+.editor-shell[data-natural-ui-installed="true"] .natural-history-actions {
+  gap: 2px;
+  height: var(--glade-row);
+  padding: 3px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--glade-paper);
+  box-shadow: var(--glade-shadow);
+  backdrop-filter: var(--glade-blur);
+}
+
+/* The brand is just the menu button; its name lives in the tooltip. */
+.editor-shell[data-natural-ui-installed="true"] .natural-brand__text {
+  display: none;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-top-chrome .natural-icon-button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--glade-ink);
+  transition:
+    background-color 160ms ease,
+    scale var(--glade-spring-ms) var(--glade-spring);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-top-chrome .natural-icon-button:hover {
+  background: rgb(96 76 52 / 9%);
+  scale: 1.08;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-top-chrome .natural-icon-button:active {
+  scale: 0.92;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-top-chrome .natural-icon-button svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.9;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-world-menu {
+  top: var(--glade-under-top);
+  left: var(--glade-gutter);
+  border: 0;
+  border-radius: 18px;
+  background: var(--glade-paper-strong);
+  box-shadow: var(--glade-shadow);
+  color: var(--glade-ink);
+  font-family: var(--glade-font);
+  transform-origin: 24px 0;
+  transition:
+    scale var(--glade-spring-ms) var(--glade-spring),
+    opacity 160ms ease;
+}
+
+@starting-style {
+  .editor-shell[data-natural-ui-installed="true"] .natural-world-menu {
+    opacity: 0;
+    scale: 0.9;
+  }
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-world-menu__head strong {
+  color: var(--glade-ink);
+  font-weight: 800;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-world-menu .natural-icon-button {
+  background: transparent;
+  color: var(--glade-ink-soft);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-menu-action {
+  border: 0;
+  border-radius: 12px;
+  background: var(--glade-well);
+  color: var(--glade-ink);
+  font-weight: 700;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-menu-action:hover {
+  background: rgb(229 155 82 / 16%);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-world-menu p {
+  color: var(--glade-ink-soft);
+}
+
+/* ── Tool tiles ──────────────────────────────────────────────────────────── */
+
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-toolbar, .natural-build-strip) {
+  bottom: var(--glade-gutter);
+  gap: 4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--glade-tray);
+  box-shadow: 0 6px 20px rgb(62 44 24 / 12%);
+  backdrop-filter: var(--glade-blur);
+  font-family: var(--glade-font);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-build-strip {
+  bottom: calc(var(--glade-gutter) + 54px);
+  transition:
+    translate var(--glade-spring-ms) var(--glade-spring),
+    opacity 180ms ease;
+}
+
+@starting-style {
+  .editor-shell[data-natural-ui-installed="true"] .natural-build-strip {
+    opacity: 0;
+    translate: 0 22px;
+  }
+}
+
+/* Cream tiles with ink glyphs; the active tile inverts. Names are tooltips. */
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-tool-button, .natural-build-action) {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  place-items: center;
+  width: 38px;
+  min-width: 0;
+  height: 38px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fffdf9, #f6eee1);
+  box-shadow:
+    inset 0 -2px 0 rgb(96 76 52 / 12%),
+    0 0 0 1px var(--glade-line),
+    0 2px 5px rgb(62 44 24 / 12%);
+  color: var(--glade-ink);
+  transition:
+    translate var(--glade-spring-ms) var(--glade-spring),
+    scale var(--glade-spring-ms) var(--glade-spring),
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-tool-button, .natural-build-action) .natural-icon svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.8;
+}
+
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-tool-button, .natural-build-action):hover {
+  background: linear-gradient(180deg, #fffefb, #fbf4e8);
+  color: var(--glade-ink);
+  translate: 0 -2px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-tool-button, .natural-build-action):active {
+  transform: none;
+  scale: 0.9;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-tool-button.is-active {
+  border: 0;
+  background: var(--glade-ink);
+  box-shadow:
+    inset 0 -2px 0 rgb(0 0 0 / 22%),
+    0 4px 10px rgb(62 44 24 / 26%);
+  color: var(--glade-cream);
+  translate: 0 -3px;
+}
+
+/* The name rides above its tile on hover and keyboard focus. */
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-tool-button, .natural-build-action) > span:last-child {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--glade-ink);
+  box-shadow: var(--glade-shadow-soft);
+  color: var(--glade-cream);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  translate: -50% 4px;
+  transition:
+    opacity 140ms ease,
+    translate var(--glade-spring-soft-ms) var(--glade-spring-soft);
+}
+
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-tool-button, .natural-build-action):is(:hover, :focus-visible) > span:last-child {
+  opacity: 1;
+  translate: -50% 0;
+}
+
+/* ── Context toolbars ────────────────────────────────────────────────────── */
+
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-context-toolbar, .natural-wall-context-toolbar) {
+  bottom: calc(var(--glade-gutter) + 54px);
+  border: 0;
+  border-radius: 999px;
+  background: var(--glade-paper);
+  box-shadow: var(--glade-shadow);
+  font-family: var(--glade-font);
+  transition:
+    translate var(--glade-spring-ms) var(--glade-spring),
+    opacity 180ms ease;
+}
+
+@starting-style {
+  .editor-shell[data-natural-ui-installed="true"] :is(.natural-context-toolbar, .natural-wall-context-toolbar) {
+    opacity: 0;
+    translate: 0 22px;
+  }
+}
+
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-context-toolbar__label, .natural-wall-context-toolbar__label) {
+  color: var(--glade-ink-soft);
+}
+
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-context-action, .natural-wall-context-action) {
+  border-radius: 999px;
+  color: var(--glade-ink);
+  font-weight: 700;
+}
+
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-context-action, .natural-wall-context-action):hover {
+  background: rgb(96 76 52 / 9%);
+  color: var(--glade-ink);
+}
+
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-context-action--danger, .natural-wall-context-action--danger) {
+  color: var(--glade-danger);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-wall-context-action__glyph {
+  color: var(--glade-accent-ink);
+}
+
+/* ── Status bar and hint ─────────────────────────────────────────────────── */
+
+.editor-shell[data-natural-ui-installed="true"] .statusbar {
+  right: var(--glade-gutter);
+  bottom: var(--glade-gutter);
+  gap: 2px;
+  padding: 4px;
+  border: 0;
+  background: var(--glade-paper);
+  box-shadow: var(--glade-shadow-soft);
+  backdrop-filter: var(--glade-blur);
+  color: var(--glade-ink-soft);
+  font-family: var(--glade-font);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .statusbar span {
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .statusbar span:last-child {
+  background: var(--glade-well);
+  color: var(--glade-ink);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-first-run-hint {
+  bottom: calc(var(--glade-gutter) + 58px);
+  border: 0;
+  background: var(--glade-ink);
+  box-shadow: var(--glade-shadow);
+  color: var(--glade-cream);
+  font-family: var(--glade-font);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ── Weather card ────────────────────────────────────────────────────────── */
+
+#app .weather-panel {
+  right: var(--glade-gutter, 16px);
+  bottom: calc(var(--glade-gutter, 16px) + 44px);
+  width: 236px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--glade-paper);
+  box-shadow: var(--glade-shadow);
+  backdrop-filter: var(--glade-blur);
+  color: var(--glade-ink);
+  color-scheme: light;
+  font: 700 11.5px/1.3 var(--glade-font);
+}
+
+#app .weather-panel-title {
+  margin-bottom: 6px;
+  color: var(--glade-ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+#app .weather-panel-row {
+  grid-template-columns: 58px 1fr;
+  margin: 5px 0;
+  color: var(--glade-ink-soft);
+}
+
+#app .weather-panel select {
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--glade-well);
+  color: var(--glade-ink);
+  font: inherit;
+}
+
+#app .weather-panel input[type="range"] {
+  accent-color: var(--glade-accent);
+}
+
+/* The settings drawer takes the right column; the corner cards make room. */
+#app:has(.editor-shell[data-natural-panel="settings"] .sidebar:not(.is-dismissed)) .weather-panel,
+.editor-shell[data-natural-panel="settings"] .sidebar:not(.is-dismissed) ~ .viewport-shell .statusbar {
+  opacity: 0;
+  pointer-events: none;
+  translate: 24px 0;
+}
+
+/* ── Spring slides between modes ─────────────────────────────────────────── */
+
+/*
+ * Each piece of chrome leaves toward its own edge (--glade-exit) and springs
+ * back on return. `playerMode.css` decides when; this decides how.
+ */
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-top-chrome, .natural-toolbar, .statusbar),
+#app .weather-panel {
+  transition:
+    translate var(--glade-spring-ms) var(--glade-spring),
+    opacity 220ms ease,
+    visibility 0s linear 0s;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar {
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    translate var(--glade-spring-ms) var(--glade-spring),
+    visibility 0s linear 0s;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-top-chrome { --glade-exit: 0 -160%; }
+.editor-shell[data-natural-ui-installed="true"] .natural-toolbar { --glade-exit: 0 180%; }
+.editor-shell[data-natural-ui-installed="true"] .statusbar { --glade-exit: 0 220%; }
+.editor-shell[data-natural-ui-installed="true"] .sidebar { --glade-exit: calc(-100% - 40px) 0; }
+#app .weather-panel { --glade-exit: calc(100% + 40px) 0; }
+
+@media (max-width: 560px) {
+  .editor-shell[data-natural-ui-installed="true"] {
+    --glade-top: 8px;
+    --glade-gutter: 8px;
+  }
+
+  .editor-shell[data-natural-ui-installed="true"] .natural-toolbar {
+    width: auto;
+  }
+
+  #app .weather-panel {
+    display: none;
+  }
+}

@@ -38,7 +38,7 @@ function createSpellButton({ id, key, label, onClick }) {
   button.innerHTML = `
     <span class="spell-slot__glyph">${spellGlyph(id)}</span>
     <svg class="spell-slot__channel" viewBox="0 0 48 48" aria-hidden="true">
-      <circle cx="24" cy="24" r="22" pathLength="100"/>
+      <rect x="2" y="2" width="44" height="44" rx="13" pathLength="100"/>
     </svg>
     <kbd class="spell-slot__key">${key}</kbd>
     <span class="spell-slot__label"></span>
@@ -64,7 +64,7 @@ function createGrip(title) {
  * restart cleanly when the same spell is cast again before the ring empties.
  */
 function playCastFeedback(button, durationMs) {
-  const ring = button.querySelector('.spell-slot__channel circle');
+  const ring = button.querySelector('.spell-slot__channel rect');
   const label = button.querySelector('.spell-slot__label');
   button.castAnimations?.forEach((animation) => animation.cancel());
   button.castAnimations = [
@@ -80,7 +80,7 @@ function playCastFeedback(button, durationMs) {
 }
 
 /**
- * The spell dock: six round slots on a paper pill, dragged by its grip.
+ * The spell dock: six compact tiles on a light tray, dragged by its grip.
  * Casting from a slot and casting from the number keys (`cast`) share one
  * path, so both get the same ring, miss flash and cast sound.
  */

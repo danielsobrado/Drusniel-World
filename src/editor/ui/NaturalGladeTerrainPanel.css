@@ -1,0 +1,205 @@
+/*
+ * Compact terrain panel for the Tiny Glade skin. The operation, tile and brush
+ * buttons keep their markup and accessible text from EditorUi; this only
+ * collapses them into icon, swatch and chip grids, with names as tooltips.
+ */
+
+/* The drawer hugs its content instead of always running the full height. */
+.editor-shell[data-natural-ui-installed="true"] .sidebar {
+  bottom: auto;
+  max-height: calc(100% - var(--glade-under-top) - var(--glade-gutter));
+}
+
+.editor-shell[data-natural-ui-installed="true"][data-natural-panel="terrain"] .sidebar:not(.is-settings-drawer) {
+  width: 232px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-panel="terrain"] {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-panel="terrain"] :is(.panel-head h2, .panel-subheading) {
+  margin: 0;
+  font-size: 9.5px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-panel="terrain"] .panel-head {
+  align-items: center;
+  min-height: 28px;
+  padding-right: 32px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-panel="terrain"] .panel-head h2 {
+  white-space: nowrap;
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-panel="terrain"] .panel-count {
+  display: none;
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-panel="terrain"] [data-role="tile-tools"] {
+  display: grid;
+  gap: 6px;
+}
+
+/* Shared tooltip for the compact buttons below, above each button so it never adds to the drawer's scroll height. */
+.editor-shell[data-natural-ui-installed="true"] [data-panel="terrain"] :is([data-terrain-mode], .brush-button)::after {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--glade-ink);
+  box-shadow: var(--glade-shadow-soft);
+  color: var(--glade-cream);
+  font: 700 10.5px/1.2 var(--glade-font);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  translate: -50% 3px;
+  transition:
+    opacity 120ms ease,
+    translate var(--glade-spring-soft-ms) var(--glade-spring-soft);
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-panel="terrain"] :is([data-terrain-mode], .brush-button):is(:hover, :focus-visible)::after {
+  opacity: 1;
+  translate: -50% 0;
+}
+
+/* ── Operations: one segmented pill of icons ─────────────────────────────── */
+
+.editor-shell[data-natural-ui-installed="true"] [data-role="terrain-mode-row"] {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--glade-well);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar [data-terrain-mode] {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--glade-ink-soft);
+  font-size: 0;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar [data-terrain-mode]::before {
+  width: 17px;
+  height: 17px;
+  background: currentColor;
+  content: '';
+  -webkit-mask: var(--mode-icon) center / contain no-repeat;
+  mask: var(--mode-icon) center / contain no-repeat;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar [data-terrain-mode]:hover {
+  background: rgb(255 255 255 / 60%);
+  color: var(--glade-ink);
+  translate: none;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar [data-terrain-mode].is-active {
+  background: var(--glade-ink);
+  box-shadow: 0 2px 5px rgb(62 44 24 / 25%);
+  color: var(--glade-cream);
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-terrain-mode="paint"] {
+  --mode-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14.5 4.5 19.5 9.5 11 18l-5-5z'/%3E%3Cpath d='M6 13c-2 .5-2.5 2.5-2.5 4.5 0 1 .5 2 .5 2 2 0 4-.5 4.5-2.5'/%3E%3C/svg%3E");
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-terrain-mode="raise"] {
+  --mode-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 19c3-5 5.5-7 9-7s6 2 9 7'/%3E%3Cpath d='M12 9V3M9 6l3-3 3 3'/%3E%3C/svg%3E");
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-terrain-mode="lower"] {
+  --mode-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 13c3 5 5.5 7 9 7s6-2 9-7'/%3E%3Cpath d='M12 3v8M9 8l3 3 3-3'/%3E%3C/svg%3E");
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-terrain-mode="smooth"] {
+  --mode-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 9c2.5-2.5 4.5-2.5 6 0s3.5 2.5 6 0 4.5-2.5 6 0'/%3E%3Cpath d='M3 16h18'/%3E%3C/svg%3E");
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-terrain-mode="paint"]::after { content: 'Paint'; }
+.editor-shell[data-natural-ui-installed="true"] [data-terrain-mode="raise"]::after { content: 'Raise'; }
+.editor-shell[data-natural-ui-installed="true"] [data-terrain-mode="lower"]::after { content: 'Lower'; }
+.editor-shell[data-natural-ui-installed="true"] [data-terrain-mode="smooth"]::after { content: 'Smooth'; }
+
+/* ── Tiles: a dense swatch grid; names come from each tile's title ───────── */
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .tile-palette {
+  grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+  gap: 5px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .tile-button {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  min-height: 0;
+  padding: 3px;
+  border-radius: 9px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .tile-button__swatch {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .tile-button__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Too small to read at swatch size; the 1–0 shortcuts still work. */
+.editor-shell[data-natural-ui-installed="true"] .sidebar .tile-button__shortcut {
+  display: none;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .tile-button.is-active {
+  background: var(--glade-cream);
+  box-shadow: 0 0 0 2px var(--glade-ink);
+}
+
+/* ── Brush sizes: small round chips ─────────────────────────────────────── */
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .brush-row {
+  grid-template-columns: repeat(auto-fill, 30px);
+  gap: 5px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .brush-button {
+  position: relative;
+  width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 11px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .brush-button.is-active {
+  background: var(--glade-ink);
+  box-shadow: none;
+  color: var(--glade-cream);
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-panel="terrain"] .brush-button::after {
+  content: attr(data-brush-size) ' × ' attr(data-brush-size);
+}

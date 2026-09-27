@@ -1,0 +1,302 @@
+/*
+ * Tiny Glade skin for the editor drawer. The drawer's panels are styled with
+ * the dark palette tokens from styles.css, so the drawer re-points those
+ * tokens at paper and ink; the rules after that re-ink the few colours that
+ * were written in directly.
+ */
+.editor-shell[data-natural-ui-installed="true"] .sidebar {
+  --surface-0: #f3ebdc;
+  --surface-1: transparent;
+  --surface-2: #fcf8f0;
+  --surface-3: #f4ead8;
+  --border: rgb(96 76 52 / 13%);
+  --border-strong: rgb(96 76 52 / 28%);
+  --text: var(--glade-ink);
+  --text-dim: var(--glade-ink-soft);
+  --accent: #d98a3f;
+  --accent-soft: rgb(229 155 82 / 16%);
+  --danger: #c0564c;
+
+  top: var(--glade-under-top);
+  bottom: var(--glade-gutter);
+  left: var(--glade-gutter);
+  width: min(304px, calc(100vw - 32px));
+  border: 0;
+  border-radius: 20px;
+  background: var(--glade-paper-strong);
+  box-shadow: var(--glade-shadow);
+  color: var(--glade-ink);
+  color-scheme: light;
+  font-family: var(--glade-font);
+  scrollbar-color: rgb(96 76 52 / 22%) transparent;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar.is-settings-drawer {
+  right: var(--glade-gutter);
+  width: min(400px, calc(100vw - 32px));
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar::-webkit-scrollbar-thumb {
+  background: rgb(96 76 52 / 22%);
+  background-clip: content-box;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .tool-panel {
+  padding: 16px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .tool-panel > :first-child {
+  padding-right: 36px;
+}
+
+/* Pinned to the drawer's top-right corner, clear of the panel heading. */
+.editor-shell[data-natural-ui-installed="true"] .natural-drawer-close {
+  float: none;
+  width: 28px;
+  height: 28px;
+  margin: 12px 12px -40px auto;
+  border: 0;
+  border-radius: 50%;
+  background: var(--glade-well);
+  color: var(--glade-ink-soft);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-drawer-close:hover {
+  background: rgb(96 76 52 / 12%);
+  color: var(--glade-ink);
+}
+
+/* Headings, notes and small print. */
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.panel h2, .panel-subheading, .settings-group h3) {
+  color: var(--glade-ink);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.panel-note, .settings-group p, .scene-settings p, .settings-range, .help-list) {
+  color: var(--glade-ink-soft);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .scene-settings code {
+  color: var(--glade-ink);
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-panel="construction"] > .panel-note:not(label) {
+  border: 0;
+  border-radius: 14px;
+  background: var(--glade-well);
+}
+
+.editor-shell[data-natural-ui-installed="true"] [data-panel="construction"] > .panel-note:not(label)::before {
+  color: var(--glade-accent-ink);
+}
+
+/* Buttons and tiles. */
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.tile-button, .object-button, .tool-button, .brush-button, .action-button) {
+  border-color: transparent;
+  border-radius: 12px;
+  box-shadow: 0 1px 0 rgb(96 76 52 / 10%), 0 0 0 1px var(--border);
+  font-weight: 700;
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    translate var(--glade-spring-ms) var(--glade-spring);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.tile-button, .object-button, .tool-button, .brush-button, .action-button):hover {
+  border-color: transparent;
+  translate: 0 -1px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.tile-button, .object-button, .tool-button, .brush-button).is-active {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--accent);
+  background: var(--accent-soft);
+  color: var(--glade-ink);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.tile-button__swatch, .object-button__swatch) {
+  border: 0;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px rgb(40 30 20 / 16%);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .action-button--danger {
+  color: var(--danger);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(input, select) {
+  border-color: transparent;
+  background: var(--surface-0);
+  color: var(--glade-ink);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar input[type="range"] {
+  accent-color: var(--glade-accent);
+  background: transparent;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.search-field, .chip, .selection-card, .settings-group, .object-card) {
+  border-color: transparent;
+  background: var(--glade-well);
+  color: var(--glade-ink);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .chip.is-active {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  background: var(--accent-soft);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .selection-card strong {
+  color: var(--glade-ink);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .god-rays-settings :is(.settings-group, [data-grass-section], [data-god-rays-section]) {
+  border: 0;
+  background: var(--glade-well);
+}
+
+/* Quick picks, recommendations and favourites. */
+.editor-shell[data-natural-ui-installed="true"] .natural-quick-picks,
+.editor-shell[data-natural-ui-installed="true"] .sidebar .natural-recommendations {
+  border-bottom-color: var(--border);
+}
+
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-quick-group > span, .natural-recommendations__label) {
+  color: var(--glade-ink-soft);
+}
+
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-quick-group button, .sidebar .natural-recommendations button) {
+  border-color: transparent;
+  background: var(--glade-well);
+  color: var(--glade-ink);
+  font-weight: 700;
+}
+
+.editor-shell[data-natural-ui-installed="true"] :is(.natural-quick-group button, .sidebar .natural-recommendations button):hover {
+  background: var(--accent-soft);
+  color: var(--glade-ink);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-favorite-toggle {
+  color: var(--glade-ink-faint);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .natural-favorite-toggle.is-active {
+  color: var(--glade-accent);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .natural-object-thumbnail {
+  background: radial-gradient(circle at 50% 65%, rgb(229 155 82 / 12%), transparent 58%);
+}
+
+/* Progressive disclosure and comfort settings. */
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.natural-advanced-settings, .natural-player-settings) {
+  border: 0;
+  border-radius: 14px;
+  background: var(--glade-well);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(
+  .natural-advanced-settings > summary,
+  .natural-advanced-settings > summary strong,
+  .natural-settings-intro strong,
+  .natural-player-settings__head strong,
+  .natural-player-setting strong
+) {
+  color: var(--glade-ink);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(
+  .natural-advanced-settings > summary::after,
+  .natural-settings-intro span,
+  .natural-player-settings__head span,
+  .natural-player-setting small,
+  .natural-controls-hint
+) {
+  color: var(--glade-ink-soft);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .natural-advanced-settings > summary span {
+  background: rgb(96 76 52 / 8%);
+  color: var(--glade-ink-soft);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.natural-player-setting, .natural-controls-hint) {
+  border-top-color: var(--border);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.natural-controls-hint kbd, .help-list kbd, .action-button kbd) {
+  border: 0;
+  background: var(--glade-cream);
+  box-shadow: inset 0 -2px 0 rgb(96 76 52 / 14%), 0 0 0 1px var(--border);
+  color: var(--glade-ink);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar .natural-player-setting input {
+  accent-color: var(--glade-accent);
+}
+
+/* Paper sliders, shared with the weather card. */
+.editor-shell[data-natural-ui-installed="true"] .sidebar input[type="range"],
+#app .weather-panel input[type="range"] {
+  height: 16px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar input[type="range"]::-webkit-slider-runnable-track,
+#app .weather-panel input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(96 76 52 / 16%);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar input[type="range"]::-webkit-slider-thumb,
+#app .weather-panel input[type="range"]::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: 2px solid var(--glade-cream);
+  border-radius: 50%;
+  appearance: none;
+  background: var(--glade-accent);
+  box-shadow: 0 1px 3px rgb(62 44 24 / 30%);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar input[type="range"]::-moz-range-track,
+#app .weather-panel input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(96 76 52 / 16%);
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar input[type="range"]::-moz-range-thumb,
+#app .weather-panel input[type="range"]::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--glade-cream);
+  border-radius: 50%;
+  background: var(--glade-accent);
+}
+
+/* Tighter rows: the drawer is a tool tray, not a form. */
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.tile-palette, .terrain-mode-row, .brush-row, .action-grid) {
+  gap: 6px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.tile-button, .object-button) {
+  min-height: 36px;
+  padding: 5px 8px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.tile-button__label, .object-button__label) {
+  font-size: 12px;
+}
+
+.editor-shell[data-natural-ui-installed="true"] .sidebar :is(.tool-button, .brush-button, .action-button) {
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 12px;
+}

@@ -23,11 +23,12 @@
 }
 
 .view-mode-switcher button {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
   height: 30px;
-  padding: 0 14px 0 10px;
+  padding: 0;
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -51,6 +52,32 @@
   stroke-width: 1.9;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* Mode names are tooltips under the switch. */
+.view-mode-switcher button > span {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--glade-ink);
+  box-shadow: var(--glade-shadow-soft);
+  color: var(--glade-cream);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  translate: -50% -4px;
+  transition:
+    opacity 140ms ease,
+    translate var(--glade-spring-soft-ms) var(--glade-spring-soft);
+}
+
+.view-mode-switcher button:is(:hover, :focus-visible) > span {
+  opacity: 1;
+  translate: -50% 0;
 }
 
 .view-mode-switcher button:hover {
@@ -80,37 +107,52 @@
 
   .view-mode-switcher button {
     height: 32px;
-    padding-inline: 10px;
   }
 }
 
 /*
  * Walking is a game view: the editing chrome steps aside until Esc pauses into
  * in-place editing, and picking a start point keeps the view clear as well.
+ * The large pieces slide off toward their own edge (`--glade-exit`, set in
+ * NaturalGladeChrome.css) and spring back; the small transient ones just go.
  */
 [data-view-mode='player']:not([data-player-paused='true']) :is(
   .natural-top-chrome,
-  .natural-world-menu,
   .natural-toolbar,
-  .natural-build-strip,
-  .natural-context-toolbar,
-  .natural-wall-context-toolbar,
-  .natural-first-run-hint,
   .sidebar,
   .statusbar,
   .weather-panel
 ),
 [data-view-mode='player-spawn'] :is(
   .natural-top-chrome,
-  .natural-world-menu,
   .natural-toolbar,
-  .natural-build-strip,
-  .natural-context-toolbar,
-  .natural-wall-context-toolbar,
-  .natural-first-run-hint,
   .sidebar,
   .statusbar,
   .weather-panel
+) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  translate: var(--glade-exit, 0 0) !important;
+  visibility: hidden;
+  transition:
+    translate var(--glade-spring-soft-ms, 470ms) var(--glade-spring-soft, ease),
+    opacity 260ms ease 120ms,
+    visibility 0s linear var(--glade-spring-soft-ms, 470ms) !important;
+}
+
+[data-view-mode='player']:not([data-player-paused='true']) :is(
+  .natural-world-menu,
+  .natural-build-strip,
+  .natural-context-toolbar,
+  .natural-wall-context-toolbar,
+  .natural-first-run-hint
+),
+[data-view-mode='player-spawn'] :is(
+  .natural-world-menu,
+  .natural-build-strip,
+  .natural-context-toolbar,
+  .natural-wall-context-toolbar,
+  .natural-first-run-hint
 ) {
   display: none !important;
 }
@@ -135,7 +177,7 @@
 }
 
 [data-view-mode='player'] .sidebar > * {
-  opacity: 0.62;
+  opacity: 0.8;
 }
 
 [data-view-mode='player'][data-player-paused='true'][data-player-panels='true'] .sidebar {

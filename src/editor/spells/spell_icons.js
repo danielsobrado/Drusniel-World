@@ -1,8 +1,7 @@
 /**
  * Glyphs for the spell dock on a 24-unit grid. Parts are classed rather than
- * coloured: `glyph-fill` takes the spell's hue, `glyph-light` its highlight,
- * `glyph-line` strokes in the hue and `glyph-shine` is a white sheen, all set
- * per spell in spell_menu.css.
+ * coloured: `glyph-fill` and `glyph-line` take the tile's ink, `glyph-light`
+ * and `glyph-shine` are highlights, all set in spell_menu.css.
  */
 const SPELL_GLYPHS = Object.freeze({
   fire: `<svg viewBox="0 0 24 24" aria-hidden="true">

@@ -8,10 +8,14 @@ import {
 import { validateSimulationConfig } from '../../src/config/validateSimulationConfig.js';
 
 test('calendar rejects derived tick counts outside the safe integer range', () => {
+  // initialHour must stay inside the calendar day, otherwise the earlier
+  // initialHour guard rejects the config before the derived tick counts are
+  // computed and the overflow guard is never reached.
   assert.throws(
     () => createWorldClock({
       ticksPerHour: Number.MAX_SAFE_INTEGER,
       hoursPerDay: 2,
+      initialHour: 0,
     }),
     (error) => error?.code === 'invalid_calendar_config' && error.field === 'ticksPerDay',
   );
@@ -20,6 +24,7 @@ test('calendar rejects derived tick counts outside the safe integer range', () =
       time: {
         ticksPerHour: Number.MAX_SAFE_INTEGER,
         hoursPerDay: 2,
+        initialHour: 0,
       },
     }),
     /ticksPerDay exceeds the safe integer range/,

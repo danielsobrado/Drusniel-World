@@ -25,12 +25,18 @@ test('legacy component edit state applies as one semantic batch', () => {
         position: [1, 1],
         scale: [1, 1],
       },
+      'copy-window-1-2': {
+        sourceId: 'window-1',
+        hostId: 'structure-main',
+        position: [2, 1],
+        scale: [1, 1],
+      },
     },
     openingAssemblies: {
       'assembly-window-1': {
         kind: 'window',
         hostId: 'structure-main',
-        memberIds: ['copy-window-1-1'],
+        memberIds: ['copy-window-1-1', 'copy-window-1-2'],
       },
     },
   });
@@ -48,6 +54,7 @@ test('legacy component edit state applies as one semantic batch', () => {
   assert.deepEqual(removalIds, [
     'opening-assembly:assembly-window-1',
     'opening-attachment:copy-window-1-1',
+    'opening-attachment:copy-window-1-2',
     'component-transform:structure-main',
   ]);
 

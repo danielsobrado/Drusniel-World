@@ -208,11 +208,19 @@ test('runtime starts no more than the configured number of concurrent bakes', as
     value: { descriptor: runtime.descriptorFor(slots[0]), durationMs: 1 },
     byteLength: 32,
   });
-  await Promise.resolve();
-  await Promise.resolve();
-  runtime.update();
-  await Promise.resolve();
+  // A finished bake only leaves `cache.inFlight` after its promise chain has
+  // drained (install -> finally), which takes more than two microtask turns.
+  // Yield until the runtime has actually been offered the next slot rather than
+  // hard-coding a microtask count; the concurrency bound below is the invariant.
+  for (let tick = 0; tick < 16 && started.length < 3; tick += 1) {
+    await Promise.resolve();
+    runtime.update();
+  }
   assert.deepEqual(started, [0, 1, 2]);
+  assert.ok(
+    runtime.getStats().peakInFlight <= 2,
+    'concurrent bakes must never exceed build.maxConcurrent',
+  );
 
   pending[1].resolve({
     value: { descriptor: runtime.descriptorFor(slots[1]), durationMs: 1 },

@@ -1406,6 +1406,10 @@ async function startEditor() {
     detachFootsteps?.();
     worldWind.dispose();
     waterfallMist.dispose();
+    worldSoundscape.dispose();
+    fallingLeaves.dispose();
+    snowPowder.dispose();
+    worldAmbience.dispose();
     heroSelectUi?.dispose();
     characterView?.dispose();
     spellRuntime?.dispose();

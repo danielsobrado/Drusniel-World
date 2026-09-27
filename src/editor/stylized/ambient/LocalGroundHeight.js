@@ -49,7 +49,13 @@ export class LocalGroundHeight {
   /** Ground height (metres, render space) under a render-space point. */
   heightNode(x, z) {
     const { corner, extent, base } = this.uniforms;
-    const uv = vec2(x, z).sub(corner).div(extent).clamp(0, 1);
+    // Samples sit on the patch's corners and edges (`rebuild` steps
+    // extent / (resolution − 1)), while a texel's centre is at (i + 0.5) /
+    // resolution: map onto the centres so each sample is read where it was taken.
+    const resolution = this.resolution;
+    const uv = vec2(x, z).sub(corner).div(extent).clamp(0, 1)
+      .mul((resolution - 1) / resolution)
+      .add(0.5 / resolution);
     return texture(this.texture, uv).level(0).r.add(base);
   }
 

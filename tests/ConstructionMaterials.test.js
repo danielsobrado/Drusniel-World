@@ -12,6 +12,8 @@ import {
   BUILTIN_WORKSHOP_MATERIAL_PRESETS,
   normalizeWorkshopMaterialDocument,
 } from '../src/editor/workshop/ProceduralWorkshopMaterialConfig.js';
+import { mortarProfile } from '../src/editor/construction/render/ConstructionMortarConfig.js';
+import { stoneSurfaceProfile } from '../src/editor/workshop/ProceduralWorkshopStoneSurfaceConfig.js';
 
 function wall(materials = {}) {
   return normalizeConstructionRecord({
@@ -37,7 +39,9 @@ test('createConstructionMaterials includes a mortar slot', () => {
   const materials = createConstructionMaterials(wall());
   assert.ok(materials.mortar);
   assert.equal(materials.mortar.userData.constructionSlot, 'mortar');
-  assert.ok(materials.mortar.color.equals(new THREE.Color('#77766b')));
+  assert.ok(
+    materials.mortar.color.equals(new THREE.Color(mortarProfile('coursed-rubble').color)),
+  );
   assert.equal(materials.mortar.roughness, 1);
 });
 
@@ -47,7 +51,9 @@ test('soft-limestone-rubble mortar profile is desaturated medium-dark', () => {
     id: 'construction-soft',
     style: { key: 'soft-limestone-rubble', version: 1, materials: {} },
   }));
-  assert.ok(materials.mortar.color.equals(new THREE.Color('#74746d')));
+  assert.ok(
+    materials.mortar.color.equals(new THREE.Color(mortarProfile('soft-limestone-rubble').color)),
+  );
   assert.equal(materials.mortar.roughness, 1);
 });
 
@@ -57,20 +63,23 @@ test('soft-limestone-rubble stone material uses the calm surface profile', () =>
     id: 'construction-soft-stone',
     style: { key: 'soft-limestone-rubble', version: 1, materials: {} },
   }));
+  // Read the expected calm response straight from the shared source profile so
+  // this test cannot drift when the profile is retuned.
+  const profile = stoneSurfaceProfile('soft-limestone').material;
   const stone = materials.stone;
   assert.equal(stone.vertexColors, true);
   assert.equal(stone.roughness, 1);
   assert.equal(stone.metalness, 0);
-  assert.equal(stone.bumpScale, 0.028);
-  assert.equal(stone.normalScale.x, 0.28);
-  assert.equal(stone.normalScale.y, 0.28);
-  assert.equal(stone.envMapIntensity, 0.58);
+  assert.equal(stone.bumpScale, profile.bumpScale);
+  assert.equal(stone.normalScale.x, profile.constructionNormalScale);
+  assert.equal(stone.normalScale.y, profile.constructionNormalScale);
+  assert.equal(stone.envMapIntensity, profile.constructionEnvMapIntensity);
   assert.equal(stone.userData.constructionSlot, 'stone');
   assert.equal(stone.userData.stoneSurfaceProfile, 'soft-limestone');
-  assert.equal(stone.userData.stoneSurface.bumpScale, 0.028);
-  assert.equal(stone.userData.stoneSurface.roughnessBase, 238);
-  assert.equal(stone.userData.stoneSurface.roughnessVariation, 10);
-  assert.equal(stone.userData.stoneSurface.normalKind, 'stoneBlock');
+  assert.equal(stone.userData.stoneSurface.bumpScale, profile.bumpScale);
+  assert.equal(stone.userData.stoneSurface.roughnessBase, profile.roughnessBase);
+  assert.equal(stone.userData.stoneSurface.roughnessVariation, profile.roughnessVariation);
+  assert.equal(stone.userData.stoneSurface.normalKind, profile.normalKind);
 });
 
 test('user presets override soft-limestone surface defaults', () => {

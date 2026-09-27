@@ -44,3 +44,24 @@ medium-large stones with occasional small pairs, low rotation, low saturation.
 - Existing `limestone` palette is unchanged; soft style uses `soft-limestone`.
 - Packer shaping (inset/depth/offset/splitMaxDepth) is style-driven; defaults
   preserve prior coursed-rubble behaviour.
+
+## Superseded values (annotated 2026-09-27)
+
+This report records 2026-07-28 evidence. The soft-limestone-rubble packer was
+retuned afterwards by commits `dc4406ef` ("Upgrade procedural wall direct
+editing and irregular crowns") and `372bd932` ("Separate stone protrusion from
+mortar depth"), so its recorded deterministic counts no longer reproduce:
+
+| Fixture | Coursed stones | Soft stones | Ratio | Soft split cells |
+| --- | --- | --- | --- | --- |
+| 12 m module | `113` → `113` | `96` → `100` | `0.850` → `0.885` | `20` → `20` |
+| 24 m straight | `201` → `201` | `195` → `204` | `0.970` → `1.015` | `44` → `47` |
+| 100 m straight | `787` → `787` | `835` → `885` | `1.061` → `1.125` | `203` → `217` |
+| 200 m straight | `1693` → `1691` | `1635` → `1718` | `0.966` → `1.016` | `377` → `396` |
+| 4 m radius quarter | `109` → `109` | `108` → `116` | `0.991` → `1.064` | `10` → `11` |
+
+The gates in this report still pass; only the recorded counts are superseded.
+The p95 ms columns are machine-dependent timings and are excluded.
+`scripts/run-construction-soft-limestone-qa.mjs` regenerates every value in
+this report from the live packer — nothing in it is hardcoded, so re-running it
+refreshes these numbers.

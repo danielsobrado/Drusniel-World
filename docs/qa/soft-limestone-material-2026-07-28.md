@@ -58,3 +58,22 @@ Fixed wall: `soft-limestone-rubble`, seed `3141`, 24×3.5×0.8 flat.
 - Legacy `limestone` / `limestone-masonry` unchanged.
 - No geometry hash or record version change.
 - No additional textures or draw calls.
+
+## Superseded values (annotated 2026-09-27)
+
+This report records 2026-07-28 evidence. The soft-limestone profile was retuned
+afterwards by commits `942e8d55` ("Sculpt procedural wall stone edges") and
+`0c90d242` ("Deepen procedural masonry contact shadows"):
+
+| Recorded value | Current value |
+| --- | --- |
+| bumpScale | `0.028` → `0.020` |
+| bumpTextureScale | `0.55` → `0.42` |
+| roughnessBase | `238` → `236` |
+| normalScale | `0.28` → `0.22` |
+| envMapIntensity | `0.58` → `0.64` |
+| brightness | `0.97–1.025` → `0.945–1.055` |
+| weatheringStrength | `0.075` → `0.065` |
+| mortar colour | `#74746d` → `#68675f` |
+
+The gates in this report still pass; only the recorded constants are superseded.

@@ -1,4 +1,5 @@
 import { sampleCubicBezierPath } from '../curve/CubicBezierPath.js';
+import { motionPrecision, snappedValue } from '../curve/CurveSnapping.js';
 import { createCurveArcTable } from '../masonry/CurveArcTable.js';
 import { CONSTRUCTION_DIRECT_GIZMO_CONFIG as CONFIG } from '../config/ConstructionDirectGizmoConfig.generated.js';
 import { ConstructionGizmoController } from './ConstructionGizmoController.js';
@@ -84,13 +85,16 @@ function installConstructionThicknessGizmo() {
     if (!point) return;
     const alongNormal = (point.x - drag.startPoint.x) * drag.normalX
       + (point.z - drag.startPoint.z) * drag.normalZ;
-    const precision = event.shiftKey ? CONFIG.thickness.precisionMultiplier : 1;
-    let thickness = drag.startThickness + alongNormal * drag.direction * 2 * precision;
+    const precision = motionPrecision(event, CONFIG.thickness.precisionMultiplier);
+    // Shift is finer motion and the step is an explicit toggle, exactly as under
+    // the height handle — and Ctrl suppresses the step rather than switching it
+    // on, which is what it used to do here.
+    let thickness = snappedValue(
+      drag.startThickness + alongNormal * drag.direction * 2 * precision,
+      event,
+      this.controller.constructionStepSnap ? CONFIG.thickness.snapStep : null,
+    );
     thickness = clamp(thickness, CONFIG.thickness.minimum, CONFIG.thickness.maximum);
-    if (event.ctrlKey) {
-      thickness = Math.round(thickness / CONFIG.thickness.snapStep) * CONFIG.thickness.snapStep;
-      thickness = clamp(thickness, CONFIG.thickness.minimum, CONFIG.thickness.maximum);
-    }
 
     if (Math.abs(thickness - drag.startThickness) <= EPSILON) {
       this.restoreDirectDraft(drag);

@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { scaleCorners } from '../masonry/CourseLattice.js';
+import { openingVerticalSpan, survivingIntervalsOverBand } from '../masonry/OpeningLayout.js';
 import { CONSTRUCTION_MORTAR_CONFIG } from '../render/ConstructionMortarConfig.js';
 
 const VERTICES_PER_PRISM = 24;
@@ -113,6 +114,119 @@ function validateDescriptor(descriptor, index) {
 }
 
 /**
+ * Heights at which the shared contour changes, clipped to a prism's own band.
+ *
+ * A sill or a crown inside the band splits it, so a core that reaches from
+ * below the sill to above the crown is only cut between them — masonry above
+ * the opening keeps its backing.
+ */
+function contourLevels(openings, bottom, top) {
+  const levels = new Set([bottom, top]);
+  for (const opening of openings) {
+    const { sill, crown } = openingVerticalSpan(opening);
+    if (sill > bottom + DEGENERATE_EPSILON && sill < top - DEGENERATE_EPSILON) {
+      levels.add(sill);
+    }
+    if (crown > bottom + DEGENERATE_EPSILON && crown < top - DEGENERATE_EPSILON) {
+      levels.add(crown);
+    }
+  }
+  return [...levels].sort((left, right) => left - right);
+}
+
+/**
+ * Split a descriptor's face ring so its core stays out of the wall's openings.
+ *
+ * The void is read from the shared contour (`survivingIntervalsOverBand`), never
+ * re-derived, so the mortar publishes the same opening the shell and the course
+ * packer do (phase 11 §7.3). A prism can only be placed against the contour when
+ * it carries its own wall frame: the rounded builder attaches `drapeFrame` (the
+ * stone's arc position) and leaves `position[1]` as the stone's height above
+ * grade. Without that frame the prism is returned unclipped — the soft path
+ * resolves its own ground and so has no grade-relative height to test.
+ *
+ * The prism is split at the sill and crown and each band is cut horizontally,
+ * exact for a rectangular ring. The band's widest void is used, and because a
+ * course is packed at its centre the stones always reach at least as far into
+ * that band's void as the cut removes, so nothing shows a hole. A span the void
+ * consumes entirely is omitted — a bounded local omission, not the minimum-piece
+ * policy phase 11 §7.3 assigns to W5.
+ *
+ * @returns {number[][][] | null} fragment rings, or null to emit the prism whole.
+ */
+function clipDescriptorToOpenings(descriptor, openings) {
+  const frame = descriptor.drapeFrame;
+  const corners = descriptor.corners;
+  if (!frame || !Array.isArray(corners) || corners.length !== 4) return null;
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of corners) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  const arcLow = frame.s + minX;
+  const arcHigh = frame.s + maxX;
+  const grade = descriptor.position[1];
+  const levels = contourLevels(openings, grade + minY, grade + maxY);
+
+  const fragments = [];
+  let clipped = false;
+  for (let index = 0; index < levels.length - 1; index += 1) {
+    const lowY = levels[index];
+    const highY = levels[index + 1];
+    const spans = survivingIntervalsOverBand([arcLow, arcHigh], openings, [lowY, highY]);
+    if (spans.length === 0) {
+      clipped = true;
+      continue;
+    }
+    const localLowY = lowY - grade;
+    const localHighY = highY - grade;
+    // Corner order is bottom-left, bottom-right, top-right, top-left.
+    for (const [from, to] of spans) {
+      const localFrom = from - frame.s;
+      const localTo = to - frame.s;
+      if (
+        Math.abs(localFrom - minX) > DEGENERATE_EPSILON
+        || Math.abs(localTo - maxX) > DEGENERATE_EPSILON
+        || Math.abs(localLowY - minY) > DEGENERATE_EPSILON
+        || Math.abs(localHighY - maxY) > DEGENERATE_EPSILON
+      ) {
+        clipped = true;
+      }
+      fragments.push([
+        [localFrom, localLowY],
+        [localTo, localLowY],
+        [localTo, localHighY],
+        [localFrom, localHighY],
+      ]);
+    }
+  }
+  return clipped ? fragments : null;
+}
+
+/** The prisms to write: each descriptor, or its contour-clipped fragments. */
+function planPrisms(descriptors, openings) {
+  if (!Array.isArray(openings) || openings.length === 0) {
+    return descriptors.map((descriptor) => ({ descriptor, corners: descriptor.corners }));
+  }
+  const prisms = [];
+  for (const descriptor of descriptors) {
+    const clipped = clipDescriptorToOpenings(descriptor, openings);
+    if (!clipped) {
+      prisms.push({ descriptor, corners: descriptor.corners });
+      continue;
+    }
+    for (const corners of clipped) prisms.push({ descriptor, corners });
+  }
+  return prisms;
+}
+
+/**
  * Write one module-level BufferGeometry of recessed mortar prisms.
  *
  * Allocates typed arrays once. Each prism uses 24 independent vertices (six
@@ -125,21 +239,29 @@ function validateDescriptor(descriptor, index) {
  *   position: number[],
  *   rotation?: number[],
  *   uvDensity?: number,
+ *   drapeFrame?: { s: number },
  * }>} descriptors
  * @param {object} [options]
  * @param {(descriptor: object, x: number, z: number) => number} [options.drape]
  *   vertical offset for a transformed vertex, so a core can follow the same
  *   ground its draped stones do. Omitted, positions are used as given.
+ * @param {Array<object>} [options.openings] the module's openings in the wall's
+ *   own arc domain (`s`, `width`, `height`, `sill`, `profile`). When given, each
+ *   prism that carries a `drapeFrame` is clipped to the shared contour so its
+ *   core never fills a visible void.
  * @returns {THREE.BufferGeometry | null}
  */
-export function buildMortarCoreGeometry(descriptors, { drape = null } = {}) {
+export function buildMortarCoreGeometry(descriptors, { drape = null, openings = null } = {}) {
   if (!descriptors || descriptors.length === 0) return null;
 
   for (let index = 0; index < descriptors.length; index += 1) {
     validateDescriptor(descriptors[index], index);
   }
 
-  const prismCount = descriptors.length;
+  const prisms = planPrisms(descriptors, openings);
+  if (prisms.length === 0) return null;
+
+  const prismCount = prisms.length;
   const vertexCount = prismCount * VERTICES_PER_PRISM;
   const indexCount = prismCount * INDICES_PER_PRISM;
   const positions = new Float32Array(vertexCount * 3);
@@ -161,8 +283,7 @@ export function buildMortarCoreGeometry(descriptors, { drape = null } = {}) {
   let indexOffset = 0;
 
   for (let prismIndex = 0; prismIndex < prismCount; prismIndex += 1) {
-    const descriptor = descriptors[prismIndex];
-    const corners = descriptor.corners;
+    const { descriptor, corners } = prisms[prismIndex];
     const halfDepth = descriptor.depth / 2;
     const uvDensity = descriptor.uvDensity ?? CONSTRUCTION_MORTAR_CONFIG.uvDensity;
     const rotation = descriptor.rotation ?? [0, 0, 0];

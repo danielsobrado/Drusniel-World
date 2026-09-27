@@ -56,8 +56,19 @@ test('values remain inside configured ranges', () => {
 });
 
 test('structural category scale zero disables relief', () => {
-  for (const category of ['coping', 'ashlar', 'quoin', 'voussoir', 'merlon', 'recess']) {
-    assert.equal(sample({ category }).enabled, false);
+  const field = sample({ category: 'field' });
+  assert.equal(field.enabled, true);
+  // `recess` carries a zero category scale and disables relief outright.
+  assert.equal(sample({ category: 'recess' }).enabled, false);
+  // The remaining dressings are category-scaled down, not disabled: they stay
+  // enabled but recede less than a full-strength field stone.
+  for (const category of ['coping', 'ashlar', 'quoin', 'voussoir', 'merlon']) {
+    const relief = sample({ category });
+    assert.equal(relief.enabled, true, `${category} should stay enabled`);
+    assert.ok(
+      relief.edgeRecession < field.edgeRecession,
+      `${category} relief recedes ${relief.edgeRecession} vs field ${field.edgeRecession}`,
+    );
   }
 });
 

@@ -46,6 +46,11 @@ function setup(built = path(), overrides = {}) {
     dimensions: { height: 3.5, thickness: 0.8 },
     path: built,
     features: [],
+    // A flat, capped top: the wall-top edits below are what these tests are
+    // about, and since commit dc4406ef a wall with no explicit `top` defaults
+    // to an irregular, uncapped crown whose heightAt carries stone-scale noise.
+    // Pinning it here keeps the fixture's authored baseline at the wall height.
+    top: { style: 'flat', base: 3.5, profile: [] },
     ...overrides,
   });
   const arcTable = createCurveArcTable(sampleCubicBezierPath(record.path));

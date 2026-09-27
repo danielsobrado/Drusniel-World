@@ -9,33 +9,124 @@ import {
 } from '../src/editor/stylized/StylizedTreeView.js';
 import { TreeManifestStore } from '../src/editor/stylized/TreeManifestStore.js';
 
-test('rock blocker preparation advances by one cold manifest per frame', () => {
+test('rock blocker preparation advances at most one bounded manifest slice per frame', () => {
   const manifests = new Map();
   const view = Object.create(StylizedRockView.prototype);
   view.blockerRequests = new Set();
   view.manifestBuildsThisFrame = 0;
   view.manifestBuildBudgetMs = 100;
   view.manifestFrameStartedAt = performance.now();
+  view.manifestKey = (chunkX, chunkZ) => `key:${chunkX}:${chunkZ}`;
   view.cachedManifestForChunk = (chunkX, chunkZ) => (
     manifests.get(`${chunkX}:${chunkZ}`) ?? null
   );
-  view.manifestForChunk = (chunkX, chunkZ) => {
-    const placements = [{ chunkX, chunkZ }];
-    manifests.set(`${chunkX}:${chunkZ}`, placements);
-    return placements;
+  view.storeManifest = (cacheKey, key, scattered) => {
+    manifests.set(cacheKey, scattered);
+    return scattered;
   };
 
-  for (let frame = 0; frame < 8; frame += 1) {
-    assert.equal(view.getPreparedBlockersForChunk(4, 7, 1), null);
-    assert.equal(manifests.size, frame + 1);
+  const startFrame = () => {
     view.manifestBuildsThisFrame = 0;
     view.manifestFrameStartedAt = performance.now();
+  };
+
+  // Cold manifest whose builder yields two bounded slices before completing.
+  const slices = [];
+  const placements = [{ chunkX: 3, chunkZ: 6 }];
+  const builder = {
+    done: false,
+    step({ shouldYield } = {}) {
+      slices.push(typeof shouldYield === 'function');
+      return slices.length < 3 ? null : placements;
+    },
+  };
+  view.pendingManifestBuild = { key: 'key:3:6', cacheKey: '3:6', builder };
+
+  // Every frame drives exactly one slice of the same cold build and reports
+  // "not ready" until that build completes.
+  for (let frame = 0; frame < 2; frame += 1) {
+    startFrame();
+    assert.equal(view.prepareManifestForChunk(3, 6), null);
+    assert.equal(slices.length, frame + 1);
+    assert.equal(manifests.size, 0);
+    assert.strictEqual(view.pendingManifestBuild.builder, builder);
   }
 
-  const blockers = view.getPreparedBlockersForChunk(4, 7, 1);
-  assert.equal(manifests.size, 9);
+  startFrame();
+  assert.deepEqual(view.prepareManifestForChunk(3, 6), placements);
+  assert.equal(slices.length, 3);
+  assert.deepEqual(manifests.get('3:6'), placements);
+  assert.equal(view.pendingManifestBuild, null);
+
+  // A prepared manifest is served from cache without resuming the builder.
+  startFrame();
+  assert.deepEqual(view.prepareManifestForChunk(3, 6), placements);
+  assert.equal(slices.length, 3);
+
+  // The per-frame build budget refuses a second cold manifest in the same frame.
+  startFrame();
+  view.manifestBuildsThisFrame = 1;
+  assert.equal(view.prepareManifestForChunk(3, 7), null);
+  assert.equal(slices.length, 3);
+
+  // ...and the elapsed-time budget refuses a cold manifest in a spent frame.
+  startFrame();
+  view.manifestFrameStartedAt = performance.now() - view.manifestBuildBudgetMs - 1;
+  assert.equal(view.prepareManifestForChunk(3, 7), null);
+  assert.equal(slices.length, 3);
+
+  assert.deepEqual(slices, [true, true, true]);
+
+  // Halo callers keep the one-cold-manifest-per-frame bound: the new builder is
+  // driven incrementally and the halo is only complete once all nine neighbouring
+  // manifests have been prepared.
+  const haloManifests = new Map();
+  const live = Object.create(StylizedRockView.prototype);
+  live.blockerRequests = new Set();
+  live.manifestBuildsThisFrame = 0;
+  live.manifestBuildBudgetMs = 100;
+  live.manifestFrameStartedAt = performance.now();
+  live.manifestKey = (chunkX, chunkZ) => `key:${chunkX}:${chunkZ}`;
+  live.cachedManifestForChunk = (chunkX, chunkZ) => (
+    haloManifests.get(`${chunkX}:${chunkZ}`) ?? null
+  );
+  live.storeManifest = (cacheKey, key, scattered) => {
+    haloManifests.set(cacheKey, scattered);
+    return scattered;
+  };
+  // Cheap deterministic options: one accepted rock per chunk, no spacing
+  // conflicts, so each prepared manifest holds exactly one placement.
+  live.manifestOptions = (chunkX, chunkZ) => ({
+    kind: 'manifest-budget-test',
+    chunkX,
+    chunkZ,
+    chunkSize: 1,
+    tileSize: 1,
+    perChunk: 1,
+    tileIds: new Set([1]),
+    tileAt: () => 1,
+    heightAt: () => 0,
+    prototypeCount: 1,
+    prototypeIndexForRoll: () => 0,
+    minScale: 1,
+    maxScale: 1,
+    radiusForScale: () => 0,
+    candidateEvaluator: null,
+  });
+
+  for (let frame = 0; frame < 8; frame += 1) {
+    live.manifestBuildsThisFrame = 0;
+    live.manifestFrameStartedAt = performance.now();
+    assert.equal(live.getPreparedBlockersForChunk(4, 7, 1), null);
+    assert.equal(haloManifests.size, frame + 1);
+  }
+
+  live.manifestBuildsThisFrame = 0;
+  live.manifestFrameStartedAt = performance.now();
+  const blockers = live.getPreparedBlockersForChunk(4, 7, 1);
+  assert.equal(haloManifests.size, 9);
   assert.equal(blockers.length, 9);
-  assert.equal(view.blockerRequests.size, 9);
+  assert.equal(live.blockerRequests.size, 9);
 });
 
 test('tree manifest jobs remain queued while their blocker halo is preparing', () => {

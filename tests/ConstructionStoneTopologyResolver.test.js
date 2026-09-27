@@ -97,9 +97,12 @@ test('source ring is unchanged and nested rings stay inside', () => {
   });
   assert.equal(topology.valid, true);
   assert.deepEqual(topology.sourceRing, input.stoneShape.corners);
-  assert.equal(topology.front.faceLoop.length, 4);
-  assert.equal(topology.front.shoulderLoop.length, 4);
-  assert.equal(topology.front.sourceLoop.length, 4);
+  // Soft edge wear now inserts an inward midpoint on every arris, so each
+  // nested ring carries four corners plus four worn midpoints.
+  assert.equal(topology.front.edgeMidpoints, true);
+  assert.equal(topology.front.faceLoop.length, 4 * 2);
+  assert.equal(topology.front.shoulderLoop.length, 4 * 2);
+  assert.equal(topology.front.sourceLoop.length, 4 * 2);
   assert.ok(topology.diagnostics.edgeWearApplied);
   assert.ok(topology.diagnostics.areaRatio >= softWear.safeguards.minimumFaceAreaRatio);
 });

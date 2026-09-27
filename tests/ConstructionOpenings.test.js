@@ -209,7 +209,8 @@ test('standalone arches: lower the top and cut until only the rings remain', () 
 test('coping runs unbroken over an arch that does not reach the crown', () => {
   // A 2.6 m arch in a 3.5 m wall leaves masonry above it, so the cap continues
   // across — suppression applies only where the void actually breaks the crown.
-  const context = setup();
+  // A flat top is what emits the coping course at all.
+  const context = setup({ top: { style: 'flat', base: 3.5 } });
   const coping = pack(context, [opening()]).stones
     .filter(({ category }) => category === 'coping');
   assert.ok(coping.length > 5);

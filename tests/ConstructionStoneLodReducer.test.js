@@ -35,7 +35,8 @@ test('near reduction preserves full descriptor values', () => {
   assert.equal(near.face.front.saddle, appearance.face.front.saddle);
   assert.deepEqual(near.edges.front.cornerWidth, appearance.edges.front.cornerWidth);
   assert.equal(near.bevelRings, 2);
-  assert.equal(near.edgeMidpoints, false);
+  // Near LOD preserves the full descriptor: edgeMidpoints mirrors the profile.
+  assert.equal(near.edgeMidpoints, lodProfile.near.edgeMidpoints);
 });
 
 test('coarse reduction preserves dominant tilt and corner', () => {

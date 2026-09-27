@@ -1,5 +1,17 @@
 # FluffyGrass → Simulator-Test Migration Implementation Guide
 
+> **Provenance note (2026-09-27).** This guide is for a donor that is **not** the
+> source of this project's vegetation work. Everything that has been ported here —
+> the two-band grass LOD, the density coverage and its thinning, the resumable
+> scatter build, the blade silhouette families, the canopy suppression — comes from
+> `F:\Development\grass-test` and is logged in
+> [the grass-test merge plan](plans/grass-test-merge-plan-2026-09-24.md). Nothing in
+> this repo derives from FluffyGrass, and none of the phases below are satisfied by
+> that work: this file describes a different donor's grass architecture
+> (`GrassLodController.ts`, `GrassFieldVariation.ts`, `biome/`, `interaction/`,
+> `impostors/`) and those modules have no counterpart here. Treat it as a reference
+> for a donor we are not using, not as a plan of record.
+
 This is an implementation playbook, not a high-level idea list. It says **what to take, from which donor file/symbol, where it belongs in Simulator-Test, what must be changed, what must not be copied, and how to verify every step**.
 
 The migration goal is not to make Simulator-Test look internally like FluffyGrass. The goal is to take the strongest grass/ecology ideas from FluffyGrass and fit them into Simulator-Test's existing Azgaar-driven, worker-generated, chunk-streamed, floating-origin, WebGPU/TSL architecture.
@@ -877,7 +889,7 @@ Use a new documented salt/channel. Do not reuse width/length/angle random channe
 
 ### Preserve prefix/compaction behavior
 
-`compactGrassScatter()` assumes each accepted source cell contributes a fixed source-clump group. Ecology rejection can break that assumption if individual clumps within a cell are removed.
+`createGrassScatterComposer()` (which replaced `compactGrassScatter()` on 2026-09-27) assumes each accepted source cell contributes a fixed source-clump group, and keeps a prefix of it. Ecology rejection can break that assumption if individual clumps within a cell are removed.
 
 Therefore choose one of these two target-safe designs:
 

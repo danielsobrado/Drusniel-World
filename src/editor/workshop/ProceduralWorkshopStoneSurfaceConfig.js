@@ -87,7 +87,9 @@ export const STONE_SURFACE_PROFILES = Object.freeze({
       workshopEnvMapIntensity: 0.64,
       constructionEnvMapIntensity: 0.64,
 
-      mortarColor: '#707069',
+      // Authoritative soft-limestone mortar colour; construction
+      // (CONSTRUCTION_MORTAR_PROFILES['soft-limestone-rubble']) must match this.
+      mortarColor: '#68675f',
     }),
   }),
 

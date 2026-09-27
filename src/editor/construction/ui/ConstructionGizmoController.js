@@ -3,6 +3,7 @@ import { IconGridMenu } from '../../ui/IconGridMenu.js';
 import { icon } from '../../ui/icons.js';
 import { FEATURE_KINDS, OPENING_PROFILES } from '../ConstructionSchema.js';
 import { sampleCubicBezierPath } from '../curve/CubicBezierPath.js';
+import { adjustDelta, motionPrecision, snappedValue } from '../curve/CurveSnapping.js';
 import { createCurveArcTable } from '../masonry/CurveArcTable.js';
 import { CONSTRUCTION_DIRECT_GIZMO_CONFIG as DIRECT_CONFIG } from '../config/ConstructionDirectGizmoConfig.generated.js';
 import {
@@ -35,6 +36,12 @@ import { ConstructionDirectGizmoView } from './ConstructionDirectGizmoView.js';
  */
 const CUTTABLE_KINDS = Object.freeze(['door', 'window', 'arch', 'gate']);
 const PRIMARY_POINTER_BUTTON = 0;
+/**
+ * Shift's factor for whole-wall moves. The direct-gizmo config has no precision
+ * entry for the move ring, so it borrows the width handle's — Shift means finer
+ * motion on every wall gesture, and a move drag is one of them.
+ */
+const MOVE_PRECISION_MULTIPLIER = 0.25;
 
 const KIND_LABELS = Object.freeze({
   door: 'Door',
@@ -111,6 +118,7 @@ export class ConstructionGizmoController {
 
   /** Actions on the selection itself, arranged as in the reference layout. */
   clusterActions() {
+    const stepSnap = Boolean(this.controller.constructionStepSnap);
     return [
       {
         id: 'openings',
@@ -122,6 +130,15 @@ export class ConstructionGizmoController {
       { id: 'cut', label: 'Cut an opening', slot: 'top', icon: icon('cut') },
       { id: 'properties', label: 'Wall properties', slot: 'bottom', icon: icon('settings') },
       { id: 'delete', label: 'Delete wall', slot: 'left', icon: icon('trash') },
+      {
+        // Visible because it has to be: Ctrl now means "suppress snapping"
+        // everywhere, so quantised heights and widths are reachable only here.
+        id: 'snapping',
+        label: stepSnap ? 'Snapping steps on' : 'Snapping steps off',
+        slot: 'bottom-left',
+        icon: icon('center'),
+        active: stepSnap,
+      },
     ];
   }
 
@@ -224,6 +241,14 @@ export class ConstructionGizmoController {
       this.close();
       this.controller.deleteSelectedConstruction();
       this.onStatus?.('Wall deleted.');
+    }
+    if (action === 'snapping') {
+      const enabled = !this.controller.constructionStepSnap;
+      this.controller.setConstructionStepSnap(enabled);
+      this.onStatus?.(enabled
+        ? 'Snapping steps on. Ctrl still suppresses them.'
+        : 'Free placement.');
+      this.refresh();
     }
   }
 
@@ -352,11 +377,18 @@ export class ConstructionGizmoController {
     this.consumeDirectEvent(event);
 
     if (drag.kind === 'height') {
-      const precision = event.shiftKey ? DIRECT_CONFIG.height.precisionMultiplier : 1;
-      let delta = (drag.startClientY - event.clientY) * drag.unitsPerPixel * precision;
-      if (event.ctrlKey) {
-        delta = Math.round(delta / DIRECT_CONFIG.height.snapStep) * DIRECT_CONFIG.height.snapStep;
-      }
+      // The modifier policy the anchor drag follows too: Shift is finer motion,
+      // the step is an explicit toggle, and Ctrl suppresses it. Ctrl used to
+      // *enable* the step here, so the same key meant "free" on an anchor and
+      // "quantised" next to it.
+      const delta = adjustDelta(
+        (drag.startClientY - event.clientY) * drag.unitsPerPixel,
+        event,
+        {
+          step: this.controller.constructionStepSnap ? DIRECT_CONFIG.height.snapStep : null,
+          precisionMultiplier: DIRECT_CONFIG.height.precisionMultiplier,
+        },
+      );
       const top = setAnchorTopHeight(
         drag.before,
         drag.arcTable,
@@ -376,10 +408,11 @@ export class ConstructionGizmoController {
         drag.planeY,
       );
       if (!point) return;
+      const precision = motionPrecision(event, MOVE_PRECISION_MULTIPLIER);
       const candidate = translateConstructionRecord(
         drag.before,
-        point.x - drag.startPoint.x,
-        point.z - drag.startPoint.z,
+        (point.x - drag.startPoint.x) * precision,
+        (point.z - drag.startPoint.z) * precision,
       );
       if (!candidate || candidate === drag.before) {
         this.restoreDirectDraft(drag);

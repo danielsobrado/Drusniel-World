@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { planConstruction } from '../src/editor/construction/planning/ConstructionPlanner.js';
-import { createCubicBezierPathFromStroke } from '../src/editor/construction/curve/CubicBezierPath.js';
+import {
+  createCubicBezierPathFromStroke,
+  insertCubicBezierAnchor,
+} from '../src/editor/construction/curve/CubicBezierPath.js';
 
 function record() {
   return {
@@ -20,7 +23,38 @@ function record() {
       [36, 3],
     ], { simplifyTolerance: 0.01 }),
     features: [],
+    // A flat, capped top: an unset `top` now defaults to an irregular, uncapped
+    // crown (commit dc4406ef), which would leave ragged top courses.
+    top: { style: 'flat', base: 4, profile: [] },
   };
+}
+
+/**
+ * Whether two modules' generated placements agree to `epsilon`.
+ *
+ * `contentHash` quantises positions to 0.1 mm and re-sampling a Bézier can
+ * perturb an untouched stone in the last few bits (measured ~1e-17 on the
+ * modules this file calls "untouched"), so "the stones are the same" means
+ * "equal to within the hash's own quantum", not "bit-identical".
+ */
+function placementsMatch(actual, expected, epsilon = 1e-9) {
+  if (Array.isArray(actual) || Array.isArray(expected)) {
+    if (!Array.isArray(actual) || !Array.isArray(expected) || actual.length !== expected.length) {
+      return false;
+    }
+    return actual.every((value, index) => placementsMatch(value, expected[index], epsilon));
+  }
+  if (actual && expected && typeof actual === 'object') {
+    const keys = Object.keys(actual);
+    if (keys.length !== Object.keys(expected).length) return false;
+    return keys.every((key) => (
+      Object.hasOwn(expected, key) && placementsMatch(actual[key], expected[key], epsilon)
+    ));
+  }
+  if (typeof actual === 'number' && typeof expected === 'number') {
+    return Object.is(actual, expected) || Math.abs(actual - expected) <= epsilon;
+  }
+  return actual === expected;
 }
 
 test('construction planning emits stable bounded semantic modules', () => {
@@ -104,7 +138,85 @@ test('masonry covers every course from wall start to wall end', () => {
   }
 });
 
-test('module content hashes only change where an anchor edit reaches', () => {
+test('an edit that does not re-parameterise the wall leaves unrelated modules untouched', () => {
+  // The locality the README promises: "Local edits stay local. Every command
+  // declares its dirty segments and every module carries a content hash; the
+  // view rebuilds only hash-changed modules."
+  //
+  // `insert_anchor` is the edit that actually honours it. It splits one segment
+  // with de Casteljau, which reproduces the wall's curve *exactly*, so the arc
+  // domain (and therefore every other segment's `[from, to]`) is unchanged and
+  // every module on a segment the split never reached keeps its content hash
+  // *and* its stones. Measured on this fixture at maxModuleLength 8: totalLength
+  // 37.9672 m before and after, the four modules on segments 2 and 3 identical
+  // to within ~2.8e-17 m, and only the split pair on segment 1 rebuilding.
+  //
+  // Contrast the length-changing endpoint move below, which re-parameterises the
+  // whole wall and so legitimately re-grids far modules too.
+  const source = record();
+  const before = planConstruction(source, { maxModuleLength: 8 });
+  const splitSegmentId = source.path.segments[0].id;
+  const splitPath = insertCubicBezierAnchor(source.path, splitSegmentId, 0.5);
+  const after = planConstruction(
+    { ...structuredClone(source), path: splitPath },
+    { maxModuleLength: 8 },
+  );
+
+  const beforeHashes = new Map(before.modules.map(({ id, contentHash }) => [id, contentHash]));
+  const beforePlacements = new Map(before.modules.map(({ id, placements }) => [id, placements]));
+  // The segments the split cannot touch: everything downstream of the split.
+  const untouched = new Set(source.path.segments.slice(1).map(({ id }) => id));
+
+  let preserved = 0;
+  let changed = 0;
+  for (const module of after.modules) {
+    const originalHash = beforeHashes.get(module.id);
+    if (originalHash === undefined) continue; // the new half of the split has a fresh id
+    if (untouched.has(module.segmentId)) {
+      assert.equal(
+        module.contentHash,
+        originalHash,
+        `${module.id} hash moved with a distant split`,
+      );
+      assert.ok(
+        placementsMatch(module.placements, beforePlacements.get(module.id)),
+        `${module.id} stones moved with a distant split`,
+      );
+      preserved += 1;
+      continue;
+    }
+    if (module.contentHash !== originalHash) changed += 1;
+  }
+  assert.ok(preserved >= 3, `expected several untouched modules, got ${preserved}`);
+  assert.ok(changed > 0, 'the split segment itself must rebuild');
+  assert.notEqual(before.contentHash, after.contentHash);
+  assert.ok(
+    Math.abs(after.totalLength - before.totalLength) < 1e-9,
+    'de Casteljau must preserve the wall length',
+  );
+});
+
+// A distant length-changing path edit legitimately re-grids far modules, and
+// that is not a regression: the masonry course lattice (`moduleCourseRange`, the
+// bed ramp and the joint lean) resolves in the wall's *absolute* arc coordinate,
+// so moving anchor 0 re-parameterises the wall even though the distant
+// centreline never moves. Measured on this fixture at maxModuleLength 8: moving
+// anchor 0 from [0, 0] to [0, -4] grows totalLength 37.9672 m -> 40.1820 m and
+// re-grids all six modules (2 per segment) — e.g. segment-3-span-1 moves its
+// interval [26.483, 32.225] -> [28.697, 34.440] and its stones 77 -> 82, and
+// segment-3-span-2 moves [32.225, 37.967] -> [34.440, 40.182], 88 -> 95 stones.
+// What must hold here is only the *soundness* contract the renderer's cache key
+// rests on: identical hash ⇒ identical geometry, i.e. a module whose stones
+// moved must carry a new hash. The stronger locality goal — far modules
+// bit-identical through a length change — needs the stable local layout origin
+// described in `docs/plans/tiny-glade-wall-builder/phase-11-look-feel-and-usability.md`
+// §9.4 ("Stable masonry through edits"). That was deliberately deferred: keying
+// the lattice on a per-segment origin would break the wall-global course-grid
+// seam continuity that `tests/ConstructionMasonry.test.js` ("adjacent modules
+// share a course grid so courses do not step") depends on, so the bed ramp and
+// joint lean would step at every seam. This test therefore asserts the
+// soundness invariant, never the stale-hash form.
+test('a length-changing endpoint move moves a far module\u2019s hash with its geometry', () => {
   const source = record();
   const before = planConstruction(source, { maxModuleLength: 8 });
   const changed = structuredClone(source);
@@ -112,23 +224,37 @@ test('module content hashes only change where an anchor edit reaches', () => {
   changed.revision += 1;
   const after = planConstruction(changed, { maxModuleLength: 8 });
 
-  const beforeHashes = new Map(before.modules.map(({ id, contentHash }) => [id, contentHash]));
-  const segmentOf = new Map(before.modules.map(({ id, segmentId }) => [id, segmentId]));
-  // Moving anchor 0 re-solves the handles of the first two segments, so those
-  // modules must change and the rest must be byte-identical.
-  const reachable = new Set(source.path.segments.slice(0, 2).map(({ id }) => id));
-  let changedCount = 0;
+  const beforeMap = new Map(before.modules.map((module) => [module.id, module]));
+  let compared = 0;
+  let reGridded = 0;
+  let farReGridded = 0;
   for (const module of after.modules) {
-    if (!beforeHashes.has(module.id)) continue;
-    if (module.contentHash === beforeHashes.get(module.id)) continue;
-    changedCount += 1;
-    assert.ok(
-      reachable.has(segmentOf.get(module.id)),
-      `module ${module.id} changed outside the edit's reach`,
+    const original = beforeMap.get(module.id);
+    if (!original) continue;
+    compared += 1;
+    if (placementsMatch(module.placements, original.placements)) {
+      // Equal hash ⇒ equal geometry: a module the move never reached is safe to
+      // reuse, so its hash may not move either.
+      assert.equal(
+        module.contentHash,
+        original.contentHash,
+        `${module.id} kept its stones but moved its hash`,
+      );
+      continue;
+    }
+    reGridded += 1;
+    // The soundness fix: geometry moved ⇒ hash moved. Asserting the converse
+    // (a far module keeps its hash) is the unsound assumption this replaced.
+    assert.notEqual(
+      module.contentHash,
+      original.contentHash,
+      `${module.id} re-gridded without changing its hash`,
     );
+    if (module.segmentId === 'segment-3') farReGridded += 1;
   }
-  assert.ok(changedCount > 0, 'the edit must change something');
-  assert.notEqual(before.contentHash, after.contentHash);
+  assert.ok(compared >= 4, `expected surviving modules, got ${compared}`);
+  assert.ok(reGridded > 0, 'the length change must re-grid some module');
+  assert.ok(farReGridded > 0, 'the length change must re-grid a distant segment-3 module');
 });
 
 test('a material swap leaves geometry hashes unchanged', () => {

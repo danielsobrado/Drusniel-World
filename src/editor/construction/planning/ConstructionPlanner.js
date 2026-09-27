@@ -3,6 +3,7 @@ import { sampleCubicBezierPath } from '../curve/CubicBezierPath.js';
 import { createCurveArcTable } from '../masonry/CurveArcTable.js';
 import { createWallTopProfile } from '../masonry/WallTopProfile.js';
 import { constructionStyle } from '../masonry/ConstructionStyleCatalog.js';
+import { footingCourseHeight } from '../masonry/WallCourseTable.js';
 import {
   MAX_CONSTRUCTION_STONES,
   MAX_MODULE_STONES,
@@ -11,9 +12,37 @@ import {
 import { constructionRuinProfile } from '../config/ConstructionRuinConfig.generated.js';
 import { resolveRuinSupport } from '../masonry/RuinSupportResolver.js';
 import { createRuinEnvelope } from '../masonry/RuinEnvelope.js';
+import { mixSeed } from '../../workshop/ProceduralRandom.js';
 
 const DEFAULT_MAX_MODULE_LENGTH = 12;
 const HASH_QUANTUM = 1e4;
+
+/**
+ * How far an opening's influence reaches past its own half-width, in metres.
+ * Shared by the packer's opening filter and the module hash, so a feature that
+ * can reshape a module is always an input to that module's hash.
+ */
+const OPENING_REACH = 0.6;
+
+/**
+ * A stable per-module seed from the module's own semantic identity.
+ *
+ * This used to be `modules.length` — the module's index in the flat module
+ * array — so inserting a control point upstream re-rolled the masonry of every
+ * module after it while their content hashes stayed put. The renderer then kept
+ * the stale stones and visibly swapped them on the next rebuild. Keying on the
+ * module's segment lineage and its slot inside that segment instead leaves
+ * downstream modules bit-identical, following `CourseLattice.hashAt`, which
+ * shapes on a wall-coordinate position rather than on an array position.
+ */
+function moduleSeedOffset(segmentId, index) {
+  let hash = 0x811c9dc5;
+  for (let position = 0; position < segmentId.length; position += 1) {
+    hash ^= segmentId.charCodeAt(position);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return mixSeed(hash >>> 0, index);
+}
 
 function createHasher() {
   let hash = 0x811c9dc5;
@@ -148,14 +177,29 @@ export function planConstruction(input, {
     distance: toArc(feature.segmentId, feature.arcFraction),
   }));
 
-  function hashModule(moduleId, from, to, modulePoints) {
+  function hashModule(moduleId, seedOffset, from, to, modulePoints) {
     const hasher = createHasher();
     hasher.text(moduleId);
+    // The resolved per-module seed, not just the record seed: it forks the
+    // packer's random stream and the per-stone shaping seed, so it is a
+    // geometry input in its own right.
+    hasher.number(seedOffset);
+    // The module's slice of the wall's arc domain. `moduleCourseRange`, the bed
+    // ramp, the joint lean and `splitCell` all resolve in *absolute* arc
+    // coordinates, so moving a distant anchor re-parameterises the wall and can
+    // re-roll this module's stones without its own centreline moving. The module's
+    // `[from, to]` are the arc-domain inputs that can move it; the wall length
+    // itself is not one of them (its only effect is the terminal module's hard
+    // end, and that module's `to` already equals the wall length), so it is left
+    // out to avoid invalidating modules a length change never reached.
+    hasher.number(from);
+    hasher.number(to);
     hasher.text(record.style.key);
     hasher.number(record.style.version);
     hasher.number(record.seed);
     hasher.number(record.dimensions.height);
     hasher.number(record.dimensions.thickness);
+    hasher.number(courseFootingHeight);
     hasher.text(record.top.style);
     hasher.number(record.top.base);
     for (const point of modulePoints) {
@@ -165,6 +209,13 @@ export function planConstruction(input, {
       hasher.number(point.tangentZ);
     }
 
+    // The top-profile control points that can shape this module. Only the
+    // bracketing points (and their slope neighbours) matter: outside the
+    // outermost control point the profile *holds* that point's height, so a
+    // module beyond the range hashes that held height and nothing else. The old
+    // `max(0, first - 1)` slice clamped a module that lies entirely *before*
+    // every point to `[0, 0]`, turning an arbitrarily distant control point into
+    // an input to this module's hash.
     let first = topPoints.findIndex((entry) => entry.distance >= from);
     if (first < 0) first = topPoints.length;
     let last = -1;
@@ -174,14 +225,25 @@ export function planConstruction(input, {
         break;
       }
     }
-    const sliceStart = Math.max(0, first - 1);
-    const sliceEnd = Math.min(topPoints.length - 1, last + 1);
-    for (let index = sliceStart; index <= sliceEnd; index += 1) {
-      hasher.number(topPoints[index].distance);
-      hasher.number(topPoints[index].height);
+    if (topPoints.length === 0) {
+      // No control points at all: the profile is the authored base height.
+      hasher.number(record.top.base);
+    } else if (last < 0) {
+      // Entirely before the range: held at the first point's height.
+      hasher.number(topPoints[0].height);
+    } else if (first >= topPoints.length) {
+      // Entirely after the range: held at the last point's height.
+      hasher.number(topPoints[topPoints.length - 1].height);
+    } else {
+      const sliceStart = Math.max(0, first - 1);
+      const sliceEnd = Math.min(topPoints.length - 1, last + 1);
+      for (let index = sliceStart; index <= sliceEnd; index += 1) {
+        hasher.number(topPoints[index].distance);
+        hasher.number(topPoints[index].height);
+      }
     }
     for (const { feature, distance } of featureArcs) {
-      const margin = feature.width / 2 + 0.5;
+      const margin = feature.width / 2 + OPENING_REACH;
       if (distance + margin <= from || distance - margin >= to) continue;
       hasher.text(feature.id);
       hasher.text(feature.kind);
@@ -200,15 +262,30 @@ export function planConstruction(input, {
   const arcTable = masonry ? createCurveArcTable(sampled) : null;
   const topProfile = masonry ? createWallTopProfile(record, arcTable, { style }) : null;
   const wallCourseHeight = masonry ? style.courseHeight : null;
-  let wallTopHeight = null;
-  if (masonry) {
-    let wallTop = 0;
-    const samples = Math.max(8, Math.ceil(sampled.totalDistance / 0.5));
-    for (let index = 0; index <= samples; index += 1) {
-      wallTop = Math.max(wallTop, topProfile.heightAt((sampled.totalDistance * index) / samples));
-    }
-    wallTopHeight = wallTop;
-  }
+  /**
+   * The wall height appearance is normalised against — the authored base
+   * height, not the wall-wide tallest point.
+   *
+   * `heightRatio` drives `applyUnitShading`'s weathering. Normalising it against
+   * the tallest point meant a local top raise moved the reference and re-shaded
+   * every far stone even though its position and mesh were byte-identical, which
+   * breaks the phase-11 clause "a local edit preserves unaffected cell
+   * identities, colors and decoration keys". The authored height is stable under
+   * any local edit, and equals the tall point on a wall that is not raised.
+   * (Trade-off: on a wall that *is* raised, stones above the base now clamp to a
+   * `heightRatio` of 1 rather than scaling up to the raised peak.)
+   */
+  const heightReference = Math.max(0.2, record.top.base);
+  // The footing course height the course table derives from `heightReference`.
+  // It is the only channel by which the reference reaches geometry, so the hash
+  // covers the derived value, not the raw height.
+  const courseFootingHeight = masonry
+    ? footingCourseHeight({
+      courseHeight: wallCourseHeight,
+      footing: style.footing ?? null,
+      wallHeight: heightReference,
+    })
+    : 0;
   let stoneTotal = 0;
   let overBudget = false;
 
@@ -228,8 +305,27 @@ export function planConstruction(input, {
       const relevant = sampled.points.filter(({ distance }) => distance >= from && distance <= to);
       const endpoints = [pointAtDistance(sampled.points, from), pointAtDistance(sampled.points, to)];
       const modulePoints = [...endpoints.slice(0, 1), ...relevant, ...endpoints.slice(1)];
+      // The hash sees the module's own samples *and one on each side*. The arc
+      // table's curvature is a finite difference that reaches 0.1 m past the arc
+      // range, so the stone widths inside a module depend on the neighbouring
+      // segment's shape at the seam — a real generation input that the module's
+      // own range alone does not capture.
+      const firstRelevant = sampled.points.findIndex(({ distance }) => distance >= from);
+      let lastRelevant = -1;
+      for (let i = sampled.points.length - 1; i >= 0; i -= 1) {
+        if (sampled.points[i].distance <= to) {
+          lastRelevant = i;
+          break;
+        }
+      }
+      const hashPoints = [];
+      if (firstRelevant > 0) hashPoints.push(sampled.points[firstRelevant - 1]);
+      hashPoints.push(...modulePoints);
+      if (lastRelevant >= 0 && lastRelevant + 1 < sampled.points.length) {
+        hashPoints.push(sampled.points[lastRelevant + 1]);
+      }
       const moduleId = `${segment.id}-span-${index + 1}`;
-      const seedOffset = modules.length;
+      const seedOffset = moduleSeedOffset(segment.id, index);
       let packed = null;
       if (masonry) {
         packed = packCurvedWall({
@@ -241,7 +337,7 @@ export function planConstruction(input, {
           seedOffset,
           wallRange: [0, sampled.totalDistance],
           courseHeight: wallCourseHeight,
-          heightReference: wallTopHeight,
+          heightReference,
           topHeightAt: topProfile.heightAt,
           ruinFactorAt: topProfile.ruinFactorAt,
           ruinStateAt: topProfile.ruinStateAt,
@@ -251,7 +347,7 @@ export function planConstruction(input, {
           deferRuinRemoval: record.top.style === 'ruined',
           openings: featureArcs
             .filter(({ feature, distance }) => {
-              const reach = feature.width / 2 + 0.6;
+              const reach = feature.width / 2 + OPENING_REACH;
               return distance + reach > from && distance - reach < to;
             })
             .map(({ feature, distance }) => ({ ...feature, s: distance })),
@@ -268,7 +364,7 @@ export function planConstruction(input, {
         kind: 'curved-span',
         segmentId: segment.id,
         seedOffset,
-        contentHash: hashModule(moduleId, from, to, modulePoints),
+        contentHash: hashModule(moduleId, seedOffset, from, to, hashPoints),
         placements: packed ? packed.stones : null,
         masonryStats: packed ? packed.stats : null,
         pathInterval: Object.freeze([from, to]),

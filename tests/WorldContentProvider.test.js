@@ -17,15 +17,28 @@ function createFakeIndexedDb() {
         createObjectStore() {},
         close() {},
         transaction() {
+          // `IndexedDbWorldContentProvider.transact` resolves on the IDB
+          // transaction's 'complete' event, which fires after the request
+          // settles, so the fake must surface that event too.
+          const listeners = { complete: [], abort: [], error: [] };
+          let settled = false;
+          const settle = (type) => {
+            if (settled) return;
+            settled = true;
+            for (const handler of listeners[type]) handler();
+          };
           return {
+            addEventListener(type, handler) {
+              if (listeners[type]) listeners[type].push(handler);
+            },
             objectStore() {
               return {
                 get(key) {
-                  return makeRequest(values.get(key));
+                  return makeRequest(values.get(key), () => settle('complete'));
                 },
                 put(value, key) {
                   values.set(key, structuredClone(value));
-                  return makeRequest(key);
+                  return makeRequest(key, () => settle('complete'));
                 },
               };
             },
@@ -47,7 +60,7 @@ function createFakeIndexedDb() {
   };
 }
 
-function makeRequest(result) {
+function makeRequest(result, onSuccess = null) {
   const listeners = { success: [], error: [] };
   const request = {
     result,
@@ -57,6 +70,9 @@ function makeRequest(result) {
   };
   queueMicrotask(() => {
     for (const handler of listeners.success) handler();
+    // Runs after the request listeners so the transaction can observe the
+    // settled result, mirroring a real IDB transaction 'complete' event.
+    onSuccess?.();
   });
   return request;
 }

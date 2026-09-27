@@ -32,6 +32,7 @@ import { createPathClearanceField } from './TreeManifestStore.js';
 import { buildRiverbankRocks, DEFAULT_RIVERBANK_ROCKS } from './riverbankRocks.js';
 import { RiverRockSource } from './RiverRockSource.js';
 import { buildCoastStones, DEFAULT_COAST_STONES } from './coastStones.js';
+import { buildSeabedRocks, DEFAULT_SEABED_ROCKS } from './seabedRocks.js';
 
 const ROCK_CLUSTER_SEED_OFFSET = 0xa7;
 
@@ -100,6 +101,7 @@ export class StylizedRockView {
     this.riverRocks = new RiverRockSource(() => terrainView.worldStore?.generator ?? null);
     this.riverbankConfig = { ...DEFAULT_RIVERBANK_ROCKS, ...(config.rocks?.riverbank ?? {}) };
     this.coastStoneConfig = { ...DEFAULT_COAST_STONES, ...(config.rocks?.coast ?? {}) };
+    this.seabedRockConfig = { ...DEFAULT_SEABED_ROCKS, ...(config.rocks?.seabed ?? {}) };
     this.biomeAssetPalette = biomeAssetPalette;
     this.regionalCharacterField = regionalCharacterField;
     this.prototypeIndicesByAsset = new Map();
@@ -416,6 +418,7 @@ export class StylizedRockView {
     const features = [
       ...this.riverbankRocksForChunk(chunkX, chunkZ),
       ...this.coastStonesForChunk(chunkX, chunkZ),
+      ...this.seabedRocksForChunk(chunkX, chunkZ),
     ];
     const placements = features.length ? [...scattered, ...features] : scattered;
     this.manifestCache.set(cacheKey, { key, placements });
@@ -444,6 +447,30 @@ export class StylizedRockView {
       ),
       radiusForScale: options.radiusForScale,
       config: this.coastStoneConfig,
+    });
+  }
+
+  /** Boulders sitting on the seabed in a chunk's shallows. */
+  seabedRocksForChunk(chunkX, chunkZ) {
+    const seaLevel = this.terrainView.worldStore?.generator?.seaLevel;
+    if (!this.seabedRockConfig.enabled || !Number.isFinite(seaLevel)) return [];
+    const tileSize = this.terrainView.worldStore.tileSize;
+    const options = this.manifestOptions(chunkX, chunkZ);
+    return buildSeabedRocks({
+      chunkX,
+      chunkZ,
+      chunkSize: this.terrainView.worldStore.chunkSize,
+      tileSize,
+      seaLevel,
+      heightAt: options.heightAt,
+      prototypeIndexForRoll: (roll, x, z) => options.prototypeIndexForRoll(
+        roll,
+        options.tileAt(Math.floor(x / tileSize), Math.floor(-z / tileSize)),
+        x,
+        z,
+      ),
+      radiusForScale: options.radiusForScale,
+      config: this.seabedRockConfig,
     });
   }
 

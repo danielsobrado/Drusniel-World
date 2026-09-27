@@ -47,6 +47,33 @@ const ORIGIN_QUANTUM = 64;
 const MODULE_BUILD_BUDGET_MS = 4;
 const MODULE_BUILD_COUNT = 1;
 
+/**
+ * Preview buffer floor. Buffers grow by doubling from here, so dragging an
+ * anchor reallocates nothing and only a genuinely longer replaced arc pays.
+ */
+const PREVIEW_BUFFER_MIN = 64;
+
+/**
+ * How long a committed draft may hold its preview while the replaced arc is
+ * rebuilt at one module per frame. Past it the preview gives way, which shows
+ * the pre-existing mixed state rather than a stale shape drawn over a wall
+ * that is already correct.
+ */
+const PREVIEW_HOLD_MS = 1000;
+
+/** A draft with nothing local to replace previews the whole record. */
+const WHOLE_SPAN = Object.freeze({ from: 0, to: 1, whole: true });
+
+/**
+ * Slack where the committed sampling and the plan's arc domain meet: the edit
+ * changes the wall's arc length, so a module boundary lands a few centimetres
+ * from where it was. The replaced arc ignores overlaps that small when it picks
+ * the modules to hide, and pads its own edges by the same amount, so the
+ * preview neither leaves a sliver of wall uncovered nor eats into masonry the
+ * drag never reached.
+ */
+const PREVIEW_SPAN_TOLERANCE = 0.25;
+
 /** Per-module counters only the rounded pillow-stone builder reports. */
 const ROUNDED_STAT_KEYS = Object.freeze([
   'roundedStones',
@@ -85,6 +112,45 @@ function originForRecord(record) {
   };
 }
 
+/**
+ * The appearance a record's stone derives from: exactly the inputs
+ * `createConstructionMaterials` keys its cache on. A reshape never touches it,
+ * so re-using the material set across a commit cannot reroll the wall.
+ */
+function appearanceKey(record) {
+  const { key, version, materials } = record.style ?? {};
+  return [record.seed, key, version, JSON.stringify(materials ?? {})].join('|');
+}
+
+/** True once the record draws masonry rather than only its ribbon placeholder. */
+function hasResidentMasonry(entry) {
+  for (const resident of entry.modules.values()) {
+    if (resident.meshes.length > 0) return true;
+  }
+  return false;
+}
+
+/** Doubling growth from a floor, so only a genuinely longer arc reallocates. */
+function growPreviewCapacity(needed) {
+  return Math.max(PREVIEW_BUFFER_MIN, 2 ** Math.ceil(Math.log2(needed)));
+}
+
+/**
+ * The segments an anchor drag moves. A cubic only changes where its own handles
+ * change, so the segments touching the dragged anchor are the whole of a
+ * reshape's structural delta.
+ */
+function draftDirtySegments(record, anchorId) {
+  const dirty = new Set();
+  if (!anchorId) return dirty;
+  for (const segment of record.path?.segments ?? []) {
+    if (segment.startAnchorId === anchorId || segment.endAnchorId === anchorId) {
+      dirty.add(segment.id);
+    }
+  }
+  return dirty;
+}
+
 export class ConstructionView {
   constructor({ terrainView, store, compilerClient = null, materialStore = null }) {
     this.terrainView = terrainView;
@@ -97,7 +163,12 @@ export class ConstructionView {
     this.root = new THREE.Group();
     this.root.name = 'live-constructions';
     this.scene.add(this.root);
-    /** id -> { group, origin, shellMesh, modules: Map<moduleId, {hash}>, plan } */
+    /**
+     * id -> { group, origin, shellMesh, modules: Map<moduleId, {hash}>, plan }.
+     * `structuralRevision` is the last revision whose geometry the entry was
+     * rebuilt from; an appearance-only change advances the record revision
+     * without moving it.
+     */
     this.entries = new Map();
     this.buildQueue = [];
     this.handleMeshes = [];
@@ -105,8 +176,18 @@ export class ConstructionView {
     this.selectedId = null;
     this.selectedAnchorId = null;
     this.previewMesh = null;
+    this.previewGeometry = null;
     this.previewOrigin = { x: 0, z: 0 };
     this.previewedConstructionId = null;
+    /** The live draft: its gesture identity and the arc it replaces. */
+    this.previewDraft = null;
+    /**
+     * Committed products the draft replaces, with the flags cancel restores.
+     * Hiding is per product, never per record: the wall stays on screen.
+     */
+    this.previewOcclusion = null;
+    /** A draft parked past its gesture until its replacement product lands. */
+    this.previewHold = null;
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
     this.ruinDebugEnabled = typeof window !== 'undefined'
@@ -153,6 +234,15 @@ export class ConstructionView {
       buildMs: 0,
       stoneBuildMs: 0,
       mortarBuildMs: 0,
+      /** Reused preview buffers allocated; flat across a drag over one arc. */
+      previewBufferAllocations: 0,
+      previewBufferWrites: 0,
+      /** How often a gesture's replaced arc was recomputed rather than reused. */
+      previewSpanChanges: 0,
+      /** Committed products the current draft hides (a gauge, not a total). */
+      previewOccludedProducts: 0,
+      previewHolds: 0,
+      previewStaleDrops: 0,
       ...Object.fromEntries(ROUNDED_STAT_KEYS.map((key) => [key, 0])),
     };
     this.shellDetail = loadShellDetailTexture();
@@ -171,8 +261,10 @@ export class ConstructionView {
       metalness: 0,
       side: THREE.DoubleSide,
     });
-    this.previewMaterial = new THREE.MeshStandardNodeMaterial({
-      color: '#73c99b',
+    // A valid draft is drawn with the wall's own shell (`draftMaterial`); only an
+    // invalid one gets a tool colour, translucent so the reason stays visible.
+    this.invalidPreviewMaterial = new THREE.MeshStandardNodeMaterial({
+      color: '#d26666',
       roughness: 0.88,
       metalness: 0,
       transparent: true,
@@ -180,8 +272,6 @@ export class ConstructionView {
       depthWrite: false,
       side: THREE.DoubleSide,
     });
-    this.invalidPreviewMaterial = this.previewMaterial.clone();
-    this.invalidPreviewMaterial.color.set('#d26666');
     this.handleGeometry = new THREE.SphereGeometry(HANDLE_RADIUS, 12, 8);
     this.tangentHandleGeometry = new THREE.SphereGeometry(TANGENT_HANDLE_RADIUS, 10, 8);
     this.handleMaterial = new THREE.MeshBasicMaterial({
@@ -221,6 +311,10 @@ export class ConstructionView {
   removeRecord(constructionId) {
     const entry = this.entries.get(constructionId);
     if (!entry) return;
+    // Nothing left to restore: the products the draft hid are being disposed.
+    if (this.previewOcclusion?.constructionId === constructionId) {
+      this.previewOcclusion = null;
+    }
     if (entry.ruinDebugMeshes?.length) {
       for (const mesh of entry.ruinDebugMeshes) entry.group.remove(mesh);
       disposeRuinDebugMeshes(entry.ruinDebugMeshes);
@@ -265,12 +359,15 @@ export class ConstructionView {
       entry = {
         group,
         origin,
+        structuralRevision: 0,
         shellMesh: null,
         shellPath: null,
         modules: new Map(),
         plan: null,
+        planRevision: 0,
         arcTable: null,
         materials: null,
+        appearanceKey: null,
       };
       this.entries.set(record.id, entry);
     }
@@ -279,9 +376,7 @@ export class ConstructionView {
 
     if (hint?.materialOnly && entry.shellMesh) {
       // Geometry is unchanged; only the material assignment can differ.
-      const previous = entry.materials;
-      entry.materials = this.createMaterials(record);
-      releaseConstructionMaterials(previous);
+      this.assignMaterials(entry, record, { force: true });
       this.applyEntryMaterials(entry);
       return;
     }
@@ -289,11 +384,7 @@ export class ConstructionView {
     // Rebuilt per revision: the arc table is the shared arc-length view the
     // masonry builder places against, and must match the path the plan solved.
     entry.arcTable = createCurveArcTable(sampleCubicBezierPath(record.path));
-    {
-      const previous = entry.materials;
-      entry.materials = this.createMaterials(record);
-      releaseConstructionMaterials(previous);
-    }
+    this.assignMaterials(entry, record);
 
     // Cached so a module shell is a slice of the same sampled curve the record
     // shell used, rather than a second sampling that could seam differently.
@@ -313,8 +404,23 @@ export class ConstructionView {
     shellMesh.receiveShadow = true;
     entry.group.add(shellMesh);
     entry.shellMesh = shellMesh;
-    entry.group.visible = record.id !== this.previewedConstructionId;
+    entry.structuralRevision = record.revision;
     this.scheduleCompile(record, hint);
+  }
+
+  /**
+   * Stone and mortar materials derive from the record's style and seed alone.
+   * An appearance that did not change keeps the existing set: re-creating it
+   * only churns the material cache, and a commit that rerolled the wall's stone
+   * character would break the continuity this preview policy exists to keep.
+   */
+  assignMaterials(entry, record, { force = false } = {}) {
+    const appearance = appearanceKey(record);
+    if (!force && entry.materials && entry.appearanceKey === appearance) return;
+    const previous = entry.materials;
+    entry.materials = this.createMaterials(record);
+    entry.appearanceKey = appearance;
+    releaseConstructionMaterials(previous);
   }
 
   applyResidentMaterials(entry, selected) {
@@ -376,8 +482,11 @@ export class ConstructionView {
 
   scheduleCompile(record, hint = null) {
     if (!this.compilerClient) return;
+    const compiledRevision = this.entries.get(record.id)?.structuralRevision ?? record.revision;
     this.compilerClient.compile(record).then((plan) => {
-      if (this.store.get(record.id)?.revision !== plan.constructionRevision) return;
+      // A material tint bumps the record revision without invalidating the
+      // structure the plan solved, so only a newer structural edit discards it.
+      if (this.entries.get(record.id)?.structuralRevision !== compiledRevision) return;
       this.applyPlan(record, plan, hint);
     }).catch((error) => {
       if (error?.name !== 'AbortError') {
@@ -400,6 +509,7 @@ export class ConstructionView {
     const entry = this.entries.get(record.id);
     if (!entry) return;
     entry.plan = plan;
+    entry.planRevision = entry.structuralRevision;
     if (entry.shellMesh) entry.shellMesh.userData.structuralPlan = plan;
     this.rebuildRecordShell(entry, plan);
     const planned = new Set();
@@ -556,7 +666,7 @@ export class ConstructionView {
     if (resident) {
       const buildKey = moduleBuildKey({
         constructionId,
-        revision: entry.record.revision,
+        revision: entry.structuralRevision,
         moduleId: module.id,
         contentHash: module.contentHash,
         requestedBand: band,
@@ -669,10 +779,15 @@ export class ConstructionView {
     this.stats.modulesNear = nearCount;
     this.stats.modulesCoarse = coarseCount;
     this.stats.modulesShell = shellCount;
+    this.enforceDraftOcclusion();
   }
 
   update() {
-    if (this.buildQueue.length === 0) return;
+    this.updatePreviewHold();
+    if (this.buildQueue.length === 0) {
+      this.enforceDraftOcclusion();
+      return;
+    }
     const started = performance.now();
     let built = 0;
     while (
@@ -690,6 +805,7 @@ export class ConstructionView {
       built += 1;
     }
     this.stats.queueDepth = this.buildQueue.length;
+    this.enforceDraftOcclusion();
   }
 
   buildModule(entry, module) {
@@ -709,7 +825,7 @@ export class ConstructionView {
       : 'near';
     const expectedKey = moduleBuildKey({
       constructionId: entry.record.id,
-      revision: entry.record.revision,
+      revision: entry.structuralRevision,
       moduleId: module.id,
       contentHash: module.contentHash,
       requestedBand: lodBand,
@@ -720,9 +836,9 @@ export class ConstructionView {
     ) {
       this.stats.staleBuildsDiscarded += 1;
       resident.pendingBuildKey = null;
-      // The band or revision moved on while this job waited its turn — builds
-      // drain one per frame and `updateLod` runs in between. Queue what is
-      // wanted now: `updateLod` only re-queues modules that were built once,
+      // The band or the structure moved on while this job waited its turn —
+      // builds drain one per frame and `updateLod` runs in between. Queue what
+      // is wanted now: `updateLod` only re-queues modules that were built once,
       // so dropping a first build here left the module on its ribbon for good.
       if (resident.hash === module.contentHash) {
         this.enqueueModuleBuild(entry.record.id, module, lodBand);
@@ -1026,43 +1142,407 @@ export class ConstructionView {
     }
   }
 
+  /**
+   * Preview the arc a draft replaces (phase 11 §8, the W3 gate).
+   *
+   * A draft never hides the record: one reusable ribbon covers the arc its
+   * gesture dirties, only the committed products inside that arc step aside,
+   * and the rest of the wall keeps drawing. The ribbon's buffers are allocated
+   * once and rewritten in place, so dragging allocates no preview product, and
+   * the gesture's identity — entity id and seed — is minted once and carried
+   * through commit so the masonry cannot reroll.
+   */
   setDraft(record, {
     valid = true,
     constructionId = null,
     snapKind = null,
     anchorId = null,
   } = {}) {
-    this.clearDraft();
     this.setSnapFeedback(anchorId, snapKind);
-    this.previewedConstructionId = constructionId;
-    if (constructionId) {
-      const entry = this.entries.get(constructionId);
-      if (entry) entry.group.visible = false;
+    const entry = constructionId ? this.entries.get(constructionId) ?? null : null;
+    const constructionKey = entry?.record.id ?? null;
+    // A gesture belongs to one record: moving to another one — or to a draw, or
+    // past a preview that is waiting to hand over — starts a fresh preview.
+    if (this.previewedConstructionId !== constructionKey || this.previewHold) {
+      this.finishPreviewDraft();
     }
+
+    const previous = this.previewDraft;
+    const spanKey = this.draftSpanKey(constructionKey, record, anchorId, entry);
+    const span = previous?.spanKey === spanKey
+      ? previous.span
+      : this.draftSpan(entry, record, anchorId);
+    if (span !== previous?.span) this.stats.previewSpanChanges += 1;
+    this.previewDraft = {
+      identity: previous?.identity ?? {
+        entityId: constructionKey ?? record.id,
+        seed: record.seed ?? entry?.record.seed ?? null,
+      },
+      spanKey,
+      span,
+      fromRevision: previous?.fromRevision ?? entry?.structuralRevision ?? null,
+    };
+    this.previewedConstructionId = constructionKey;
     this.previewOrigin = originForRecord(record);
-    this.previewMesh = new THREE.Mesh(
-      buildWallGeometry(record, this.terrainView, this.previewOrigin),
-      valid ? this.previewMaterial : this.invalidPreviewMaterial,
-    );
     const render = this.floatingOrigin.toRender(this.previewOrigin.x, this.previewOrigin.z);
+    this.ensurePreviewMesh();
     this.previewMesh.position.set(render.x, 0, render.z);
+    this.previewMesh.material = valid ? this.draftMaterial(record) : this.invalidPreviewMaterial;
+    const source = this.buildPreviewSource(record, span);
+    const drawn = source ? this.writePreviewGeometry(source) : false;
+    // The shared shell builder hands back a scratch geometry; copying it into
+    // the reused buffers is what keeps the preview product itself stable.
+    source?.dispose();
+    if (!drawn) {
+      // Nothing to draw for this arc: leave the committed wall on screen rather
+      // than hide it behind an empty preview.
+      this.previewMesh.visible = false;
+      this.endDraftOcclusion();
+      return;
+    }
+    if (entry) this.occludeDraftSpan(entry, span);
+  }
+
+  /**
+   * End the gesture.
+   *
+   * A reshape parks the preview instead of deleting it: the commit runs in this
+   * same tick, and `update` hands over to the committed product only once the
+   * replaced arc is rebuilt — no blank frame, no double wall. A gesture that
+   * commits nothing releases on the next frame, which is an exact restore
+   * because nothing else moved. A new-wall draft has no committed product to
+   * wait for and retires at once.
+   */
+  clearDraft() {
+    this.setSnapFeedback(null, null);
+    const constructionId = this.previewedConstructionId;
+    const draft = this.previewDraft;
+    this.previewedConstructionId = null;
+    const entry = constructionId ? this.entries.get(constructionId) : null;
+    if (!entry || !draft || (draft.span.whole && !hasResidentMasonry(entry))) {
+      this.finishPreviewDraft();
+      return;
+    }
+    this.previewDraft = null;
+    this.previewHold = {
+      constructionId,
+      fromRevision: draft.fromRevision,
+      startedAt: performance.now(),
+    };
+    this.stats.previewHolds += 1;
+  }
+
+  /** Retire the draft now: release the replaced arc and hide the preview. */
+  finishPreviewDraft() {
+    this.endDraftOcclusion();
+    if (this.previewMesh) this.previewMesh.visible = false;
+    this.previewDraft = null;
+    this.previewHold = null;
+    this.previewedConstructionId = null;
+  }
+
+  /**
+   * Resolve a parked preview. The commit runs in the same tick as `clearDraft`,
+   * so a record whose structural revision never moved was cancelled — restore
+   * at once rather than leave a ghost. When it did move, the preview stays
+   * until the plan and the builds for the replaced arc have landed, so the swap
+   * covers the same arc in the same tick. A record that vanished under the
+   * draft (undo, delete) or a worker that never answers is dropped instead of
+   * resurrecting an older shape.
+   */
+  updatePreviewHold() {
+    const hold = this.previewHold;
+    if (!hold) return;
+    const entry = this.entries.get(hold.constructionId);
+    if (!entry || entry.structuralRevision === hold.fromRevision) {
+      if (!entry) this.stats.previewStaleDrops += 1;
+      this.finishPreviewDraft();
+      return;
+    }
+    if (performance.now() - hold.startedAt > PREVIEW_HOLD_MS) {
+      this.stats.previewStaleDrops += 1;
+      this.finishPreviewDraft();
+      return;
+    }
+    if (!entry.planRevision || entry.planRevision <= hold.fromRevision) return;
+    if (this.buildQueue.some((job) => job.constructionId === hold.constructionId)) return;
+    this.finishPreviewDraft();
+  }
+
+  /**
+   * What a valid draft looks like: the wall's own shell — its style colour and
+   * stone pattern, or the selection tint when the wall is selected — so a new
+   * wall grows under the pointer as stone and a reshaped arc matches the wall
+   * around it (phase 11 §4, §8: "a matching opaque shaded shell").
+   */
+  draftMaterial(record) {
+    return record.id === this.selectedId ? this.selectedMaterial : this.shellMaterials.forRecord(record);
+  }
+
+  /** The single reusable preview mesh; its buffers outlive every gesture. */
+  ensurePreviewMesh() {
+    if (this.previewMesh) return;
+    this.previewGeometry = new THREE.BufferGeometry();
+    this.previewGeometry.name = 'construction-preview-buffers';
+    this.previewMesh = new THREE.Mesh(this.previewGeometry, this.invalidPreviewMaterial);
     this.previewMesh.name = 'construction-preview';
     this.previewMesh.renderOrder = 20;
+    this.previewMesh.visible = false;
     this.root.add(this.previewMesh);
   }
 
-  clearDraft() {
-    this.setSnapFeedback(null, null);
-    if (this.previewMesh) {
-      this.root.remove(this.previewMesh);
-      this.previewMesh.geometry.dispose();
-      this.previewMesh = null;
+  /**
+   * Gesture-stable key for the arc a draft replaces. The arc and its occlusion
+   * are recomputed only when this changes; an anchor that keeps moving inside
+   * the same segments only rewrites vertex data.
+   */
+  draftSpanKey(constructionId, record, anchorId, entry = null) {
+    const dirty = draftDirtySegments(record, anchorId);
+    return [
+      constructionId ?? record.id,
+      dirty.size > 0 && this.isLocalDraft(entry, record) ? 'local' : 'record',
+      [...dirty].join(','),
+    ].join('|');
+  }
+
+  /**
+   * True when a draft changes only the shape of the segments the dragged anchor
+   * joins. Thickness, height, style, openings and a whole-wall move each change
+   * every module's inputs, so they replace the record's whole arc instead.
+   */
+  isLocalDraft(entry, record) {
+    const committed = entry?.record;
+    if (!committed || !hasResidentMasonry(entry)) return false;
+    return committed.dimensions.height === record.dimensions.height
+      && committed.dimensions.thickness === record.dimensions.thickness
+      && committed.style?.key === record.style?.key
+      && committed.seed === record.seed
+      && committed.top?.style === record.top?.style
+      && (committed.features?.length ?? 0) === (record.features?.length ?? 0)
+      && committed.path?.closed === record.path?.closed
+      && (committed.path?.anchors?.length ?? 0) === (record.path?.anchors?.length ?? 0)
+      && (committed.path?.segments?.length ?? 0) === (record.path?.segments?.length ?? 0);
+  }
+
+  /**
+   * The arc a draft replaces, as fractions of the record's path.
+   *
+   * Segment-local, because a cubic only moves where its own handles moved: an
+   * anchor drag dirties the segments touching that anchor, and the masonry
+   * beyond them keeps its geometry and stays on screen (phases 11 §8, §9.5).
+   * The range is widened to whole modules so the preview covers exactly what it
+   * hides. A draft with nothing local to replace — a new wall, a whole-wall
+   * move or thickness change, a wall that is still only its ribbon — previews
+   * the whole record.
+   */
+  draftSpan(entry, record, anchorId) {
+    const dirty = draftDirtySegments(record, anchorId);
+    if (dirty.size === 0 || !this.isLocalDraft(entry, record)) return WHOLE_SPAN;
+    // The committed sampling, not the draft's: the plan's module intervals live
+    // in that arc domain, and the two only have to agree closely enough to pick
+    // the same modules.
+    const sampled = entry.shellPath;
+    const total = sampled?.totalDistance ?? 0;
+    if (!(total > 0)) return WHOLE_SPAN;
+    let from = Infinity;
+    let to = -Infinity;
+    for (const point of sampled.points) {
+      if (!dirty.has(point.segmentId)) continue;
+      from = Math.min(from, point.distance);
+      to = Math.max(to, point.distance);
     }
-    if (this.previewedConstructionId) {
-      const entry = this.entries.get(this.previewedConstructionId);
-      if (entry) entry.group.visible = true;
+    if (!(to > from)) return WHOLE_SPAN;
+
+    // Widen to the modules the range cuts through: hiding half a module without
+    // previewing its other half would leave a hole in the wall.
+    const planTotal = entry.plan?.totalLength ?? 0;
+    const tolerance = planTotal > 0 ? PREVIEW_SPAN_TOLERANCE / planTotal : 0;
+    let spanFrom = from / total;
+    let spanTo = to / total;
+    if (planTotal > 0) {
+      for (let pass = 0; pass < 3; pass += 1) {
+        for (const module of entry.plan.modules) {
+          const [start, end] = module.pathInterval ?? [0, planTotal];
+          const moduleFrom = start / planTotal;
+          const moduleTo = end / planTotal;
+          if (moduleTo <= spanFrom + tolerance || moduleFrom >= spanTo - tolerance) continue;
+          spanFrom = Math.min(spanFrom, moduleFrom);
+          spanTo = Math.max(spanTo, moduleTo);
+        }
+      }
     }
-    this.previewedConstructionId = null;
+    const whole = spanFrom <= 0 && spanTo >= 1;
+    return {
+      from: Math.max(0, spanFrom - tolerance),
+      to: Math.min(1, spanTo + tolerance),
+      whole,
+    };
+  }
+
+  /**
+   * One ribbon over the draft's replaced arc, built from the draft record the
+   * way a module shell is, so the preview and the committed product agree about
+   * silhouette, thickness and opening contours (phase 11 §8).
+   */
+  buildPreviewSource(record, span) {
+    const sampled = sampleShellPath(record);
+    const points = span.whole
+      ? sampled.points
+      : shellSectionPoints(sampled, span.from, span.to);
+    return buildShellGeometry(points, {
+      record,
+      terrainView: this.terrainView,
+      origin: this.previewOrigin,
+    });
+  }
+
+  /** Copy a scratch ribbon into the reused preview buffers, counted for QA. */
+  writePreviewGeometry(source) {
+    const geometry = this.previewGeometry;
+    const index = source.getIndex();
+    if (!(source.getAttribute('position')?.count > 2 && index?.count > 2)) return false;
+    this.writePreviewAttribute('position', source.getAttribute('position'), 3);
+    this.writePreviewAttribute('normal', source.getAttribute('normal'), 3);
+    this.writePreviewAttribute('uv', source.getAttribute('uv'), 2);
+    this.writePreviewIndex(index);
+    const { identity } = this.previewDraft;
+    geometry.userData.constructionId = identity.entityId;
+    geometry.userData.constructionSeed = identity.seed;
+    // The spare capacity is stale; let the cull rebuild both volumes from the
+    // live count instead of carrying geometry that is no longer drawn.
+    geometry.boundingBox = null;
+    geometry.boundingSphere = null;
+    this.previewMesh.visible = true;
+    this.stats.previewBufferWrites += 1;
+    return true;
+  }
+
+  /**
+   * Write one attribute in place. Buffers double from `PREVIEW_BUFFER_MIN` and
+   * keep their identity while `count` tracks the live range, so a drag over a
+   * stable arc allocates no buffer, re-creates no GPU buffer and rebinds
+   * nothing — it only re-uploads the vertices that moved.
+   */
+  writePreviewAttribute(name, source, itemSize) {
+    const geometry = this.previewGeometry;
+    const needed = source.count * itemSize;
+    let attribute = geometry.getAttribute(name);
+    if (!attribute || attribute.array.length < needed) {
+      attribute = new THREE.BufferAttribute(
+        new Float32Array(growPreviewCapacity(needed)),
+        itemSize,
+      );
+      geometry.setAttribute(name, attribute);
+      this.stats.previewBufferAllocations += 1;
+    }
+    attribute.array.set(source.array, 0);
+    attribute.count = source.count;
+    attribute.needsUpdate = true;
+  }
+
+  /** The index buffer follows the same rule, in whole-number elements. */
+  writePreviewIndex(source) {
+    const geometry = this.previewGeometry;
+    let attribute = geometry.getIndex();
+    if (!attribute || attribute.array.length < source.count) {
+      attribute = new THREE.BufferAttribute(
+        new Uint32Array(growPreviewCapacity(source.count)),
+        1,
+      );
+      geometry.setIndex(attribute);
+      this.stats.previewBufferAllocations += 1;
+    }
+    attribute.array.set(source.array, 0);
+    attribute.count = source.count;
+    attribute.needsUpdate = true;
+  }
+
+  /**
+   * Step the committed products inside the replaced arc aside, recording the
+   * flags cancel has to restore. Recomputed only when the arc changes, so a
+   * moving anchor does not re-walk the wall.
+   */
+  occludeDraftSpan(entry, span) {
+    const occlusion = this.previewOcclusion;
+    if (occlusion?.constructionId === entry.record.id
+      && occlusion.spanKey === this.previewDraft.spanKey) {
+      this.enforceDraftOcclusion();
+      return;
+    }
+    this.endDraftOcclusion();
+    const products = this.draftSpanProducts(entry, span)
+      .map((object) => ({ object, visible: object.visible }));
+    this.previewOcclusion = {
+      constructionId: entry.record.id,
+      spanKey: this.previewDraft.spanKey,
+      span,
+      products,
+    };
+    this.stats.previewOccludedProducts = products.filter(({ visible }) => visible).length;
+    this.enforceDraftOcclusion();
+  }
+
+  /**
+   * Hide the replaced arc again after a pass that recomputed visibility. The
+   * LOD and shell rules keep running every frame; this only overrides their
+   * answer for the arc the preview owns, so a build landing mid-drag cannot
+   * flash stale stones back over the preview.
+   */
+  enforceDraftOcclusion() {
+    const occlusion = this.previewOcclusion;
+    if (!occlusion) return;
+    const entry = this.entries.get(occlusion.constructionId);
+    if (!entry) {
+      this.previewOcclusion = null;
+      return;
+    }
+    for (const { object } of occlusion.products) object.visible = false;
+    for (const object of this.draftSpanProducts(entry, occlusion.span)) {
+      object.visible = false;
+    }
+  }
+
+  /** Restore the flags the draft hid. A cancel is exact: nothing else moved. */
+  endDraftOcclusion() {
+    const occlusion = this.previewOcclusion;
+    this.previewOcclusion = null;
+    this.stats.previewOccludedProducts = 0;
+    if (!occlusion) return;
+    const hidden = new Set(occlusion.products.map(({ object }) => object));
+    for (const { object, visible } of occlusion.products) object.visible = visible;
+    const entry = this.entries.get(occlusion.constructionId);
+    if (!entry) return;
+    // A committed reshape replaced some of those products while the draft was
+    // up: hand the replacements to the shell rules rather than the old flags.
+    for (const object of this.draftSpanProducts(entry, occlusion.span)) {
+      if (!hidden.has(object)) object.visible = true;
+    }
+    this.updateShellVisibility(entry);
+  }
+
+  /** Every committed product drawing inside the replaced arc. */
+  draftSpanProducts(entry, span) {
+    const products = [];
+    // The record-wide ribbon is the pre-masonry placeholder: the preview
+    // supersedes it wherever it shows, and it has no per-arc split to keep.
+    if (entry.shellMesh) products.push(entry.shellMesh);
+    const total = entry.plan?.totalLength ?? 0;
+    // The same tolerance `draftSpan` widened with, so the modules the preview
+    // covers and the modules it hides are always the same set.
+    const tolerance = total > 0 ? PREVIEW_SPAN_TOLERANCE / total : 0;
+    for (const [moduleId, resident] of entry.modules) {
+      const module = entry.plan?.modules.find((candidate) => candidate.id === moduleId);
+      const start = module?.pathInterval?.[0] ?? 0;
+      const end = module?.pathInterval?.[1] ?? total;
+      if (total > 0) {
+        const moduleFrom = start / total;
+        const moduleTo = end / total;
+        if (moduleTo <= span.from + tolerance || moduleFrom >= span.to - tolerance) continue;
+      }
+      if (resident.shellMesh) products.push(resident.shellMesh);
+      products.push(...resident.meshes);
+    }
+    return products;
   }
 
   setPointer(clientX, clientY) {
@@ -1192,14 +1672,17 @@ export class ConstructionView {
 
   dispose() {
     this.unsubscribe?.();
-    this.clearDraft();
+    this.finishPreviewDraft();
     for (const id of [...this.entries.keys()]) this.removeRecord(id);
     this.scene.remove(this.root);
+    if (this.previewMesh) this.root.remove(this.previewMesh);
+    this.previewGeometry?.dispose();
+    this.previewMesh = null;
+    this.previewGeometry = null;
     this.shellMaterials.dispose();
     this.wallMaterial.dispose();
     this.shellDetail?.dispose();
     this.selectedMaterial.dispose();
-    this.previewMaterial.dispose();
     this.invalidPreviewMaterial.dispose();
     this.handleGeometry.dispose();
     this.tangentHandleGeometry.dispose();

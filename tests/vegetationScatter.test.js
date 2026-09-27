@@ -3,7 +3,6 @@ import test from 'node:test';
 import {
   buildFlowerScatter,
   buildGrassScatter,
-  compactGrassScatter,
   createVegetationScatterConfig,
   enrichPageVegetationScatter,
 } from '../src/editor/stylized/vegetationScatter.js';
@@ -49,7 +48,7 @@ test('createVegetationScatterConfig snapshots grass/flower fields', () => {
   assert.equal(config.flowers.perChunk, 12);
 });
 
-test('buildGrassScatter is deterministic and compactable', () => {
+test('buildGrassScatter is deterministic from the page', () => {
   const page = makePage();
   const scatter = buildGrassScatter({
     page,
@@ -63,6 +62,7 @@ test('buildGrassScatter is deterministic and compactable', () => {
     maxLength: 0.2,
   });
   assert.equal(scatter.count, 4 * 4 * 2);
+  assert.equal(scatter.clumpsPerCell, 2);
   const again = buildGrassScatter({
     page,
     chunkSize: 4,
@@ -75,12 +75,6 @@ test('buildGrassScatter is deterministic and compactable', () => {
     maxLength: 0.2,
   });
   assert.deepEqual([...scatter.base], [...again.base]);
-
-  const compact = compactGrassScatter(scatter, 1, 4);
-  assert.equal(compact.count, 4 * 4);
-  assert.equal(compact.clumpsPerCell, 1);
-  assert.equal(compact.base[0], scatter.base[0]);
-  assert.equal(compact.base[3], scatter.base[6]);
 });
 
 test('grass clump prefixes stay distributed inside a cell', () => {

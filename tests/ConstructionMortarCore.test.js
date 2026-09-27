@@ -55,8 +55,14 @@ test('multiple prisms use one geometry', () => {
 test('depth is recessed from both faces', () => {
   const stoneDepth = 0.8;
   const coreDepth = mortarCoreDepth(stoneDepth, CONSTRUCTION_MORTAR_CONFIG);
+  // The core is recessed from both faces: derive the expected depth from the
+  // configured face recess so future retunes do not break the invariant.
+  const expected = Math.max(
+    CONSTRUCTION_MORTAR_CONFIG.minimumDepth,
+    stoneDepth - CONSTRUCTION_MORTAR_CONFIG.faceRecess * 2,
+  );
   assert.ok(coreDepth < stoneDepth);
-  assert.ok(Math.abs(coreDepth - 0.73) < 1e-9);
+  assert.ok(Math.abs(coreDepth - expected) < 1e-9);
 });
 
 test('backing expands in plane by absolute overlap', () => {

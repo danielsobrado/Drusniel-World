@@ -13,14 +13,17 @@ import { TILE_BY_SHORTCUT } from './tileCatalog.js';
 import { executeConstructionCommand } from './construction/ConstructionCommands.js';
 import {
   closestPointOnCubicBezierPath,
+  controlPointsForSegment,
   createCubicBezierPathFromStroke,
   findCubicBezierSelfIntersections,
   moveCubicBezierAnchor,
   setCubicBezierHandle,
 } from './construction/curve/CubicBezierPath.js';
 import {
+  GRID_SIZE,
   flattenHandlesAround,
   resolveAnchorSnap,
+  snappingEnabled,
 } from './construction/curve/CurveSnapping.js';
 import {
   TOP_RADIUS_DEFAULT,
@@ -46,6 +49,62 @@ const SECONDARY_POINTER_BUTTON = 2;
 const POINTER_TAP_DISTANCE = 6;
 const POINTER_TAP_MS = 400;
 
+/** A wall stroke must be drawn at least this far, or a stray click would build. */
+const MIN_CONSTRUCTION_STROKE_LENGTH = 0.5;
+/** Endpoints closer than this are the same point, so the stroke is a loop. */
+const CONSTRUCTION_CLOSURE_TOLERANCE = 0.5;
+/** How far a cut stroke's tip reaches for a wall to preview an opening on. */
+const CUT_PREVIEW_RADIUS = 1.5;
+
+/**
+ * Decide whether a freehand stroke can become a wall.
+ *
+ * Length is accumulated along the sampled points, never measured between the
+ * first and last sample: a loop returns to its own start, so endpoint distance
+ * is ~0 and would reject every courtyard as "too short". Closure is resolved
+ * before the length decision, so a returning stroke is recognised as a loop
+ * rather than a zero-length wall.
+ *
+ * @returns `{ length, closed, usable }` — accumulated length in metres,
+ *   whether the stroke returns to its start, and whether it is long enough.
+ */
+export function isUsableConstructionStroke(stroke, {
+  closureTolerance = CONSTRUCTION_CLOSURE_TOLERANCE,
+  minimumLength = MIN_CONSTRUCTION_STROKE_LENGTH,
+} = {}) {
+  if (!Array.isArray(stroke) || stroke.length < 2) {
+    return { length: 0, closed: false, usable: false };
+  }
+  let length = 0;
+  for (let index = 1; index < stroke.length; index += 1) {
+    length += Math.hypot(
+      stroke[index].x - stroke[index - 1].x,
+      stroke[index].z - stroke[index - 1].z,
+    );
+  }
+  // Two coincident samples are a mis-tap, not a loop.
+  const closed = stroke.length >= 3
+    && Math.hypot(stroke.at(-1).x - stroke[0].x, stroke.at(-1).z - stroke[0].z)
+      <= closureTolerance;
+  return { length, closed, usable: length >= minimumLength };
+}
+
+/**
+ * The snapping options an anchor drag runs with.
+ *
+ * Free placement is the default, so the ground grid is named only when the
+ * explicit precision toggle asked for it — it is no longer a step the cascade
+ * takes on its own. Ctrl suppresses the grid exactly as it suppresses the
+ * anchor, curve and alignment candidates.
+ */
+export function anchorSnapOptions(stepSnap, event) {
+  const enabled = snappingEnabled(event);
+  return {
+    enabled,
+    gridSize: enabled && stepSnap ? GRID_SIZE : null,
+  };
+}
+
 /** Allocate an opening id that cannot collide with holes left by deletions. */
 function nextOpeningFeatureId(record) {
   const used = new Set(record.features.map(({ id }) => id));
@@ -56,6 +115,142 @@ function nextOpeningFeatureId(record) {
     id = `opening-${record.id}-${index}`;
   }
   return id;
+}
+
+/** The rectangle a stroke covers, or `null` for an empty one. */
+function strokeBounds(stroke) {
+  if (!Array.isArray(stroke) || stroke.length === 0) return null;
+  const bounds = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
+  for (const point of stroke) {
+    bounds.minX = Math.min(bounds.minX, point.x);
+    bounds.maxX = Math.max(bounds.maxX, point.x);
+    bounds.minZ = Math.min(bounds.minZ, point.z);
+    bounds.maxZ = Math.max(bounds.maxZ, point.z);
+  }
+  return bounds;
+}
+
+/**
+ * The rectangle a path covers, from its control points rather than its anchors.
+ *
+ * A cubic stays inside the hull of its control polygon, and the control polygon
+ * reaches further than the anchors do. Bounds built from the anchors would
+ * therefore shrink past the curve where it bulges, and a wall that bulges toward
+ * a stroke would be filtered out of the very query that needs it.
+ */
+function pathBounds(path) {
+  const bounds = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
+  for (const segment of path.segments) {
+    for (const point of controlPointsForSegment(path, segment)) {
+      bounds.minX = Math.min(bounds.minX, point.x);
+      bounds.maxX = Math.max(bounds.maxX, point.x);
+      bounds.minZ = Math.min(bounds.minZ, point.z);
+      bounds.maxZ = Math.max(bounds.maxZ, point.z);
+    }
+  }
+  return bounds;
+}
+
+/** Gap between two axis-aligned rectangles, zero when they overlap. */
+function rectangleGap(a, b) {
+  const dx = Math.max(b.minX - a.maxX, a.minX - b.maxX, 0);
+  const dz = Math.max(b.minZ - a.maxZ, a.minZ - b.maxZ, 0);
+  return Math.hypot(dx, dz);
+}
+
+/**
+ * Constructions a stroke could cut into, nearest first.
+ *
+ * `resolveCutStroke` intersects the stroke with every path it is handed. That is
+ * affordable once, on release, and is not affordable on every pointer sample of
+ * a drag. Rectangle-to-rectangle distance is the cheap prefilter, and both
+ * rectangles are built to be supersets of the geometry they stand for, so a wall
+ * the cut would actually touch cannot fall outside the query.
+ *
+ * @param stroke the sampled `{ x, z }` points, tip last.
+ * @param radius how far outside the wall's footprint still counts, in metres.
+ */
+export function constructionsNear(records, stroke, radius = CUT_PREVIEW_RADIUS) {
+  const bounds = strokeBounds(stroke);
+  if (!bounds) return [];
+  const tip = stroke.at(-1);
+  const found = [];
+  for (const record of records) {
+    if (record.path?.type !== 'cubicBezier') continue;
+    const wall = pathBounds(record.path);
+    const gap = rectangleGap(bounds, wall);
+    if (gap > radius + (record.dimensions?.thickness ?? 0) / 2) continue;
+    const tipGap = rectangleGap({ minX: tip.x, maxX: tip.x, minZ: tip.z, maxZ: tip.z }, wall);
+    found.push({ record, distance: gap, tipDistance: tipGap });
+  }
+  // A stroke that reaches two walls touches both rectangles equally; the one the
+  // pointer has got to is the one worth drafting, and the ids settle the rest.
+  return found.sort((left, right) => (left.distance - right.distance)
+    || (left.tipDistance - right.tipDistance)
+    || left.record.id.localeCompare(right.record.id, undefined, { numeric: true }));
+}
+
+/**
+ * The record a wall becomes once `cuts` land on it, with the segments they
+ * dirty.
+ *
+ * Shared by the live cut preview and the commit, so the opening the user drags
+ * is built by the code that builds the opening they get — the ids, the sill and
+ * the window grouping included. Pure: `record` is read, never written, and the
+ * store is not involved.
+ *
+ * @param cuts entries from `resolveCutStroke` that belong to this wall.
+ * @param options.styleFor `(cut) => feature fields`; geometry still decides the
+ *   kind, the openings grid only expresses a preference.
+ * @param options.arcTable the wall's arc table, for window link grouping.
+ * @param options.link whether nearby windows share a surround.
+ */
+export function applyCutFeatures(record, cuts, {
+  styleFor,
+  arcTable = null,
+  link = true,
+} = {}) {
+  let features = record.features;
+  const dirtySegmentIds = new Set();
+  for (const cut of cuts) {
+    const style = styleFor(cut);
+    // Link against the features gathered so far, so a second window in one
+    // stroke can join the group the first one just created.
+    const working = { ...record, features };
+    const group = style.kind === 'window'
+      ? resolveWindowGroup(
+        working,
+        { segmentId: cut.segmentId, arcFraction: cut.arcFraction },
+        arcTable,
+        { link },
+      )
+      : null;
+    if (group && arcTable) {
+      const s = arcTable.toArc(cut.segmentId, cut.arcFraction);
+      features = features.map((entry) => {
+        if (entry.kind !== 'window' || entry.segmentId !== cut.segmentId) return entry;
+        const other = arcTable.toArc(entry.segmentId, entry.arcFraction);
+        if (Math.abs(other - s) > WINDOW_LINK_ARC) return entry;
+        return { ...entry, group };
+      });
+    }
+    features = [
+      ...features,
+      {
+        id: nextOpeningFeatureId(working),
+        ...style,
+        segmentId: cut.segmentId,
+        arcFraction: cut.arcFraction,
+        width: cut.width,
+        group,
+      },
+    ];
+    dirtySegmentIds.add(cut.segmentId);
+  }
+  return {
+    record: { ...record, features, path: { ...record.path, features } },
+    dirtySegmentIds: [...dirtySegmentIds],
+  };
 }
 
 export class EditorController {
@@ -136,6 +331,14 @@ export class EditorController {
      * a window was not carvable at all.
      */
     this.constructionOpening = { kind: null, profile: 'round', dressed: true };
+    /**
+     * Explicit step and grid snapping for the wall tool.
+     *
+     * Ctrl means "suppress snapping" everywhere here, so it cannot also be what
+     * switches quantisation *on*: that is this toggle, and it starts off because
+     * free placement is the default the plan advertises.
+     */
+    this.constructionStepSnap = false;
     /** Lets a menu arm a cut for pointers that cannot hold Alt. */
     this.constructionCutArmed = false;
     /** `{ constructionId, s }` under the pointer, for the raise/lower gesture. */
@@ -226,6 +429,7 @@ export class EditorController {
       constructionMode: this.constructionMode,
       constructionHeight: this.constructionHeight,
       constructionThickness: this.constructionThickness,
+      constructionStepSnap: this.constructionStepSnap,
       selectedConstruction: this.selectedConstructionId
         ? this.constructionStore?.get(this.selectedConstructionId) ?? null
         : null,
@@ -365,6 +569,18 @@ export class EditorController {
   /** Arm the next drag to carve rather than draw, as holding Alt would. */
   armConstructionCut(armed = true) {
     this.constructionCutArmed = Boolean(armed);
+    this.emitState();
+  }
+
+  /**
+   * Turn quantised snapping on or off for the wall tool.
+   *
+   * Covers the step under the height and width handles and the grid an anchor
+   * drag may acquire, so the whole tool has one snapping story: off by default,
+   * explicitly enabled here, and suppressed for as long as Ctrl is held.
+   */
+  setConstructionStepSnap(enabled) {
+    this.constructionStepSnap = Boolean(enabled);
     this.emitState();
   }
 
@@ -719,11 +935,7 @@ export class EditorController {
     const records = this.constructionStore.list();
     const cuts = resolveCutStroke(stroke, records, {
       arcTableFor: (id) => this.constructionView?.arcTableFor(id) ?? null,
-      heightAt: (record, s) => {
-        const arcTable = this.constructionView?.arcTableFor(record.id);
-        if (!arcTable) return record.dimensions.height;
-        return createWallTopProfile(record, arcTable).heightAt(s);
-      },
+      heightAt: (record, s) => this.openingCrownAt(record, s),
     });
     if (cuts.length === 0) {
       this.emitNotice('Draw across a wall to carve an arch, or up to one for a door.', true);
@@ -744,56 +956,20 @@ export class EditorController {
       const before = this.constructionStore.get(constructionId);
       if (!before) continue;
       const arcTable = this.constructionView?.arcTableFor(constructionId);
-      let working = before;
-      const dirty = new Set();
-      for (const cut of wallCuts) {
-        const featureId = nextOpeningFeatureId(working);
-        const style = this.cutFeatureStyle(cut);
-        const group = style.kind === 'window'
-          ? resolveWindowGroup(
-            working,
-            { segmentId: cut.segmentId, arcFraction: cut.arcFraction },
-            arcTable,
-            { link },
-          )
-          : null;
-        let features = working.features;
-        if (group && arcTable) {
-          const s = arcTable.toArc(cut.segmentId, cut.arcFraction);
-          features = features.map((entry) => {
-            if (entry.kind !== 'window' || entry.segmentId !== cut.segmentId) return entry;
-            const other = arcTable.toArc(entry.segmentId, entry.arcFraction);
-            if (Math.abs(other - s) > WINDOW_LINK_ARC) return entry;
-            return { ...entry, group };
-          });
-        }
-        features = [
-          ...features,
-          {
-            id: featureId,
-            ...style,
-            segmentId: cut.segmentId,
-            arcFraction: cut.arcFraction,
-            width: cut.width,
-            group,
-          },
-        ];
-        dirty.add(cut.segmentId);
-        working = {
-          ...working,
-          features,
-          path: { ...working.path, features },
-        };
-        added += 1;
-      }
-      const after = this.constructionStore.update(constructionId, working, {
-        dirtySegmentIds: [...dirty],
+      const { record: working, dirtySegmentIds } = applyCutFeatures(before, wallCuts, {
+        arcTable,
+        link,
+        styleFor: (cut) => this.cutFeatureStyle(cut),
       });
+      const after = this.constructionStore.update(constructionId, working, {
+        dirtySegmentIds,
+      });
+      added += wallCuts.length;
       batch.push(Object.freeze({
         kind: 'construction',
         before,
         after,
-        dirtySegmentIds: Object.freeze([...dirty]),
+        dirtySegmentIds: Object.freeze([...dirtySegmentIds]),
         materialOnly: false,
         dropped: 0,
       }));
@@ -811,6 +987,58 @@ export class EditorController {
       this.emitNotice(`Carved ${added} opening${added === 1 ? '' : 's'}.`);
       this.emitMap();
     }
+  }
+
+  /**
+   * Show what the cut stroke would carve, without carving it.
+   *
+   * The draft is the wall's own record carrying the tentative openings, so the
+   * preview shell carves the real contour — the same `OpeningLayout` arch, sill
+   * and width the commit will produce. Nothing is written to the store while the
+   * pointer is down: the openings land on release, which is what keeps the drag
+   * off the masonry build.
+   */
+  previewCutStroke(stroke, { link = true } = {}) {
+    const preview = this.resolveCutPreview(stroke, { link });
+    if (!preview) {
+      this.constructionView.clearDraft();
+      return;
+    }
+    this.constructionView.setDraft(preview.record, {
+      constructionId: preview.constructionId,
+      valid: true,
+    });
+  }
+
+  /** The one wall a cut stroke is about to carve, as a draft record. */
+  resolveCutPreview(stroke, { link = true } = {}) {
+    if (!this.constructionStore || stroke.length < 2) return null;
+    const near = constructionsNear(this.constructionStore.list(), stroke);
+    if (near.length === 0) return null;
+    const cuts = resolveCutStroke(stroke, near.map(({ record }) => record), {
+      arcTableFor: (id) => this.constructionView?.arcTableFor(id) ?? null,
+      heightAt: (record, s) => this.openingCrownAt(record, s),
+    });
+    if (cuts.length === 0) return null;
+    // Nearest first: that is the wall the pointer is on. The view drafts one
+    // wall at a time, and the stroke has not been resolved far enough to say
+    // which of several crossed walls the user is looking at.
+    const target = near.find(({ record }) => cuts.some((cut) => cut.constructionId === record.id));
+    if (!target) return null;
+    const wallCuts = cuts.filter((cut) => cut.constructionId === target.record.id);
+    const { record } = applyCutFeatures(target.record, wallCuts, {
+      arcTable: this.constructionView?.arcTableFor(target.record.id) ?? null,
+      link,
+      styleFor: (cut) => this.cutFeatureStyle(cut),
+    });
+    return { constructionId: target.record.id, record };
+  }
+
+  /** The wall top above arc position `s`, which sizes an opening it contains. */
+  openingCrownAt(record, s) {
+    const arcTable = this.constructionView?.arcTableFor(record.id);
+    if (!arcTable) return record.dimensions.height;
+    return createWallTopProfile(record, arcTable).heightAt(s);
   }
 
   /** Insert a node where the pointer meets a wall. Returns true if it landed. */
@@ -928,12 +1156,19 @@ export class EditorController {
     if (!point) return;
     if (this.constructionDrawing && this.constructionStroke) {
       const previous = this.constructionStroke.at(-1);
-      if (Math.hypot(point.x - previous.x, point.z - previous.z) >= 0.12) {
+      const advanced = Math.hypot(point.x - previous.x, point.z - previous.z) >= 0.12;
+      if (advanced) {
         this.constructionStroke.push(point);
       }
       if (this.constructionCutStroke) {
-        // A cut is not a wall, so it gets no wall preview. Masonry is never
-        // touched during the drag either — the openings land on commit.
+        // A cut is not a wall, so it gets no wall preview. It gets the wall's
+        // own shell instead, carved by the opening it would leave: the arch and
+        // its width are visible before release, and the drag never touches
+        // masonry. Resolving only on a new sample keeps the path off the
+        // candidate query in between.
+        if (advanced) {
+          this.previewCutStroke(this.constructionStroke, { link: snappingEnabled(event) });
+        }
         return;
       }
       if (this.constructionStroke.length >= 2) {
@@ -983,13 +1218,15 @@ export class EditorController {
         return;
       }
       // Snapping is on by default; Left Ctrl suppresses it. Both source
-      // descriptions of the reference game reduce to this one rule.
+      // descriptions of the reference game reduce to this one rule, and the
+      // handles read the same predicate. The grid joins in only when the
+      // precision toggle asked for it, because free placement is the default.
       const snap = resolveAnchorSnap({
         candidate: point,
         path: drag.before.path,
         anchorId: drag.anchorId,
         others: this.otherConstructionPaths(drag.constructionId),
-        enabled: !event.ctrlKey,
+        ...anchorSnapOptions(this.constructionStepSnap, event),
       });
       drag.snap = snap;
       let path = moveCubicBezierAnchor(
@@ -1036,22 +1273,25 @@ export class EditorController {
       this.constructionCutArmed = false;
       this.constructionView.clearDraft();
       if (cutting) {
-        // Left Ctrl suppresses auto-linking nearby windows into a shared group.
-        this.commitCutStroke(stroke, { link: !event.ctrlKey });
+        // Left Ctrl suppresses auto-linking nearby windows into a shared group,
+        // exactly as it suppresses snapping — the same one predicate.
+        this.commitCutStroke(stroke, { link: snappingEnabled(event) });
         this.emitState();
         return;
       }
-      if (
-        stroke.length < 2
-        || Math.hypot(stroke.at(-1).x - stroke[0].x, stroke.at(-1).z - stroke[0].z) < 0.5
-      ) {
+      const strokeInfo = isUsableConstructionStroke(stroke);
+      if (!strokeInfo.usable) {
         this.emitNotice('Drag at least 0.5 metres to create a wall.', true);
         this.emitState();
         return;
       }
       try {
         const id = this.constructionStore.nextConstructionId();
-        const path = createCubicBezierPathFromStroke(stroke, {
+        // Hand a closed loop its own start back, so the fitter drops the
+        // duplicated endpoint and the loop closes on one seam, not a stub.
+        const points = strokeInfo.closed ? [...stroke.slice(0, -1), stroke[0]] : stroke;
+        const path = createCubicBezierPathFromStroke(points, {
+          closed: strokeInfo.closed,
           anchorPrefix: `${id}-anchor`,
           segmentPrefix: `${id}-segment`,
         });
@@ -1064,7 +1304,9 @@ export class EditorController {
         });
         this.commitHistory(change);
         this.setSelectedConstruction(id);
-        this.constructionMode = 'edit';
+        // The tool stays in draw mode. The plan's first minute is "release to
+        // keep it, then draw the next one", and selecting the new wall is not an
+        // edit gesture, so neither may switch the pointer away from drawing.
         this.emitMap();
       } catch (error) {
         this.emitNotice(error.message, true);

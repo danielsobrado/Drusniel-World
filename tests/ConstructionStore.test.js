@@ -56,9 +56,19 @@ test('construction commands provide reversible snapshots and local dirty segment
   assert.deepEqual(moved.after.path.anchors[1].position, [9, 4]);
 
   store.applyChange(moved, 'undo');
-  assert.deepEqual(store.get(current.id), moved.before);
+  // Undo restores the previous authored state, but the store re-normalizes the
+  // record on the way back in and keeps revisions monotonic across a world
+  // replacement (see test/construction-store-runtime-revision.test.js). So the
+  // revision watermark is bumped on undo — compare the authored content, not the
+  // byte-exact snapshot, and pin the monotonic bump explicitly.
+  const authored = ({ revision, ...rest }) => rest;
+  const undone = store.get(current.id);
+  assert.ok(undone.revision > moved.after.revision, 'undo must bump the watermark');
+  assert.deepEqual(authored(undone), authored(moved.before));
   store.applyChange(moved, 'redo');
-  assert.deepEqual(store.get(current.id), moved.after);
+  const redone = store.get(current.id);
+  assert.ok(redone.revision > undone.revision, 'redo must stay monotonic');
+  assert.deepEqual(authored(redone), authored(moved.after));
   store.applyChange(created, 'undo');
   assert.equal(store.size, 0);
 });

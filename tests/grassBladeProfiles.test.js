@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   GENERATED_PROFILE_ID,
+  GENERATED_SHAPE_IDS,
   describeProfileSets,
   generatedProfile,
   resampleProfile,
   resolveProfileSet,
+  shapedProfile,
 } from '../src/editor/stylized/grassBladeProfiles.js';
 
 const AUTHORED = {
@@ -86,4 +88,62 @@ test('a partly baked set is offered but reported as incomplete', () => {
   assert.equal(described.find((set) => set.id === 'authored').complete, true);
   // `generated` is not in the manifest and must not be counted as missing.
   assert.equal(described.find((set) => set.id === 'generated').complete, true);
+});
+
+test('the donor silhouette families are offered without an asset to bake', () => {
+  // These are generated outlines, so a set naming only them resolves against an
+  // empty manifest. That is the whole point of them: a biome can be given a
+  // silhouette without anything to extract first.
+  const sets = Object.fromEntries(GENERATED_SHAPE_IDS.map((id) => [id, { profiles: [id] }]));
+  const described = describeProfileSets({ manifest: null, sets });
+  for (const id of GENERATED_SHAPE_IDS) {
+    assert.equal(described.find((set) => set.id === id).complete, true, `${id} reported incomplete`);
+    const resolved = resolveProfileSet({ manifest: null, sets, setId: id, segments: 3 });
+    assert.equal(resolved.length, 1);
+    assert.equal(resolved[0].id, id);
+  }
+});
+
+test('every silhouette family is a distinct outline, not a rescale of one', () => {
+  const halfWidthAt = (id, t) => {
+    const profile = shapedProfile(id);
+    // Sampled rather than indexed, because the shapes are defined by continuous
+    // functions and the arrays are just their samples.
+    const last = profile.halfWidth.length - 1;
+    const position = Math.round(t * last);
+    return profile.halfWidth[position];
+  };
+  // Slender tapers evenly; a reed holds near-full width most of the way up and
+  // then collapses into the tip; a broadleaf is widest at the base with a round
+  // shoulder. Checked mid-height, where the three actually differ.
+  assert.ok(halfWidthAt('reed', 0.5) > halfWidthAt('slender', 0.5));
+  assert.ok(halfWidthAt('broadleaf', 0.5) > halfWidthAt('slender', 0.5));
+  // The reed's collapse is the point of it: nearly the same width at half height
+  // as at a quarter, and almost gone by the top. Slender has halved by then.
+  const reedHold = halfWidthAt('reed', 0.5) / halfWidthAt('reed', 0.25);
+  assert.ok(reedHold > 0.95, `reed should hold its width, ratio ${reedHold}`);
+  assert.ok(halfWidthAt('reed', 0.97) < 0.2, 'reed should collapse into its tip');
+  assert.ok(halfWidthAt('slender', 0.5) / halfWidthAt('slender', 0.25) < 0.7);
+  // ...and its character includes being thin overall: the donor's 0.55 scale comes
+  // through as a profile-level scale, so the instance width roll cannot undo it.
+  assert.ok(shapedProfile('reed').widthScale < shapedProfile('slender').widthScale);
+  assert.ok(shapedProfile('broadleaf').widthScale < shapedProfile('slender').widthScale);
+  // Normalized, so "halfWidth" keeps meaning "units of this blade's widest point".
+  for (const id of GENERATED_SHAPE_IDS) {
+    const profile = shapedProfile(id);
+    assert.equal(Math.max(...profile.halfWidth), 1, `${id} is not normalized`);
+    assert.ok(profile.halfWidth.every((value) => value >= 0 && value <= 1), `${id} leaves [0,1]`);
+    assert.ok(profile.curve.every((value) => value === 0), `${id} should not arc`);
+  }
+  assert.equal(shapedProfile('tufted'), null, 'the donor billboard family has no blade profile');
+  assert.equal(shapedProfile('nonsense'), null);
+});
+
+test('the silhouette scale survives resampling and defaults where there is none', () => {
+  // The geometry reads it per blade, off whichever shape that blade rolled, so it
+  // has to travel with the profile rather than with the set.
+  assert.equal(resampleProfile(shapedProfile('reed'), 3).widthScale, 0.55);
+  assert.equal(resampleProfile(shapedProfile('slender'), 3).widthScale, 1);
+  // An extracted profile predates the field and must read as unscaled.
+  assert.equal(resampleProfile(AUTHORED, 3).widthScale, 1);
 });

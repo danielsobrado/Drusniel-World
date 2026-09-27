@@ -110,58 +110,6 @@ export function buildGrassScatter({
   };
 }
 
-/**
- * Compact a full-density grass scatter down to `targetClumpsPerCell` per eligible cell.
- * Matches main-thread generation which uses clump indices `0..target-1`.
- */
-export function compactGrassScatter(scatter, targetClumpsPerCell, chunkSize) {
-  if (!scatter || targetClumpsPerCell >= scatter.clumpsPerCell) {
-    return scatter;
-  }
-  const sourceClumps = scatter.clumpsPerCell;
-  const base = new Float32Array(chunkSize * chunkSize * targetClumpsPerCell * 3);
-  const parameters = new Float32Array(chunkSize * chunkSize * targetClumpsPerCell * 4);
-  let read = 0;
-  let write = 0;
-  let minimumHeight = Number.POSITIVE_INFINITY;
-  let maximumHeight = Number.NEGATIVE_INFINITY;
-
-  // Source was written cell-major over eligible cells only — recover by walking
-  // the packed source count in clumpsPerCell strides is wrong when tiles skip.
-  // Instead: rebuild from the packed stream by grouping consecutive clumps.
-  // Eligible cells produce exactly `sourceClumps` instances each in order.
-  const groups = scatter.count / sourceClumps;
-  for (let group = 0; group < groups; group += 1) {
-    for (let clump = 0; clump < targetClumpsPerCell; clump += 1) {
-      const src = (group * sourceClumps + clump) * 3;
-      const dst = write * 3;
-      base[dst] = scatter.base[src];
-      base[dst + 1] = scatter.base[src + 1];
-      base[dst + 2] = scatter.base[src + 2];
-      const srcP = (group * sourceClumps + clump) * 4;
-      const dstP = write * 4;
-      parameters[dstP] = scatter.parameters[srcP];
-      parameters[dstP + 1] = scatter.parameters[srcP + 1];
-      parameters[dstP + 2] = scatter.parameters[srcP + 2];
-      parameters[dstP + 3] = scatter.parameters[srcP + 3];
-      minimumHeight = Math.min(minimumHeight, base[dst + 1]);
-      maximumHeight = Math.max(maximumHeight, base[dst + 1]);
-      write += 1;
-    }
-    read += sourceClumps;
-  }
-  void read;
-
-  return {
-    base,
-    parameters,
-    count: write,
-    clumpsPerCell: targetClumpsPerCell,
-    minimumHeight,
-    maximumHeight,
-  };
-}
-
 export function buildFlowerScatter({
   page,
   chunkSize,

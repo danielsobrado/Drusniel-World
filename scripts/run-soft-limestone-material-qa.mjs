@@ -84,6 +84,12 @@ const construction = createConstructionMaterials(normalizeConstructionRecord({
   features: [],
 }));
 
+// Derive the mortar parity check from source on both sides rather than a pasted
+// hex literal, so retuning either the construction mortar profile or the shared
+// workshop surface profile keeps the gate honest instead of silently drifting.
+const constructionMortar = mortarProfile('soft-limestone-rubble');
+const workshopMortarColor = softProfile.material.mortarColor;
+
 const gates = {
   legacyUnchanged: legacy.color === '#c4b794' && legacy.base[0] === 194,
   softLowerChroma: meanChroma(soft) < meanChroma(legacy) * 0.5,
@@ -93,7 +99,7 @@ const gates = {
   workshopParity: workshop.stone.bumpScale === construction.stone.bumpScale
     && workshop.stone.envMapIntensity === construction.stone.envMapIntensity
     && workshop.stone.normalScale.x === construction.stone.normalScale.x,
-  mortarAligned: mortarProfile('soft-limestone-rubble').color === '#74746d',
+  mortarAligned: constructionMortar.color === workshopMortarColor,
 };
 
 const allPass = Object.values(gates).every(Boolean);
@@ -138,7 +144,7 @@ Geometry, hashes, and save schema are unchanged. Style remains opt-in via
 | Soft bump weaker than legacy default | ${gates.softBumpReduced ? 'PASS' : 'FAIL'} |
 | Soft normal weaker than legacy default | ${gates.softNormalReduced ? 'PASS' : 'FAIL'} |
 | Workshop ↔ construction surface parity | ${gates.workshopParity ? 'PASS' : 'FAIL'} |
-| Mortar colour \`#74746d\` | ${gates.mortarAligned ? 'PASS' : 'FAIL'} |
+| Mortar colour \`${constructionMortar.color}\` | ${gates.mortarAligned ? 'PASS' : 'FAIL'} |
 
 Overall: **${allPass ? 'PASS' : 'FAIL'}**
 

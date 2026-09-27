@@ -113,7 +113,7 @@ data source for streaming · **Ideas** = reuse the technique or tuning, write ne
 |---|---|---|---|
 | Coastal-jungle kit (palms, broadleaf, ferns, vines, climbers, split-leaf, banana) | Generated `tropical_tall` only | **Port** | Biomes 5 & 7 (and 3 savanna edges); v2 kit with Meshopt |
 | `CoastalJungleCulling/Visibility` distance keep-curves | `StylizedLodRuntime`, impostors | **Ideas** | Keep ours; take the keep-curve tuning |
-| Grass silhouettes (slender/reed/broadleaf/tufted) atlases | `GrassBladeProfilePool` | **Adapt** | New blade profile sets per biome (reed → wetland 12, tufted → tundra 10) |
+| Grass silhouettes (slender/reed/broadleaf/tufted) atlases | `GrassBladeProfilePool` | **Adapt** | Done 2026-09-27: `slender`/`reed`/`broadleaf` ported as generated profiles and mapped to biomes (`biomeSets`). `tufted` is a billboard family with no near-band equivalent here — left out |
 | `InteractionMap` (persistent trampling, recovery) | Rock trampling only | **Port** | Player + NPC feet paint a scrolling ring texture |
 | `UnderstorySystem` + billboards, `MeadowDetails`, `WildGrassSystem` | Bushes, flowers, ground detail | **Ideas** | Cherry-pick species/tuning; our streaming stays |
 | `LeafSystem` (falling leaves, zone variants, wind advected) | none | **Adapt** | Emit near deciduous canopy (biome 6/8) from tree manifest |
@@ -341,25 +341,21 @@ viewport-texture rule holds (medium keeps no copied depth).
    residency variants for taiga (9) and tundra (10) edges.
 10. **Deep-snow wake** (`SnowSurfWake`), later, after footprints ship.
 
-### 5.6 Phase 6: NPCs and crowds (≈6–8 days, after Phase 1)
+### 5.6 Phase 6: NPCs and crowds — **dropped (2026-09-27)**
 
-The sim has settlements, population, factions, combat and adventuring parties with no
-visual presentation. `NpcSystem` shows the pattern: wander targets, clip cross-fades,
-turn rate.
+Dropped by decision, along with the giant serpents of §10. The sim still has
+settlements, population, factions, combat and adventuring parties with no visual
+presentation, and that is now accepted rather than planned: none of this phase is
+being built, so nothing below is a target.
 
-- `src/sim/presentation` → `NpcPresentationView`: pulls agents near the camera from
-  sim queries and assigns archetypes (villager, goblin, paladin, cleric, wizard, dwarf,
-  serpent master) by settlement culture, faction and role.
-- **Crowd LOD** (NpcSystem has none, so this is required):
-  - ≤ 30 m: full skinned mesh, per-character mixer, foot contacts, contact shadow;
-  - 30–120 m: shared mixer per archetype × clip with phase offsets. Mixer updates are
-    throttled (every 2nd–4th frame), with no contacts;
-  - 120–300 m: baked vertex-animation texture (VAT) instanced mesh per archetype (bake
-    script from the GLB clips), one draw per archetype;
-  - > 300 m: none, or an impostor dot on the map.
-- Behaviours: villagers amble between buildings, work spots and the tavern; guards patrol
-  roads; goblins roam wilds/shores and alternate walk/run. Driven by sim state, not random.
-- Culling: frustum + distance; register in perf counters.
+What was assessed, for the record, in case it is ever picked up again: the donor's
+`NpcSystem` pattern is wander targets, clip cross-fades and a turn rate, pulled from
+sim queries near the camera and assigned archetypes by settlement culture, faction and
+role. It would have needed a crowd LOD the donor does not have — full skinned mesh
+with per-character mixers inside ~30 m, a shared mixer per archetype and clip with
+phase offsets out to ~120 m, a baked vertex-animation texture instanced per archetype
+to ~300 m, and nothing or a map dot beyond — plus frustum and distance culling wired
+into the perf counters.
 
 ### 5.7 Phase 7: Weather, time of day, atmosphere (≈4–5 days)
 
@@ -386,11 +382,17 @@ turn rate.
   `tileIds` for tropical seasonal forest (5) and tropical rainforest (7), plus palm-only
   coastal edges for savanna (3) and hot desert (1) oases. Meshopt decoding is required. Species go
   into `ForestSpeciesRegistry` so impostor baking covers them (`bake:impostors`).
-- **Grass silhouettes per biome:** add reed / broadleaf / tufted / slender profile sets to
-  `grassBladeProfiles` (wetland → reed, grassland → slender + broadleaf, tundra → tufted,
-  savanna → tall slender, dry tint).
+- **Grass silhouettes per biome:** done 2026-09-27. `slender`, `reed` and `broadleaf`
+  are ported as generated profiles (`grassBladeProfiles.js`), because the donor's
+  fourth family, `tufted`, is a billboard shape and this project's near band is a
+  blade strip. `stylizedSurface.grass.bladeProfiles.biomeSets` gives a biome a set,
+  chosen per chunk by the majority biome it stands on. Wetland gets reeds, grassland
+  a slender/broadleaf mix, the forest biomes a narrower blade.
 - **Trampling:** port `InteractionMap` as a player-centred scrolling texture read by
-  `StylizedGrassMaterial` (bend + slow recovery), painted by footstep events.
+  `StylizedGrassMaterial` (bend + slow recovery), painted by footstep events. Still
+  open: today the field reads the shared snow/sand footprint deformation
+  (`groundDeformationNode`) for trampling and a static rock-influence texture for
+  boulders, which covers the footprint case but not crush direction or recovery.
 - **Trails:** take `LandscapePaths`' walkable grading (forward/backward max-grade
   profile, blend within `terrainWidth`, terraced `cut` gorges) and apply it to Azgaar routes
   (roads/trails) in the chunk worker. Walkable roads over the exaggerated relief matter for
@@ -410,10 +412,10 @@ turn rate.
 ## 6. Recommended order and milestones
 
 ```text
-P0 foundations ──► P1 characters ──► P6 NPC crowds
+P0 foundations ──► P1 characters
        │
        ├──► P2 waterfalls ──► P3 lakes (decision)
-\n       ├──► P4 coast & sea
+       ├──► P4 coast & sea
        ├──► P5 snow ──► (P8 trails/relief share the terrain-change QA window)
        ├──► P7 weather/time/atmosphere
        └──► P9 audio (can start any time after P1's footstep bus)
@@ -423,7 +425,7 @@ P0 foundations ──► P1 characters ──► P6 NPC crowds
   and audible.
 - **Milestone B, "water you remember":** P2 + P4 (+ P3 if approved).
 - **Milestone C, "seasons of Eldara":** P5 + P7 + P8.
-- **Milestone D, "living towns":** P6.
+- ~~**Milestone D, "living towns":** P6.~~ Dropped 2026-09-27 with the NPC phase.
 
 ## 7. Decisions (resolved 2026-09-24)
 
@@ -469,12 +471,54 @@ out.
 | Giant serpents (`b755559`, `05ba54c`) | Procedural giant snakes: species, a worker-baked skin, and a body that follows its path | **Port** as wildlife in jungle and wetland | new `stylized/wildlife/serpents/` |
 | NPCs (`7cd863f`, `9c56206`, `09a07d2`, `41507c7`, `e502ff2`) | NPC kinds (villager, goblin), village farmers, per-camera culling, minimap markers | **Fold into P6** with its crowd LOD | `NpcPresentationView` |
 | Assisted camera follow (`f149f95`, `d06e528`) | Camera follows the heading unless you look around (touch only) | **Skip**: desktop input | — |
-| Loading and draw-call work (`e502ff2`, `1b08080`, `2ec9162`, `93fd222`, `2193353`) | Scene preprocessing, asset load context, one grass batch per LOD, per-variant low-LOD tree shadows, resolution-independent tree LOD | **Ideas only**: our streaming and residency differ. Revisit tree shadow casters under perf QA | — |
+| Loading and draw-call work (`e502ff2`, `1b08080`, `2ec9162`, `93fd222`, `2193353`) | Scene preprocessing, asset load context, **one grass batch per LOD**, per-variant low-LOD tree shadows, resolution-independent tree LOD | **Ideas only**: our streaming and residency differ. Revisit tree shadow casters under perf QA. Assessed 2026-09-27: the one-batch-per-LOD trick stays out — it exists to stop a camera turn rebuilding a batch, and this project's chunks are already per-slot resident with a band swap that shares instance buffers, so there is nothing to rebuild | — |
 | Grass density and blinking-strip fix (`a42791c`) | Lives in `RecoveredGrassMaterial` | **Excluded** (recovered lineage) | — |
 | Character occlusion smoothstep fix (`5501d02`) | Reversed smoothstep | **Already fixed here** | — |
 
-Order: audio v2, ambient effects, serpents, beach and water life, surface detail,
-then NPCs with P6.
+Order: audio v2 (done), ambient effects (done), then beach and water life,
+surface detail, and the rest of §11. The serpents and the NPCs that followed
+them in this list are dropped — see §5.6 and §11.
+
+## 11. Re-scope: what is left, and the performance filter (2026-09-27)
+
+The scope of this merge is now **every technique in grass-test that works well and is
+already cheap**. Two areas are dropped by decision and are no longer targets: the
+**NPC crowds** (P6, §5.6) and the **giant serpents** (§10). Everything else in §3 and
+§10 that is not already logged as done in §9 is still to do.
+
+The filter, which §3 already applies area by area and which decides every remaining
+call: take it if it costs a shader or a bounded per-frame update, leave it if it
+re-renders the scene, reads the viewport depth buffer where it can be avoided, uses a
+planar reflection or a cube probe, or iterates the whole map. This project's SSR/TAA
+post graph stays authoritative, and terrain materials keep to the documented
+viewport-texture rule.
+
+### Still to do, in order
+
+| # | Area | Donor source | Target here |
+|---|---|---|---|
+| 1 | Beach and water life | `world/BeachScatter.js`, `world/BeachStarfish.js`, `world/CoastalGroundcover.js`, `water/SeabedRocks.js`, `water/SeaAlgae.js`, `water/LakeFlora.js`, `water/RiverDetails.js`, `world/BeachPalms.js` | scatter/stone-sink layers keyed on the water field's shore distance, in the `coastStones` pattern |
+| 2 | Surface detail | rock streaks/strata/crevices/ledge snow, bark weathering, waterline algae, straw fringe, contact shade | `StylizedRockView`, tree materials, and the baked terrain terms |
+| 3 | Deep water | bathymetry-driven absorption and colour, offshore whitecaps, crest transmission, `UnderwaterPerformanceController` | the ocean branch of `StylizedWaterMaterial`, plus a submerged-quality policy |
+| 4 | Tropical kit | coastal-jungle v2 objects | residency layers for biomes 5 and 7, palm-only edges for 3 and 1 |
+| 5 | Trampling | `grass/InteractionMap.js` | a persistent grass disturbance field read by `StylizedGrassMaterial` |
+| 6 | Alpine trees | `tree10/11` | taiga and tundra residency variants, after an offline extract |
+| 7 | Valley fog | `valleyFog.js` | quality-gated, region-weighted gorge mist |
+| 8 | Deep-snow wake | `SnowSurfWake` / `snowWakeSpine` | on top of the footprint deformation field |
+| 9 | Ambient tail | blown snow and sand streaks, grass gust sheen, frost | the existing `stylized/ambient/` layer |
+| 10 | Heat shimmer, jungle mist | read the scene or depth | A/B each alone before it lands |
+| 11 | Couloirs, crest notches | `MountainNoise` detail | `world/MountainRidges.js`; terrain change, so re-import and `docs/perf-qa.md` |
+| 12 | Day/night, stars, moon | donor has presets only | the P7 tail: an animated cycle, stars, a moon disc distinct from the sun |
+
+Item 1's donor report is already gathered; items 2–12 are inventoried as they are
+started rather than up front, because the donor's fixed-map assumptions mean each one
+has to be re-derived against a field before it is worth writing down.
+
+### Open from the grass pass
+
+The browser A/B for the two-band LOD, the resumable build and the density coverage
+(`docs/perf-qa.md`, "Grass two-band LOD and density coverage"): the numbers there are
+reasoned, not measured, because this pass had no GPU machine.
 
 ## 9. Implementation log
 
@@ -981,3 +1025,137 @@ then NPCs with P6.
     - no shader errors.
   - Not yet: blown snow and sand streaks in the terrain, grass gust sheen, frost.
     Heat shimmer and jungle mist read the scene or depth and need an A/B first.
+- **2026-09-27, grass: the two-band LOD, a resumable build, and density coverage.**
+  Grass was the least-ported subsystem, and the donor's grass pass is the one place
+  it does something this project had no equivalent of. Three changes, plus the
+  silhouette families (§5.8).
+  - *The far band is live.* `nearRadius` is 0 rather than 1, so the eight chunks
+    around the camera draw the single-triangle blade and only the camera's own chunk
+    keeps the tapered one. No ring and no chunk is added — the resident set is the
+    same nine either way — so the saving is purely on the draw side: 40 triangles per
+    clump down to 8 across eight chunks. Until now `nearRadius === residentRadius`
+    meant `farGeometry` was never even built, so the whole band was dead code.
+    Note the `residentRadius: 2` regression in `docs/perf-qa.md` is *not* answered by
+    this: it was build cost, and this adds no build.
+  - *The per-chunk build is one resumable pass.* A page arrives at full density, and
+    the chunk takes a prefix of each cell's clumps with the canopy taken out. That
+    was `compactGrassScatter` + `filterScatterByForest`: two walks over two freshly
+    allocated copies of the chunk, about 1.4 MB of garbage, in one frame.
+    `grassScatterBuild.js` does it in a single pass straight into the instance
+    buffers, resumable at `streaming.grassScatterGroupsPerSlice` source cells a
+    frame. `compactGrassScatter` is deleted; the canopy filter is now reached by the
+    main-thread fallback path too, which previously grew grass straight through the
+    forest floor.
+  - *Ring boundaries are thinned, not stepped.* The per-ring compaction can only keep
+    whole clumps per cell, so a chunk's density is a step and the ring boundary is
+    where it shows; the last ring also used to end at a line. `grassLodCoverage` owns
+    the density law and retires blades by their own rank to make up the difference,
+    capped by an `outerFadeMeters` tail that hands over to the terrain shader's faked
+    ground cover. The rate is a *ratio* against what the chunk was compacted to, so
+    it can only thin — it cannot double-count the falloff or invent blades.
+    Blade rank rides in the spare channel of `bladeWind`, rolled from the same index
+    in both bands so a chunk crossing the band boundary retires the same blades
+    either side.
+  - *Silhouettes.* `slender`, `reed` and `broadleaf` are ported as generated profiles
+    with the donor's per-shape width scale (what makes a reed a reed), and
+    `bladeProfiles.biomeSets` gives a biome a set — wetland reeds, a grassland mix,
+    narrower blades under forest. The donor's `tufted` is a billboard family and is
+    deliberately absent: the near band here is a blade strip, and a billboard
+    silhouette would need the far-card system below.
+  - *Found and fixed on the way:* the material measured every distance from the
+    canonical `worldXZ`, which is the same vector as render space only while the
+    floating origin sits at the world's centre. On an imported planet-scale world the
+    flutter fade and the blade-normal fade were therefore permanently off.
+  - *Tests:* coverage law and its seam invariants, the build's equivalence to the
+    two-pass version it replaced and its insensitivity to slice size, the slot's
+    coverage corners and interrupted-build invalidation, the silhouette family
+    characters, and biome-set resolution. The coverage shading is assembled in Node
+    (`tests/grassLodCoverageShading.test.js`), which caught a missing `uniform`
+    import that would have drawn a blank field.
+  - *Not done:* the far-grass billboard cards and their atlas. Assessed and left out:
+    the donor needs them because its far representation is a blade, but here the far
+    band is already one triangle per *clump* — 96 blades — which is cheaper per blade
+    than a card, and this grass is fill-bound rather than triangle-bound, so a card
+    would not pay for its atlas, material and second instance buffer. `tufted` and
+    the mid patch representation stay out with it. The browser A/B for the three
+    changes above is outstanding (`docs/perf-qa.md`).
+- **2026-09-27, §11 item 1 starts: seabed rocks.** The first piece of beach and water
+  life, and the one that needed no new view: boulders are stones, so they ride the
+  rock layer as a third placement mode beside `rocks.riverbank` and `rocks.coast`,
+  and inherit drawing, fading, collision and tree blocking from it.
+  - *`seabedRocks.js`* is `coastStones.js`'s shape with a depth band instead of a
+    height band, because a coast here is ground standing below the water rather than
+    an analytic curve: candidates on a jittered grid are kept where the ground is
+    1.2–11 m below sea level, clustered so they gather in drifts. Five height probes
+    reject a chunk that is dry or too deep before a candidate is tried.
+  - *Where the donor's seaward bias went.* The donor clusters its boulders seaward of
+    the shoreline. Here the bias is toward the *shallows*, and for a harder reason
+    than taste: the water's colour saturates by about six metres (P4 above), so a
+    boulder deeper than that is drawn and never seen. `keep` falls off with depth and
+    reaches zero at `maxDepth` — measured on a test chunk, 27 stones at 2.5 m, 8 at
+    9 m, 2 at 10 m, none at 11 m.
+  - *`clusterNoise` moved* from `coastStones.js` to `stonePlacementSink.js`, where
+    both strand layers now share one copy rather than two.
+  - *Not yet:* starfish, strand-line shells and driftwood, coastal groundcover, sea
+    algae and the tropical palms. The first three need a view of their own — they are
+    not stones — so they are the next piece rather than a config change.
+- **2026-09-27, §11 item 1: shore life (starfish, shells, driftwood, creeping
+  leaves).** The donor generates all of this geometry in code, and that is the part
+  worth keeping: it costs no asset, no atlas and no load. The work was therefore
+  two small pieces and a wiring, not four new systems.
+  - *A layer can now take prototypes built in code.* `StylizedGroundDetailView`
+    grew `appendProceduralPrototypes`, which pushes the same bookkeeping
+    `appendVariants` does — height offsets, placement, water, biome and the new
+    strand rules — and then hands the new slice to the same
+    `createInstancedRenderers`. Everything downstream is unchanged: the same
+    deterministic per-chunk manifest, the same Matérn spacing, the same rebuild
+    path and the same disposal. A layer of these installs synchronously at boot
+    because there is nothing to fetch.
+  - *`strandPlacement.js`* is the band rule for the two sides of the waterline,
+    written as a sibling of `AquaticPlacement` because it answers the same question
+    with the other signal: `AquaticPlacement` reads the water field's kind, depth
+    and shore distance, and this reads metres above sea level, which is the only
+    signal there is on dry ground. A rule that names one side of its band is a
+    config error rather than a silent no-op.
+  - *`proceduralFlora.js`* holds the shapes — a ten-triangle starfish, an
+    eight-triangle scallop, a two-triangle leaf, a tube twig and a ribbon clump —
+    each authored at its **natural size**. That is a deliberate departure from the
+    donor's per-species scale: this project's ground-detail manifest carries one
+    scale band for a whole layer, so a starfish and a 1.6 m log can only differ in
+    size if their geometry differs. The layer's band is then variation around it.
+  - *The bands, read as a set:* shells 0.02–1.8 m above sea level, starfish
+    0.05–1.4, driftwood 0.1–2.4 (the strand line, above the swash), creeping leaves
+    1.4–26 inland. The layer's own 0.02–26 is the shore those sit inside, and the
+    validator refuses a species that strays past it or names no band at all.
+  - *Cost:* one draw call per prototype, two to ten triangles per instance, no
+    texture, no viewport read, nothing quality-gated. 96 candidates a chunk over a
+    resident radius of 2, most rejected by the band before they cost anything.
+  - *Not yet:* sea algae, lake flora and the tropical palms, and the seaweed sway
+    the donor puts on its underwater plants.
+- **2026-09-27, §11 item 1 finished but for the palms: water plants and their sway.**
+  Sea algae (seagrass, kelp, red tufts) and lake flora (eelgrass, waterweed,
+  pondweed, lily pads), all generated, all riding the aquatic layer the authored
+  lake plants already use.
+  - *The placement rule was already there.* `evaluateAquaticPlacement` takes a depth
+    band, a placement mode, a shore-distance band and a set of water kinds — which is
+    the donor's own species table, expressed in this project's water field. So each
+    species is a rule and a shape, not a new system: seagrass 0.6–4 m in sea or lake,
+    kelp 1.2–9 m sea only, red algae 0.8–7 m in both, eelgrass 0.5–5 m lake only,
+    waterweed 0.8–7 m, pondweed 1–8 m, and pads floating on the surface within 22 m
+    of a bank. The bands overlap on purpose — a bed that is only seagrass to 3 m and
+    only kelp past it has a line drawn across it.
+  - *Sway.* `plantSway.js` is the donor's `plantMaterial`: 0.3 for kelp, 0.18 for
+    seagrass, 0.1 for the algae. It is vertex-only, so it costs nothing per pixel and
+    nothing to disable, and its per-instance phase comes free from
+    `instanceDither.y` — the stable seed the lod runtime already writes for every
+    instanced detail — so a bed does not sway in lockstep without a new buffer.
+    Blades are authored one metre tall whatever the species so the shader can read
+    the height fraction straight off the vertex; the species' real height scales the
+    vertical only, or kelp would come out as broad as it is tall.
+  - *Two config errors the tests caught,* both of which would have placed nothing at
+    all: water kinds are numeric constants and not the strings `'ocean'`/`'lake'`, and
+    the layer has to be `enabled` for a view to exist to draw the species into.
+  - *Cost:* seven species, `blades x segments x 2` triangles each — 12 to 30 — over
+    the layer's existing 24 candidates a chunk. No new texture, no viewport read.
+  - *Not yet in this item:* the coastal palms, which need the coastal-jungle kit and
+    are §11 item 4.

@@ -5,3 +5,4 @@ tmp/
 debug.log
 **/debug.log
 *.glb
+.commandcode/

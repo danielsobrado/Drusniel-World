@@ -25,13 +25,16 @@ export class GrassBladeProfilePool {
     this.manifestError = null;
     this.setId = config.bladeProfiles?.set ?? 'generated';
     this.revision = 0;
-    this.near = null;
-    this.far = null;
-    this.resolve();
+    this.resolved = new Map();
+    this.resolvedRevision = -1;
   }
 
   get sets() {
     return this.config.bladeProfiles?.sets ?? {};
+  }
+
+  get biomeSets() {
+    return this.config.bladeProfiles?.biomeSets?.byTileId ?? {};
   }
 
   async load(baseUrl = '') {
@@ -56,10 +59,9 @@ export class GrassBladeProfilePool {
   }
 
   resolve() {
-    const shared = { manifest: this.manifest, sets: this.sets, setId: this.setId };
-    this.near = resolveProfileSet({ ...shared, segments: this.nearSegments });
-    this.far = resolveProfileSet({ ...shared, segments: this.farSegments });
     this.revision += 1;
+    this.resolved.clear();
+    this.resolvedRevision = -1;
   }
 
   /** Returns false when the set is already active, so a repeated UI selection does
@@ -72,13 +74,53 @@ export class GrassBladeProfilePool {
     return true;
   }
 
+  /**
+   * Which set a chunk standing mostly on `tileId` wears.
+   *
+   * A biome boundary crosses a chunk for free, so this is the chunk's majority
+   * biome rather than a boundary-accurate answer: a reed bed decides the shape of
+   * the meadow it spills into about as often as the other way round. The point is
+   * that wetland grass is a reed and tundra grass is not, not that the seam lands
+   * in the right place.
+   */
+  setForTile(tileId) {
+    if (tileId === null || tileId === undefined) return this.setId;
+    const mapped = this.biomeSets[tileId];
+    return mapped && this.sets[mapped] ? mapped : this.setId;
+  }
+
+  /**
+   * The resampled near and far bands for one set, resolved once and kept until the
+   * manifest or the selection changes. Chunks are the ones that rebuild, so a set
+   * shared by many chunks is only ever resolved once.
+   */
+  forSet(setId = this.setId) {
+    if (this.resolvedRevision !== this.revision) {
+      this.resolved.clear();
+      this.resolvedRevision = this.revision;
+    }
+    let entry = this.resolved.get(setId);
+    if (!entry) {
+      const shared = { manifest: this.manifest, sets: this.sets, setId };
+      entry = {
+        setId,
+        revision: this.revision,
+        near: resolveProfileSet({ ...shared, segments: this.nearSegments }),
+        far: resolveProfileSet({ ...shared, segments: this.farSegments }),
+      };
+      this.resolved.set(setId, entry);
+    }
+    return entry;
+  }
+
   /** What a Settings control needs to render itself and report what it switched to. */
   describe() {
     return {
       setId: this.setId,
       manifestLoaded: Boolean(this.manifest),
       manifestError: this.manifestError ? String(this.manifestError.message ?? this.manifestError) : null,
-      activeProfiles: this.near?.map((profile) => profile.id) ?? [],
+      activeProfiles: this.forSet().near.map((profile) => profile.id),
+      biomeSets: { ...this.biomeSets },
       sets: describeProfileSets({ manifest: this.manifest, sets: this.sets }),
     };
   }

@@ -661,6 +661,10 @@ export function buildModuleMasonry(placements, {
     mergedStone.computeBoundingSphere();
 
     const mortarStarted = performance.now();
+    // Soft stones carry no `drapeFrame`, and their `position[1]` is an absolute
+    // grade plus terrain height, not a height above grade, so a prism has no
+    // frame the core can test against the opening contour. The core is therefore
+    // left unclipped here; the rounded path supplies the frame and can clip.
     mortarCore = buildMortarCoreGeometry(mortarDescriptors);
     stats.mortarBuildMs = performance.now() - mortarStarted;
 

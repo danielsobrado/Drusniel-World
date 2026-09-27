@@ -8,6 +8,8 @@ export const FOOTSTEP_SURFACES = Object.freeze(['water', 'snow', 'mud', 'sand', 
 
 const WETLAND = 12;
 const ROAD = 13;
+/** The editor's bare Stone tile (tileCatalog). */
+const STONE = 15;
 const HOT_DESERT = 1;
 const COLD_DESERT = 2;
 const FOREST_FLOOR = new Set([5, 6, 7, 8, 9]); // tropical, temperate, taiga
@@ -27,7 +29,7 @@ export function classifyFootstepSurface({ inWater, tileId, heightAboveSea, snow 
   if (tileId === WETLAND) return 'mud';
   if (tileId === HOT_DESERT) return 'sand';
   if (heightAboveSea >= 0 && heightAboveSea < BEACH_TOP) return 'sand';
-  if (tileId === ROAD || tileId === COLD_DESERT) return 'gravel';
+  if (tileId === ROAD || tileId === STONE || tileId === COLD_DESERT) return 'gravel';
   if (FOREST_FLOOR.has(tileId)) return 'leaves';
   return 'grass';
 }

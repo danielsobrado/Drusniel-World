@@ -26,6 +26,10 @@ function wallRecord(overrides = {}) {
       [0, 0], [10, 0.01], [20, -0.01], [30, 0],
     ], { simplifyTolerance: 0.001 }),
     features: [],
+    // Flat, capped top. `base` is deliberately omitted: it must still default to
+    // `dimensions.height` (see the overlapping-walls fixture below, whose taller
+    // record relies on that).
+    top: { style: 'flat' },
     ...overrides,
   };
 }

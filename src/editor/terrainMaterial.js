@@ -67,6 +67,9 @@ export function createTerrainMaterial({
   chunkWorldSize,
   stylizedConfig,
   bakeGpuState = null,
+  // The live sun (a Vector3 the sky turns in place for each time of day), for
+  // snow shading. Without it, the configured sun.
+  sunDirection = null,
 }) {
   const terrainUv = uv();
   const tileColor = slotTexture('tileTexture', tileTexture, terrainUv).rgb;
@@ -267,6 +270,7 @@ export function createTerrainMaterial({
         chunkCenter,
         snow: bakedSurface.snow,
         stylizedConfig,
+        sunDirection,
       })
       : null;
     const footprints = createFootprintShading({

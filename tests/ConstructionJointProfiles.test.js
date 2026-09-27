@@ -94,7 +94,9 @@ test('generator output is deterministic', () => {
 });
 
 test('default profile preserves legacy joint dimensions', () => {
-  const profile = constructionJointProfile('coursed-rubble');
+  // `coursed-rubble` now carries its own override, so probe a style with none
+  // (`ashlar`) to prove un-configured styles still inherit the default widths.
+  const profile = constructionJointProfile('ashlar');
   assert.equal(profile.headJoint.min, 0.012);
   assert.equal(profile.headJoint.max, 0.03);
   assert.equal(profile.bedJoint.min, 0.0084);

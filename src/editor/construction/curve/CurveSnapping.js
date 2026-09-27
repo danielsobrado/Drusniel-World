@@ -8,11 +8,51 @@ import { closestPointOnCubicBezierPath } from './CubicBezierPath.js';
  * snapping" versus "hold Left Ctrl to place close without connecting" — but in
  * the game snapping is the default and Ctrl is the escape hatch; "precise" is
  * describing that default. One rule satisfies both readings.
+ *
+ * That one rule is the whole tool's, which is why the modifier policy lives
+ * here rather than beside any single gesture: Ctrl cannot mean "free" on an
+ * anchor and "quantised" on the handles next to it.
  */
 
-const GRID_SIZE = 0.5;
+/** The world grid the precision toggle can ask for. Off until it is asked for. */
+export const GRID_SIZE = 0.5;
 const ANGLE_STEP = Math.PI / 12;   // 15 degrees
 const EPSILON = 1e-9;
+/** Distances this close together are the same distance to any user. */
+const CANDIDATE_TIE_EPSILON = 1e-6;
+
+/**
+ * Is snapping on for this event? Read by every wall gesture — anchor drags, the
+ * ground grid, and the quantised steps under the height and width handles.
+ */
+export function snappingEnabled(event) {
+  return !event?.ctrlKey;
+}
+
+/** Shift gives finer motion during a drag. It never changes what the drag does. */
+export function motionPrecision(event, multiplier = 1) {
+  return event?.shiftKey ? multiplier : 1;
+}
+
+/**
+ * Snap a value to a step, when the explicit toggle asked for one and Ctrl is not
+ * held. `step` of `null` or `0` means free placement, which is the default.
+ */
+export function snappedValue(value, event, step) {
+  if (!(step > 0) || !snappingEnabled(event)) return value;
+  return Math.round(value / step) * step;
+}
+
+/**
+ * A drag delta after the tool's modifier policy.
+ *
+ * Shift scales the motion down for fine work. `step` is the explicit toggle and
+ * defaults to off: quantisation is never a step the cascade takes on its own,
+ * and Ctrl keeps its single meaning of suppressing it while it is on.
+ */
+export function adjustDelta(delta, event, { step = null, precisionMultiplier = 1 } = {}) {
+  return snappedValue(delta * motionPrecision(event, precisionMultiplier), event, step);
+}
 
 function distance(a, b) {
   return Math.hypot(a.x - b.x, a.z - b.z);
@@ -49,10 +89,10 @@ function straightSnap(candidate, path, anchorIndex) {
   return { x: a.x + dx * t, z: a.z + dz * t };
 }
 
-function gridSnap(candidate) {
+function gridSnap(candidate, size) {
   return {
-    x: Math.round(candidate.x / GRID_SIZE) * GRID_SIZE,
-    z: Math.round(candidate.z / GRID_SIZE) * GRID_SIZE,
+    x: Math.round(candidate.x / size) * size,
+    z: Math.round(candidate.z / size) * size,
   };
 }
 
@@ -66,8 +106,32 @@ function angleSnap(candidate, origin) {
 }
 
 /**
+ * Should the newer T-junction candidate replace the one held?
+ *
+ * Nearest wins. Within `CANDIDATE_TIE_EPSILON` the two are the same distance as
+ * far as anyone can see, and the stable ids decide — a wall that acquires one
+ * target on this frame and another on the next reads as flicker, not snapping.
+ */
+function outranksClosest(closest, other, held) {
+  const gap = closest.distance - held.closest.distance;
+  if (Math.abs(gap) > CANDIDATE_TIE_EPSILON) return gap < 0;
+  const id = String(other.constructionId ?? '');
+  const heldId = String(held.constructionId ?? '');
+  if (id !== heldId) return id < heldId;
+  return String(closest.segmentId ?? '') < String(held.closest.segmentId ?? '');
+}
+
+/**
  * @param options.others `[{ constructionId, path }]` — every other construction.
  * @param options.enabled `false` while Left Ctrl is held.
+ * @param options.worldRadius acquisition radius, in metres. It stays
+ *   world-space: the zoom-aware version the plan asks for has to convert a
+ *   screen threshold through the camera, and its 10–22 px hysteresis band is
+ *   still an untested hypothesis.
+ * @param options.gridSize world grid step to snap to, or `null` for free
+ *   placement. The default is the module grid a caller used to get without
+ *   asking; the wall tool now names it explicitly, and names `null` unless its
+ *   precision toggle asked for a grid.
  * @returns `{ position, kind, targetId, flattenHandles }` or `null`.
  */
 export function resolveAnchorSnap({
@@ -76,6 +140,7 @@ export function resolveAnchorSnap({
   anchorId,
   others = [],
   worldRadius = 0.75,
+  gridSize = GRID_SIZE,
   enabled = true,
 }) {
   if (!enabled) return null;
@@ -123,15 +188,23 @@ export function resolveAnchorSnap({
     });
   }
 
-  // 2. Endpoint onto another centreline — a T-junction.
+  // 2. Endpoint onto another centreline — a T-junction. The *nearest*
+  //    centreline wins rather than the first one inside the radius: two walls
+  //    running close together would otherwise snap to whichever the store
+  //    happened to list first, which changes when an unrelated wall is added.
+  let junction = null;
   for (const other of others) {
     const closest = closestPointOnCubicBezierPath(other.path, point);
     if (!closest || closest.distance > worldRadius) continue;
+    if (junction && !outranksClosest(closest, other, junction)) continue;
+    junction = { closest, constructionId: other.constructionId };
+  }
+  if (junction) {
     return Object.freeze({
-      position: [closest.x, closest.z],
+      position: [junction.closest.x, junction.closest.z],
       kind: 'curve',
-      targetId: closest.segmentId,
-      constructionId: other.constructionId,
+      targetId: junction.closest.segmentId,
+      constructionId: junction.constructionId,
       closesLoop: false,
       flattenHandles: false,
     });
@@ -152,17 +225,20 @@ export function resolveAnchorSnap({
     });
   }
 
-  // 4. World grid.
-  const grid = gridSnap(point);
-  if (distance(point, grid) <= Math.min(worldRadius, GRID_SIZE * 0.4)) {
-    return Object.freeze({
-      position: [grid.x, grid.z],
-      kind: 'grid',
-      targetId: null,
-      constructionId: null,
-      closesLoop: false,
-      flattenHandles: false,
-    });
+  // 4. World grid, when the precision toggle asked for one. Free placement is
+  //    the default, so this is never a step the cascade takes on its own.
+  if (gridSize > 0) {
+    const grid = gridSnap(point, gridSize);
+    if (distance(point, grid) <= Math.min(worldRadius, gridSize * 0.4)) {
+      return Object.freeze({
+        position: [grid.x, grid.z],
+        kind: 'grid',
+        targetId: null,
+        constructionId: null,
+        closesLoop: false,
+        flattenHandles: false,
+      });
+    }
   }
 
   // 5. Bearing from the previous anchor, for regular corners.

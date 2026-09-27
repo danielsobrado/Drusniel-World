@@ -37,6 +37,9 @@ function tightArcPath(radius = 4) {
 }
 
 function record(path, overrides = {}) {
+  // The fixture's own height, so a flat top still sits at the wall's own level
+  // when a test overrides the dimensions.
+  const height = overrides.dimensions?.height ?? 3.5;
   return normalizeConstructionRecord({
     version: 1,
     id: 'construction-1',
@@ -44,9 +47,13 @@ function record(path, overrides = {}) {
     seed: 3141,
     kind: 'wall',
     style: { key: 'coursed-rubble', version: 1 },
-    dimensions: { height: 3.5, thickness: 0.8 },
+    dimensions: { height, thickness: 0.8 },
     path,
     features: [],
+    // A flat, capped top at the wall height: an unset `top` now defaults to an
+    // irregular, uncapped crown (commit dc4406ef), which is not the wall these
+    // masonry fixtures describe.
+    top: { style: 'flat', base: height, profile: [] },
     ...overrides,
   });
 }
@@ -592,6 +599,13 @@ test('mortar footprint is larger than the visible stone and matches joint widths
 test('mortar footprints tile a course without gaps or overlaps', () => {
   const result = pack(setup(straightPath(24)));
   const courses = fieldCells(result);
+  // The topmost field course is the crown: its cells are clamped and flattened
+  // against the wall body's own ceiling.
+  const crownCourse = Math.max(
+    ...result.stones
+      .filter(({ category }) => category === 'field')
+      .map(({ courseIndex }) => courseIndex),
+  );
 
   const world = (stone, key) => stone[key].map(([x, y]) => [stone.s + x, stone.y + y]);
   const near = (a, b, tol = 1e-6) => (
@@ -615,8 +629,13 @@ test('mortar footprints tile a course without gaps or overlaps', () => {
       }
     }
 
-    // Unsplit neighbouring cells share mortar head-joint corners exactly, while
-    // their visible stones leave a gap.
+    // Unsplit neighbours share their head joint, so the mortar footprints tile
+    // the course with no gap and no overlap: the joint's vertical edge must line
+    // up exactly on both sides. Below the crown the whole corner is also resolved
+    // identically (x and y). At the crown only x is shared: `CourseLattice`
+    // flattens each crown cell's top arris to its own per-cell min, so adjacent
+    // crown stones deliberately end at different heights — documented as "real
+    // block steps", not a tear. The visible stones still leave a gap.
     for (let index = 1; index < cells.length; index += 1) {
       const leftCell = cells[index - 1];
       const rightCell = cells[index];
@@ -625,8 +644,12 @@ test('mortar footprints tile a course without gaps or overlaps', () => {
       const right = rightCell.leaves[0];
       const leftMortar = world(left, 'mortarCorners');
       const rightMortar = world(right, 'mortarCorners');
-      assert.ok(near(leftMortar[1], rightMortar[0]));
-      assert.ok(near(leftMortar[2], rightMortar[3]));
+      assert.ok(Math.abs(leftMortar[1][0] - rightMortar[0][0]) < 1e-6, 'bottom joint x');
+      assert.ok(Math.abs(leftMortar[2][0] - rightMortar[3][0]) < 1e-6, 'top joint x');
+      if (left.courseIndex !== crownCourse) {
+        assert.ok(near(leftMortar[1], rightMortar[0]));
+        assert.ok(near(leftMortar[2], rightMortar[3]));
+      }
       const leftVisible = world(left, 'corners');
       const rightVisible = world(right, 'corners');
       const visibleGap = Math.hypot(

@@ -125,11 +125,14 @@ test('near and coarse soft stones share outer bounds', () => {
       `xy axis ${axis}: ${nearBounds[axis]} vs ${coarseBounds[axis]}`,
     );
   }
-  // Depth bounds stay within a millimetre-scale band: coarse reduces bevel
-  // variation so max |z| can shift slightly while the footprint stays locked.
+  // Depth bounds share a mortar-recess-driven depth budget: the resolver clamps
+  // the face recession to `maxShoulderDepth * 0.72`, and the bevel depth scales
+  // with CONSTRUCTION_MORTAR_CONFIG.faceRecess. Coarse uses fewer bevel rings,
+  // so the z extremes can drift by a few millimetres even though the x/y
+  // footprint (asserted strictly above) stays locked.
   for (const axis of [2, 5]) {
     assert.ok(
-      Math.abs(nearBounds[axis] - coarseBounds[axis]) < 0.0025,
+      Math.abs(nearBounds[axis] - coarseBounds[axis]) < 0.007,
       `z axis ${axis}: ${nearBounds[axis]} vs ${coarseBounds[axis]}`,
     );
   }

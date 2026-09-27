@@ -81,7 +81,7 @@ function createWaterDistanceField(terrainView, stylizedConfig) {
  * One terrain material for every slot (see TerrainSlotBindings): built from
  * the first slot's data, which fixes the texture formats, then shared.
  */
-function createSharedTerrainMaterialSource({ worldStore, stylizedConfig }) {
+function createSharedTerrainMaterialSource({ worldStore, stylizedConfig, sunDirection = null }) {
   let material = null;
   return (slotData, bakeGpuState) => {
     material ??= createTerrainMaterial({
@@ -91,6 +91,7 @@ function createSharedTerrainMaterialSource({ worldStore, stylizedConfig }) {
       height: worldStore.chunkSize,
       stylizedConfig,
       bakeGpuState,
+      sunDirection,
     });
     return material;
   };
@@ -297,7 +298,12 @@ export class InfiniteTerrainView {
       this.chunkSize,
       this.chunkSize,
     );
-    const sharedMaterial = createSharedTerrainMaterialSource({ worldStore, stylizedConfig });
+    // The god rays' sun is the one the sky turns for each time of day.
+    const sharedMaterial = createSharedTerrainMaterialSource({
+      worldStore,
+      stylizedConfig,
+      sunDirection: this.godRays.sunDirection,
+    });
     this.slots = Array.from(
       { length: streamingConfig.maxResidentChunks },
       (_, slotIndex) => createSlot({

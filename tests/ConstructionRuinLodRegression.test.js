@@ -77,7 +77,9 @@ test('one completely missing course remains a ruin gap', () => {
   const coarse = coarsePlacements([bottom, top], { styleKey: 'coursed-rubble' });
   const keptBottom = coarse.find(({ stableIndex }) => stableIndex === bottom.stableIndex);
   assert.ok(keptBottom);
-  assert.equal(keptBottom.height, bottom.height);
+  // Never grown to fill the missing course. Coarse joint amplification may
+  // shrink the height slightly, but the y and locality below are unchanged.
+  assert.ok(keptBottom.height <= bottom.height + 1e-9);
   assert.equal(keptBottom.y, bottom.y);
 });
 
@@ -92,7 +94,10 @@ test('coarse stretching is local and does not fill a horizontal ruin void', () =
   const left = coarse.find(({ stableIndex }) => stableIndex === lowerLeft.stableIndex);
   const right = coarse.find(({ stableIndex }) => stableIndex === lowerRight.stableIndex);
   assert.ok(left.height > lowerLeft.height, 'covered left stone should stretch');
-  assert.equal(right.height, lowerRight.height, 'uncovered right stone must preserve the void');
+  assert.ok(
+    right.height <= lowerRight.height + 1e-9,
+    'uncovered right stone must preserve the void (never grown)',
+  );
 });
 
 test('partial upper-course coverage does not stretch over the uncovered portion', () => {
@@ -100,6 +105,8 @@ test('partial upper-course coverage does not stretch over the uncovered portion'
   const upper = field({ id: 2, courseIndex: 1, s: 0.4, y: 0.6, width: 0.8 });
   const coarse = coarsePlacements([lower, upper], { styleKey: 'coursed-rubble' });
   const kept = coarse.find(({ stableIndex }) => stableIndex === lower.stableIndex);
-  assert.equal(kept.height, lower.height);
+  // Must not stretch up over the uncovered portion. Coarse joint amplification
+  // may shrink the height, but the y (and locality) stays put.
+  assert.ok(kept.height <= lower.height + 1e-9);
   assert.equal(kept.y, lower.y);
 });

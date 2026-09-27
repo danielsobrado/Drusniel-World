@@ -255,8 +255,14 @@ slices. Cheaper blades cannot pay that back.
 
 **Before raising `residentRadius` again,** make far-ring scatter coarser (skip cells
 rather than only thinning clumps per cell). The band machinery itself stays in place
-and costs nothing while `nearRadius === residentRadius`: `farGeometry` is not even
+and costs nothing when no ring reaches past `nearRadius`: `farGeometry` is not even
 allocated in that case.
+
+The band is no longer inert, though — see "grass two-band LOD and density coverage"
+below, which sets `nearRadius: 0` so the eight chunks around the camera take the
+cheap blade without adding a ring, and reworks the per-chunk build this measurement
+blamed. That measurement predates the rework, so it is the baseline to re-run
+against rather than the current answer.
 
 ### Measured: grass density 4× is free, `bladesPerClump` is the lever (2026-07-26)
 
@@ -318,6 +324,66 @@ The extra footprint and per-blade centre/facing attributes do not increase
 streaming work or instance uploads. Frame throughput improved within normal
 run-to-run variance; the two extra hitches are in the historical 5–9 spread and
 did not move p95/p99 upward.
+
+### Grass two-band LOD and density coverage (2026-09-27, **A/B outstanding**)
+
+Three changes, all in the grass pass. Only the first is expected to move frames;
+the second and third are about where the cost lands and what the falloff looks
+like.
+
+**1. The far band is live.** `nearRadius` is now 0 instead of 1, so the eight chunks
+around the camera draw the single-triangle blade and only the camera's own chunk
+keeps the tapered five-triangle one. This adds no ring and no chunk — the resident
+set is the same nine chunks either way — so it is a pure draw-side saving of 40
+triangles per clump to 8 across eight of the nine chunks, with no extra build work.
+Before this, `nearRadius === residentRadius` meant `farGeometry` was never built at
+all and the band did nothing.
+
+**2. The per-chunk build no longer lands in one frame.** A page arrives from the
+worker at the world's full density; the chunk then takes a prefix of each cell's
+clumps, removes what the canopy covers, and uploads. That was two passes over two
+freshly allocated copies of the chunk — roughly 1.4 MB of garbage and two full
+walks — inside a single frame. It is now one resumable pass
+(`grassScatterBuild.js`) writing straight into the instance buffers:
+`streaming.grassScatterGroupsPerSlice` source cells a frame, sixteen frames for a
+64² page. Nothing is allocated, and the canopy filter is applied in the same pass
+the prefix is taken in.
+
+This is aimed directly at the `residentRadius: 2` regression above, whose cost was
+`grassScatterMs` and build slices rather than drawing. It does **not** make the
+worker's scatter coarser, which is what that measurement asked for, so a second ring
+is still a separate decision.
+
+**3. Ring boundaries are thinned instead of stepped.** The per-ring compaction can
+only keep whole clumps per cell, so a chunk's density is a step and the boundary
+between two rings is where it shows. `stylizedSurface.grass.lod.coverage` retires
+blades by their own rank to make up the difference, evaluated per blade from the
+blade's distance to the camera, so the falloff is continuous in space rather than
+per chunk. The last ring also thins out over `outerFadeMeters` past the residency
+radius, which hands over to the terrain shader's faked ground cover and stops a
+chunk popping as it enters residency.
+
+Cost: a handful of arithmetic per blade plus one `vec4` uniform write per chunk per
+frame. It thins (blades are removed) rather than shrinks blades, and widens the
+survivors by the retired share, capped at 1.35x — the donor's measured fill limit.
+
+**Not measured on hardware.** The numbers above are reasoned from the triangle and
+allocation counts, not taken from a run: this pass had no GPU machine. Run
+`qa:perf --qa chunk-cross --warmup 8 --duration 12` plus `qa:perf:matrix` before
+treating any of it as settled, and compare `grassLodNearChunks` /
+`grassLodFarChunks` / `grassLodNearTriangles` / `grassLodFarTriangles` (new
+counters) against `grassBuildSlices` and `grassScatterMs` for the same run. The
+specific things to look for:
+
+| What | Where | Expected |
+|------|-------|----------|
+| The far band is drawing | `grassLodFarChunks` > 0, `grassLodFarTriangles` ≈ ⅕ of near per clump | 8 chunks on the cheap blade |
+| Build spread over frames | `grassBuildSlices` per rebuild | 16 per chunk, not 1 |
+| No allocation churn | hitch count during chunk-cross | at or below the 5–8 baseline spread |
+| The falloff is a gradient | walk a straight line out of the grass ring and watch `grassLodRetiredShare` | rises smoothly, no step at a ring line |
+
+If the hitch count rises, `streaming.grassScatterGroupsPerSlice` is the dial: lower
+it to spread each chunk over more frames, at the cost of grass appearing later.
 
 ### Fix landed: worker render pixels + commit queue
 
@@ -461,9 +527,20 @@ like shadow streaks:
 
 1. The forest-floor tint was applied on top of exposed dirt and path tread,
    shifting warm soil toward `groundCoreColor`.
-2. `normalNode` was assigned a literal local +Z even though node-material normals
-   are consumed in view space. Leaving the plane's default transformed normal
-   correctly rotates its local +Z into world +Y.
+2. `normalNode` was assigned a **literal** local +Z even though node-material
+   normals are consumed in view space, so every surface read as one flat plane.
+   Removing it let the plane's default transformed normal correctly rotate its
+   local +Z into world +Y.
+
+   **Superseded 2026-08-19.** `terrainMaterial.js` assigns `material.normalNode`
+   again, but from a *computed* surface-gradient normal
+   (`createTerrainSurfaceNormal`) derived from the same heightfield as the
+   geometry displacement and transformed into view space
+   (`TerrainMaterialSurfaceGradientNodes.js`). The defect above was the constant
+   vector, not the assignment itself — do not "fix" the current assignment by
+   reverting it. `test/terrain-material-baked-lod.test.js` and
+   `test/terrain-material-family-lod.test.js` pin the current contract; this
+   section is kept only as the record of the original defect.
 
 The existing `PCFSoftShadowMap`, 2048 map, 120 m half-extent, bias, normal bias,
 and radius remain unchanged. A headed `chunk-cross --warmup 8 --duration 14

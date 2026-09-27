@@ -7,15 +7,15 @@ import { cellSampleRandom01, grassClumpCellOffset, sampleHeight } from './scatte
 import {
   clumpsPerCell,
   densityForDistance,
+  dominantEligibleTile,
   grassLodBand,
+  grassLodCoverage,
   trianglesPerBlade,
 } from './grassLodMath.js';
 import { generatedProfile, resampleProfile } from './grassBladeProfiles.js';
-import { filterScatterByForest } from './forest/ForestFloor.js';
+import { createForestDensitySampler } from './forest/ForestFloor.js';
 import { applyCloudShadow } from './CloudShadow.js';
-import {
-  compactGrassScatter,
-} from './vegetationScatter.js';
+import { createGrassScatterComposer } from './grassScatterBuild.js';
 
 const BLADE_SEGMENTS = 3;
 // One triangle per blade. The far band is not meant to survive inspection — it
@@ -47,6 +47,11 @@ function bladeRandom01(bladeIndex, salt) {
   return fract(Math.sin((bladeIndex + 1) * 12.9898 + salt * 78.233) * 43758.5453);
 }
 const DEFAULT_BUILD_SLICE_CELLS = 64;
+// Source cells per frame when a chunk is built from the worker's scatter. A page
+// is 64x64 cells, so this spreads a full chunk over 16 frames instead of one; the
+// measured reason the grass residency radius was pinned at one ring was the whole
+// chunk's build landing in a single frame.
+const DEFAULT_SCATTER_GROUP_SLICE = 256;
 const DEFAULT_INACTIVE_RELEASE_FRAMES = 30;
 const DEFAULT_BLADES_PER_CLUMP = 8;
 const DEFAULT_INFLUENCE_TEXTURE_SIZE = 32;
@@ -145,6 +150,12 @@ export function createClumpGeometry({
     const windPhase = bladeRandom01(bladeIndex, 8);
     const stiffness = bladeRandom01(bladeIndex, 9);
     const flutter = bladeRandom01(bladeIndex, 10);
+    // The order this blade retires in when its chunk's distance thins the field.
+    // Rolled per blade, and rolled from the same index in both bands, so a chunk
+    // crossing the band boundary retires exactly the same blades in either band
+    // and the join cannot read as a step in density. It rides in the spare channel
+    // of `bladeWind` rather than claiming the eighth vertex buffer.
+    const retireRank = bladeRandom01(bladeIndex, 11);
     // Which authored silhouette this blade wears. Rolled per blade rather than
     // assigned per clump: a clump is a hidden batching unit, and giving one shape
     // to all 96 of its blades would make that unit visible as patches of a single
@@ -171,7 +182,7 @@ export function createClumpGeometry({
       bladeWinds[vertex * 4] = windPhase;
       bladeWinds[vertex * 4 + 1] = stiffness;
       bladeWinds[vertex * 4 + 2] = flutter;
-      bladeWinds[vertex * 4 + 3] = 0;
+      bladeWinds[vertex * 4 + 3] = retireRank;
       bladeShapes[vertex * 4] = tintPhase;
       bladeShapes[vertex * 4 + 1] = shadePhase;
       // The arc is in blade lengths, not blade widths, so it cannot be folded into
@@ -187,7 +198,10 @@ export function createClumpGeometry({
     // inside its clump is in `bladeCenter`, in metres.
     for (let segment = 0; segment < segments; segment += 1) {
       const t = segment / segments;
-      const width = shape.halfWidth[segment] * PEAK_HALF_WIDTH;
+      // The shape's own scale travels with it: a reed is a narrow spike and a
+      // broadleaf is a wide one, and that difference is part of the silhouette
+      // rather than a per-set width the instance roll would then override.
+      const width = shape.halfWidth[segment] * PEAK_HALF_WIDTH * (shape.widthScale ?? 1);
       const left = (vertexBase + segment * 2) * 3;
       const right = left + 3;
       positions[left] = -axisX * width;
@@ -228,7 +242,8 @@ export function createClumpGeometry({
   geometry.setAttribute('bladeCenter', new THREE.BufferAttribute(bladeCenters, 4));
   // xy = the two colour rolls, zw = the authored profile's arc at this row.
   geometry.setAttribute('bladeShape', new THREE.BufferAttribute(bladeShapes, 4));
-  // x = gust phase offset, y = stiffness, z = flutter amount, w = spare.
+  // x = gust phase offset, y = stiffness, z = flutter amount, w = the order this
+  // blade retires in as its chunk thins with distance.
   geometry.setAttribute('bladeWind', new THREE.BufferAttribute(bladeWinds, 4));
   geometry.setIndex(indices);
   geometry.setAttribute('instanceBase', instanceBase);
@@ -298,6 +313,11 @@ export class StylizedGrassSlot {
     // assignment plus a release rather than a walk over every slot's own copy.
     this.bladeProfileProvider = bladeProfileProvider;
     this.builtProfileRevision = -1;
+    this.builtProfileSetId = null;
+    // The chunk's own biome vote, cached against the page it was taken from.
+    this.dominantPage = null;
+    this.dominantRevision = -1;
+    this.dominantSetId = null;
     this.chunkSize = terrainView.worldStore.chunkSize;
     this.tileSize = terrainView.worldStore.tileSize;
     this.chunkWorldSize = this.chunkSize * this.tileSize;
@@ -311,6 +331,16 @@ export class StylizedGrassSlot {
       config.grass.nearRadius ?? config.grass.residentRadius,
     );
     this.maxInstances = this.chunkSize * this.chunkSize * this.clumpsPerCell;
+    // The density law the field is trying to follow, evaluated per chunk from the
+    // camera's real position and handed to the material as the two coverage values
+    // its nearest and farthest corners call for. `grassLodCoverage` owns the law;
+    // the shader only interpolates between the pair by each blade's own distance,
+    // so the field thins across a chunk instead of stepping at its edge.
+    this.lodCoverage = uniform(new THREE.Vector4(0, 1, 1, 1));
+    this.coverageSettings = config.grass.lod?.coverage ?? {};
+    this.coverageEnabled = this.coverageSettings.enabled !== false;
+    this.bandDensity = 1;
+    this.ringDistance = 0;
     this.chunkCenter = uniform(new THREE.Vector2());
     this.time = uniform(0);
     this.emptyGeometry = new THREE.BufferGeometry();
@@ -374,8 +404,10 @@ export class StylizedGrassSlot {
       4,
     );
     const pool = this.bladeProfileProvider?.();
+    const bands = pool?.forSet(this.builtProfileSetId ?? undefined) ?? null;
     this.builtProfileRevision = pool?.revision ?? -1;
-    const bands = {
+    this.builtProfileSetId = bands?.setId ?? null;
+    const geometryBands = {
       bladesPerClump: this.bladesPerClump,
       tiltMax: this.config.grass.tiltMax ?? DEFAULT_TILT_MAX,
       clumpRadius: this.config.grass.clumpRadius ?? DEFAULT_CLUMP_RADIUS,
@@ -386,14 +418,14 @@ export class StylizedGrassSlot {
     // far blade keeps the authored outline's proportions instead of reverting to
     // the generated taper the moment a chunk crosses the ring.
     this.nearGeometry = createClumpGeometry({
-      ...bands,
+      ...geometryBands,
       segments: BLADE_SEGMENTS,
-      profiles: pool?.near,
+      profiles: bands?.near,
     });
     // Only built when some ring can actually reach it; with nearRadius equal to
     // residentRadius every chunk stays on full blades and this would never draw.
     this.farGeometry = this.nearRadius < this.config.grass.residentRadius
-      ? createClumpGeometry({ ...bands, segments: FAR_BLADE_SEGMENTS, profiles: pool?.far })
+      ? createClumpGeometry({ ...geometryBands, segments: FAR_BLADE_SEGMENTS, profiles: bands?.far })
       : null;
     this.geometry = this.band === 'far' && this.farGeometry
       ? this.farGeometry
@@ -407,6 +439,7 @@ export class StylizedGrassSlot {
       sunDirection: this.sunDirection,
       config: this.config,
       tuning: this.tuning,
+      lodCoverage: this.lodCoverage,
     });
     applyCloudShadow(this.material, this.config.sky);
     this.mesh.geometry = this.geometry;
@@ -497,7 +530,45 @@ export class StylizedGrassSlot {
     PerfCounters.set('grassTrample', elapsed);
   }
 
-  update(timestamp, focusChunk, objectSignature, localBoulders) {
+  /**
+   * How much of this chunk should still be standing, at its nearest and farthest
+   * corner from the camera, as `(inner metres, outer metres, coverage each)`.
+   *
+   * The ring the chunk sits on decides what it was compacted to, and the smooth law
+   * decides what that distance actually calls for; `grassLodCoverage` is the ratio.
+   * Both corners are measured to the chunk's box rather than to its centre, because
+   * a 128 m chunk seen from its edge spans a third of the residency radius and a
+   * single number for it would put the falloff back where the compaction left it.
+   */
+  updateCoverage(descriptor, focus) {
+    this.bandDensity = densityForDistance(
+      this.ringDistance,
+      this.config.grass.residentRadius,
+      this.config.grass.outerRingDensity ?? 0.45,
+    );
+    if (!this.coverageEnabled || !focus) {
+      this.lodCoverage.value.set(0, 1, 1, 1);
+      return;
+    }
+    const half = this.chunkWorldSize / 2;
+    const offsetX = Math.abs(descriptor.centerWorldX - focus.x);
+    const offsetZ = Math.abs(descriptor.centerWorldZ - focus.z);
+    const inner = Math.hypot(Math.max(offsetX - half, 0), Math.max(offsetZ - half, 0));
+    const outer = Math.hypot(offsetX + half, offsetZ + half);
+    const law = {
+      radiusMeters: this.config.grass.residentRadius * this.chunkWorldSize,
+      farDensity: this.config.grass.outerRingDensity ?? 0.45,
+      fadeMeters: this.coverageSettings.outerFadeMeters ?? 0,
+    };
+    this.lodCoverage.value.set(
+      inner,
+      outer,
+      grassLodCoverage({ distanceMeters: inner, bandDensity: this.bandDensity, ...law }),
+      grassLodCoverage({ distanceMeters: outer, bandDensity: this.bandDensity, ...law }),
+    );
+  }
+
+  update(timestamp, focusChunk, objectSignature, localBoulders, focus = null) {
     this.time.value = timestamp / 1000;
     const descriptor = this.terrainSlot.descriptor;
     const distance = descriptor && focusChunk
@@ -510,6 +581,13 @@ export class StylizedGrassSlot {
     const active = Boolean(this.terrainSlot.mesh.visible && withinRadius && descriptor && this.terrainSlot.page);
     if (!active) {
       this.mesh.visible = false;
+      // A build in flight writes straight into the live instance buffers, a slice
+      // per frame, so a chunk that leaves residency part-way through has half of one
+      // population and half of another in them. `readyKey` still names the old build
+      // and would let the mesh be drawn again with it if the chunk came back without
+      // its page changing — so an interrupted build is forgotten here and the next
+      // activation rebuilds from the source.
+      if (this.pendingRebuild || this.buildState) this.readyKey = null;
       this.pendingRebuild = null;
       this.buildState = null;
       this.inactiveFrames += 1;
@@ -524,17 +602,24 @@ export class StylizedGrassSlot {
     this.inactiveFrames = 0;
     // Blade shape is baked into the clump's vertex buffer, so switching profile
     // sets is a rebuild, not a uniform. Dropping the resources here lets the
-    // existing allocate-on-demand path do it without a second code path.
-    const profileRevision = this.bladeProfileProvider?.()?.revision ?? -1;
-    if (this.geometry && profileRevision !== this.builtProfileRevision) this.releaseResources();
+    // existing allocate-on-demand path do it without a second code path. Two things
+    // can change the shape: the pool re-resolving (a new manifest, or the Settings
+    // selector) and the chunk's own biome, which is what makes wetland a reed bed.
+    const page = this.terrainSlot.page;
+    const pool = this.bladeProfileProvider?.();
+    const profileRevision = pool?.revision ?? -1;
+    const profileSetId = this.profileSetFor(page);
+    const shapeChanged = profileRevision !== this.builtProfileRevision
+      || (profileSetId !== null && profileSetId !== this.builtProfileSetId);
+    if (this.geometry && shapeChanged) this.releaseResources();
     this.ensureResources();
+    this.ringDistance = Number.isFinite(distance) ? distance : 0;
+    this.updateCoverage(descriptor, focus);
     this.setBand(grassLodBand(distance, this.nearRadius));
     this.updateTrampleTexture(descriptor, localBoulders, objectSignature);
     this.mesh.position.copy(this.terrainSlot.mesh.position);
     this.chunkCenter.value.set(descriptor.centerWorldX, descriptor.centerWorldZ);
-    const farDensity = this.config.grass.outerRingDensity ?? 0.45;
-    const density = densityForDistance(distance, this.config.grass.residentRadius, farDensity);
-    const targetClumpsPerCell = Math.max(1, Math.round(this.clumpsPerCell * density));
+    const targetClumpsPerCell = Math.max(1, Math.round(this.clumpsPerCell * this.bandDensity));
     const isReadyForDescriptor = this.readyKey === descriptor.key;
     this.mesh.visible = Boolean(this.terrainSlot.mesh.visible && isReadyForDescriptor);
 
@@ -571,7 +656,40 @@ export class StylizedGrassSlot {
       minimumHeight: Number.POSITIVE_INFINITY,
       maximumHeight: Number.NEGATIVE_INFINITY,
       usedWorkerScatter: false,
+      forestDensityAt: this.createForestSampler(job.descriptor),
     };
+  }
+
+  /**
+   * The silhouette set this chunk should be wearing, from the biome most of its
+   * grass stands on.
+   *
+   * The vote is cached against the page and its revision because it reads all 4096
+   * of the chunk's cells, and `update` runs every frame while a set only changes
+   * when the page does. Null only when there is no pool or no page to vote over, and
+   * the caller reads that as "leave the geometry alone".
+   */
+  profileSetFor(page) {
+    const pool = this.bladeProfileProvider?.();
+    if (!pool?.setForTile || !page?.tiles) return null;
+    if (this.dominantPage === page && this.dominantRevision === this.terrainSlot.pageRevision) {
+      return this.dominantSetId;
+    }
+    this.dominantPage = page;
+    this.dominantRevision = this.terrainSlot.pageRevision;
+    const tile = dominantEligibleTile(page.tiles, this.config.grass.tileIds);
+    this.dominantSetId = pool.setForTile(tile);
+    return this.dominantSetId;
+  }
+
+  createForestSampler(descriptor) {
+    return createForestDensitySampler({
+      descriptor,
+      field: this.forestFieldProvider?.(),
+      kind: 'grass',
+      config: this.config.trees?.forestFloor,
+      chunkWorldSize: this.chunkWorldSize,
+    });
   }
 
   applyPendingRebuild() {
@@ -581,23 +699,7 @@ export class StylizedGrassSlot {
 
     const workerScatter = job.page.grassScatter;
     if (workerScatter?.base && workerScatter?.parameters) {
-      const scatterStartedAt = performance.now();
-      const compacted = compactGrassScatter(workerScatter, job.clumpsPerCell, this.chunkSize)
-        ?? workerScatter;
-      const scatter = filterScatterByForest({
-        scatter: compacted,
-        descriptor: job.descriptor,
-        field: this.forestFieldProvider?.(),
-        kind: 'grass',
-        config: this.config.trees.forestFloor,
-        chunkWorldSize: this.chunkWorldSize,
-      });
-      this.applyScatter(job, scatter);
-      PerfCounters.inc('grassBuildSlices');
-      const elapsed = performance.now() - scatterStartedAt;
-      PerfCounters.inc('grassScatterMs', elapsed);
-      PerfCounters.set('grassScatter', elapsed);
-      return true;
+      return this.applyScatterSlices(job, workerScatter);
     }
 
     if (!this.buildState || this.buildState.signature !== job.signature) {
@@ -619,21 +721,54 @@ export class StylizedGrassSlot {
     return true;
   }
 
-  applyScatter(job, scatter) {
-    const baseAttribute = this.geometry.getAttribute('instanceBase');
-    const parameterAttribute = this.geometry.getAttribute('instanceParams');
-    baseAttribute.array.set(scatter.base.subarray(0, scatter.count * 3));
-    parameterAttribute.array.set(scatter.parameters.subarray(0, scatter.count * 4));
-    this.finishBuild(job, {
-      count: scatter.count,
-      minimumHeight: scatter.minimumHeight,
-      maximumHeight: scatter.maximumHeight,
-    });
+  /**
+   * The worker already built this page's grass at the world's full density, so the
+   * chunk's own population is a prefix of it with the canopy taken out. That pass is
+   * resumable: a slice writes as many source cells as its budget allows and the rest
+   * waits for the next frame, instead of the whole chunk landing in one frame — which
+   * is what the residency radius was previously held back for.
+   */
+  applyScatterSlices(job, workerScatter) {
+    const scatterStartedAt = performance.now();
+    if (!this.buildState || this.buildState.signature !== job.signature) {
+      this.startBuild(job);
+      const composer = createGrassScatterComposer({
+        scatter: workerScatter,
+        targetClumpsPerCell: job.clumpsPerCell,
+        forestDensityAt: this.buildState.forestDensityAt,
+      });
+      this.buildState.composer = composer;
+      PerfCounters.set('grassLastChunkSourceClumps', workerScatter.count);
+    }
+    const state = this.buildState;
+    const composer = state.composer;
+    if (!composer) {
+      this.finishBuild(job, state);
+      return true;
+    }
+    const budget = this.config.streaming?.grassScatterGroupsPerSlice
+      ?? DEFAULT_SCATTER_GROUP_SLICE;
+    composer.advance(
+      budget,
+      this.geometry.getAttribute('instanceBase').array,
+      this.geometry.getAttribute('instanceParams').array,
+    );
+    PerfCounters.inc('grassBuildSlices');
+    state.count = composer.count;
+    state.minimumHeight = composer.minimumHeight;
+    state.maximumHeight = composer.maximumHeight;
+    state.usedWorkerScatter = true;
+    PerfCounters.inc('grassScatterMs', performance.now() - scatterStartedAt);
+    if (!composer.done) return true;
+    PerfCounters.set('grassScatter', performance.now() - scatterStartedAt);
+    this.finishBuild(job, state);
+    return true;
   }
 
   buildCells(job, state, endCell) {
     const base = this.geometry.getAttribute('instanceBase').array;
     const parameters = this.geometry.getAttribute('instanceParams').array;
+    const forestDensityAt = state.forestDensityAt;
 
     for (; state.cellCursor < endCell; state.cellCursor += 1) {
       const cellIndex = state.cellCursor;
@@ -675,6 +810,13 @@ export class StylizedGrassSlot {
           clumpIndex,
           5,
         );
+        // Canopy suppression belongs to the scatter, not to the worker, so the
+        // main-thread path applies it too. It used to be reached only on the
+        // worker path, which meant a page built here grew grass straight through
+        // the forest floor.
+        if (forestDensityAt && parameters[parameterOffset + 3] >= forestDensityAt(localWorldX, localWorldZ)) {
+          continue;
+        }
         state.minimumHeight = Math.min(state.minimumHeight, height);
         state.maximumHeight = Math.max(state.maximumHeight, height);
         state.count += 1;
@@ -713,11 +855,23 @@ export class StylizedGrassSlot {
     // Reported so a blade-profile switch can be judged on cost as well as looks.
     // It follows the band this chunk is on, which is the point: the far band is
     // where a shape change stops costing anything.
+    const farBand = this.band === 'far' && Boolean(this.farGeometry);
+    const segments = farBand ? FAR_BLADE_SEGMENTS : BLADE_SEGMENTS;
     PerfCounters.set(
       'grassLastChunkTriangles',
-      state.count * this.bladesPerClump
-        * trianglesPerBlade(this.band === 'far' && this.farGeometry ? FAR_BLADE_SEGMENTS : BLADE_SEGMENTS),
+      state.count * this.bladesPerClump * trianglesPerBlade(segments),
     );
+    // The band split and the retired population, so the two things this pass is
+    // trying to buy — cheaper distant grass, and a density falloff that is a
+    // gradient rather than a ring — can be read off a capture instead of argued
+    // about. `grassLodRetiredShare` is the share of the compacted blades the
+    // coverage is holding out at this chunk's distance.
+    PerfCounters.inc(farBand ? 'grassLodFarChunks' : 'grassLodNearChunks');
+    PerfCounters.inc(
+      farBand ? 'grassLodFarTriangles' : 'grassLodNearTriangles',
+      state.count * this.bladesPerClump * trianglesPerBlade(segments),
+    );
+    PerfCounters.set('grassLodRetiredShare', 1 - this.lodCoverage.value.z);
     PerfCounters.set('grassInstanceAttributeBytes', bytes);
   }
 

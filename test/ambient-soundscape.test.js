@@ -14,6 +14,7 @@ test('footfalls take their sound from water, snow, biome and beach', () => {
   assert.equal(classifyFootstepSurface({ ...ground, tileId: 1 }), 'sand');
   assert.equal(classifyFootstepSurface({ ...ground, tileId: 2 }), 'gravel');
   assert.equal(classifyFootstepSurface({ ...ground, tileId: 13 }), 'gravel');
+  assert.equal(classifyFootstepSurface({ ...ground, tileId: 15 }), 'gravel', 'bare stone is not grass');
   assert.equal(classifyFootstepSurface({ ...ground, tileId: 6 }), 'leaves');
   assert.equal(classifyFootstepSurface({ ...ground, tileId: 4 }), 'grass');
   assert.equal(classifyFootstepSurface({ ...ground, tileId: 4, heightAboveSea: 0.6 }), 'sand');

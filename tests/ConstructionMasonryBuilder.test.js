@@ -475,7 +475,7 @@ test('soft limestone coarse field stones use soft-coarse geometry', () => {
   for (const mesh of built.meshes) mesh.geometry.dispose();
 });
 
-test('legacy coursed rubble output remains without relief', () => {
+test('coursed rubble near field stones are sculpted by the relief pipeline', () => {
   const { record, arcTable, placements } = packStraight(8);
   const materials = materialsFor(record);
   const built = buildModuleMasonry(placements.slice(0, 40), {
@@ -486,7 +486,11 @@ test('legacy coursed rubble output remains without relief', () => {
     groundHeightAt: () => 0,
     lodBand: 'near',
   });
-  assert.equal(built.stats.reliefStones, 0);
+  // coursed-rubble now opts into the soft appearance pipeline: its near field
+  // stones are relief-sculpted and every eligible stone resolves without
+  // falling back to the plain lattice mesh.
+  assert.ok(built.stats.reliefStones > 0);
+  assert.equal(built.stats.reliefFallbacks, 0);
   for (const mesh of built.meshes) mesh.geometry.dispose();
 });
 

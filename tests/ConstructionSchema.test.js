@@ -35,8 +35,11 @@ function legacyRecord(overrides = {}) {
 
 test('legacy records load with derivable defaults for the new fields', () => {
   const record = normalizeConstructionRecord(legacyRecord());
+  // A legacy wall with no `top` now defaults to an irregular stone crown
+  // (commit dc4406ef); buildings stay flat. See
+  // test/construction-direct-gizmo.test.js, which pins that default.
   assert.deepEqual(record.top, {
-    style: 'flat',
+    style: 'irregular',
     base: 4,
     profile: [],
   });

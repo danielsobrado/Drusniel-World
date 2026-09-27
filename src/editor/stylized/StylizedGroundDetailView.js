@@ -13,6 +13,7 @@ import { extractAuthoredGroupedPrototypes } from './StylizedPrototypeBake.js';
 import { acceptsStrategicDetailPlacement } from './StrategicDetailPlacement.js';
 import { registerPrototypeIndices } from './BiomeAssetPalette.js';
 import { createBiomePrototypeSelector } from './BiomePrototypeSelector.js';
+import { evaluateStrandPlacement } from './strandPlacement.js';
 
 const DETAIL_UP = new THREE.Vector3(0, 1, 0);
 const DETAIL_SCRATCH = {
@@ -75,6 +76,7 @@ export class StylizedGroundDetailView {
     this.prototypeHeightOffsets = [];
     this.prototypePlacementRules = [];
     this.prototypeWaterRules = [];
+    this.prototypeStrandRules = [];
     this.prototypeBiomeRules = [];
     this.prototypeIndexForRoll = null;
     this.prototypeRevision = 0;
@@ -116,6 +118,7 @@ export class StylizedGroundDetailView {
               ? this.layerConfig.surfaceWater
               : null),
         );
+        this.prototypeStrandRules.push(null);
         this.prototypeBiomeRules.push({
           tileIds: definition.tileIds ?? null,
           weight: definition.prototypeWeights?.[groupIndex] ?? definition.weight ?? 1,
@@ -164,6 +167,75 @@ export class StylizedGroundDetailView {
     this.prototypeRevision += 1;
   }
 
+  /**
+   * Adds prototypes that are built in code rather than extracted from a GLB.
+   *
+   * The donor's shore life — starfish, strand debris, creeping leaves, sea grass —
+   * is geometry it generates, and that is worth keeping: it costs no asset, no
+   * atlas and no load, so a whole layer can be installed synchronously at boot
+   * instead of streaming in through residency. Everything downstream is the same
+   * machinery the authored prototypes use: the same deterministic per-chunk
+   * manifest, the same spacing and biome rules, the same instanced renderers, and
+   * the same rebuild path.
+   *
+   * A definition is: `{ id, parts, heightOffset, placement, strand, tileIds,
+   * weight, character, characterStrength, canopy }`, where `parts` is a list of
+   * `{ geometry, material, kind }` exactly as `appendVariants` produces. `strand`
+   * is a band relative to sea level (see `strandPlacement.js`) and is what makes a
+   * layer of these live on a shore rather than everywhere.
+   */
+  appendProceduralPrototypes(definitions = []) {
+    if (!this.layerConfig?.enabled || this.disposed || definitions.length === 0) return;
+    const firstNewPrototype = this.prototypes.length;
+    for (const definition of definitions) {
+      if (!Array.isArray(definition.parts) || definition.parts.length === 0) {
+        throw new Error(`${this.layerName} prototype ${definition.id ?? '?'} has no parts.`);
+      }
+      this.prototypeHeightOffsets.push(
+        definition.heightOffset ?? this.layerConfig.heightOffset ?? 0,
+      );
+      this.prototypePlacementRules.push(definition.placement ?? null);
+      this.prototypeWaterRules.push(definition.water ?? null);
+      this.prototypeStrandRules.push(
+        definition.strand ?? this.layerConfig.strand ?? null,
+      );
+      this.prototypeBiomeRules.push({
+        tileIds: definition.tileIds ?? null,
+        weight: definition.weight ?? 1,
+        character: definition.character ?? null,
+        characterStrength: definition.characterStrength,
+        canopy: definition.canopy,
+      });
+      this.prototypes.push(definition.parts.map((part) => ({
+        geometry: part.geometry,
+        material: part.material,
+        kind: part.kind ?? 'detail',
+      })));
+      registerPrototypeIndices(
+        this.prototypeIndicesByAsset,
+        definition.id,
+        this.prototypes.length - 1,
+        1,
+      );
+    }
+    this.prototypeIndexForRoll = createBiomePrototypeSelector({
+      rules: this.prototypeBiomeRules,
+      regionalCharacterField: this.regionalCharacterField,
+    });
+    const capacity = instanceCapacity({
+      residentRadius: this.layerConfig.residentRadius,
+      perChunk: this.layerConfig.perChunk,
+    });
+    this.meshes.push(...createInstancedRenderers({
+      root: this.root,
+      partsByPrototype: this.prototypes.slice(firstNewPrototype),
+      capacity,
+      name: `stylized-${this.layerName}-${firstNewPrototype}`,
+      castShadow: this.layerConfig.castShadow === true,
+    }));
+    this.prototypeRevision += 1;
+  }
+
   manifestForChunk(chunkX, chunkZ) {
     const forestField = this.forestFieldProvider?.();
     const key = [
@@ -177,6 +249,7 @@ export class StylizedGroundDetailView {
       JSON.stringify(this.prototypeBiomeRules),
       JSON.stringify(this.prototypePlacementRules),
       JSON.stringify(this.prototypeWaterRules),
+      JSON.stringify(this.prototypeStrandRules),
       this.regionalCharacterField?.signature ?? 'uniform-regions',
       forestField?.signature ?? 'uniform-forest',
       this.biomeAssetPalette?.revision ?? 0,
@@ -234,6 +307,17 @@ export class StylizedGroundDetailView {
             prototypeRule: this.prototypeWaterRules[candidate.prototypeIndex],
           });
           if (!metadata) return null;
+        } else if (this.prototypeStrandRules[candidate.prototypeIndex]) {
+          // The band either side of the waterline, which has no water sample to
+          // read because the field reports no kind on dry ground.
+          const strand = evaluateStrandPlacement({
+            height: candidate.height,
+            seaLevel: this.terrainView.worldStore?.generator?.seaLevel,
+            layerRule: this.layerConfig.strand,
+            prototypeRule: this.prototypeStrandRules[candidate.prototypeIndex],
+          });
+          if (!strand) return null;
+          metadata = strand;
         }
 
         const tileDensity = this.layerConfig.densityByTile?.[candidate.tileId] ?? 1;
@@ -333,6 +417,7 @@ export class StylizedGroundDetailView {
     this.prototypeHeightOffsets.length = 0;
     this.prototypePlacementRules.length = 0;
     this.prototypeWaterRules.length = 0;
+    this.prototypeStrandRules.length = 0;
     this.prototypeBiomeRules.length = 0;
     this.prototypeIndicesByAsset.clear();
     this.prototypeIndexForRoll = null;

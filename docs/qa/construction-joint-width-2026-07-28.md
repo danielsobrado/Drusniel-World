@@ -91,3 +91,13 @@ Soft vs coursed near payload delta: **2812 bytes** (includes mortarCorners + joi
 Tune order if joints look too dark: mortar colour → roughness → underside AO → recess → width last.
 
 Raw JSON: `tmp/construction-joint-width-qa.json`
+
+## Superseded values (annotated 2026-09-27)
+
+This report records 2026-07-28 evidence. Values below changed afterwards:
+
+| Recorded value | Current value | Changed by |
+| --- | --- | --- |
+| faceRecess `0.035 m` | `0.055 m` | `5fe0d989`, `0c90d242` |
+| soft mortar colour `#74746d` | `#68675f` | `0c90d242` |
+| coursed-rubble joint means within the default 12–30 / 8.4–21 mm ranges | coursed-rubble has its own profile override (head 24–40 mm, bed 18–30 mm) | `5fe0d989` |

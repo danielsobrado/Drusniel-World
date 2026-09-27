@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import yaml from 'js-yaml';
 import {
   burgToNormalized,
   canonicalWorldToNormalized,
@@ -10,12 +12,20 @@ import { importAzgaarFullJson } from '../src/editor/import/AzgaarJsonImporter.js
 import { AzgaarMacroWorldGenerator } from '../src/editor/world/AzgaarMacroWorldGenerator.js';
 import { worldToCell } from '../src/editor/world/WorldCoordinates.js';
 
+// The importer derives the macro world's tuning from the Azgaar guidance
+// document; without it AzgaarWorldGuidance rejects the configuration.
+const guidanceConfig = yaml.load(readFileSync(
+  new URL('../config/azgaar-guidance.yaml', import.meta.url),
+  'utf8',
+));
+
 function createConfig() {
   return {
     map: { tileSize: 2 },
     import: {
       azgaarAtlasLongEdge: 4,
       azgaarOceanTransitionKilometers: 50,
+      azgaarGuidance: guidanceConfig,
     },
     world: {
       seed: 918273,

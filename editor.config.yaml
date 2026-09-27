@@ -580,10 +580,20 @@ stylizedSurface:
     # their job on the draw side, but the extra ring still pays full per-chunk
     # scatter generation — grass build slices tripled (12 -> 36) and grassScatterMs
     # went 21.6 -> 58.2. The cost is in building the ring, not drawing it, so the
-    # far band alone cannot pay for it. Raising this needs coarser far-ring scatter
-    # first. See docs/perf-qa.md.
+    # far band alone cannot pay for it. See docs/perf-qa.md.
+    #
+    # The build is cheaper now than it was then: a chunk is written in one resumable
+    # pass straight into the instance buffers, with no intermediate copies, spread
+    # over `streaming.grassScatterGroupsPerSlice` cells per frame. The measurement
+    # above predates that, so a second ring is worth re-running before it is ruled
+    # in or out.
     residentRadius: 1
-    nearRadius: 1
+    # The band split, in chunk rings: this ring and nearer draw the tapered blade,
+    # everything further out draws the single-triangle one. At 0 the camera's own
+    # chunk keeps the full silhouette and the eight around it take the cheap band —
+    # which is the whole draw-side saving, for no extra build work at all, since the
+    # resident ring is the same either way.
+    nearRadius: 0
     # Density comes from these two together, and only the ratio costs anything.
     # Blades are baked into the clump's shared vertex buffer, so instances are
     # clumps, not blades: clumpsPerCell = ceil(bladesPerCell / bladesPerClump)
@@ -597,6 +607,31 @@ stylizedSurface:
     bladesPerClump: 96
     influenceTextureSize: 32
     outerRingDensity: 0.45
+    # The density law, and how the field is brought down to it between rings.
+    #
+    # The per-ring compaction can only keep whole clumps per cell, so a chunk's
+    # population is a step and the boundary between two rings is where it shows.
+    # `coverage` retires blades by their own rank to make up the difference, so the
+    # falloff reads as a gradient and the residency edge fades instead of ending at
+    # a line. `grassLodCoverage` owns the law; the shader only interpolates it.
+    lod:
+      coverage:
+        enabled: true
+        # Metres past the residency radius over which the last ring thins to
+        # nothing. This is the handover to the terrain shader's faked ground cover
+        # (`groundCover` below), and it is also what stops a chunk popping in as it
+        # enters residency: it arrives already thinned to almost nothing.
+        outerFadeMeters: 64
+        # How much of the coverage range one blade spends fading. Wider is softer
+        # but retires blades from further away; too wide and the field reads as
+        # fogged rather than thinned.
+        presenceWindow: 0.06
+        # Survivors widen by the share already retired, so the count drops without
+        # the carpet going bald. `compensation` scales how much of that to apply,
+        # and the cap is the donor's measured fill limit: past about 1.35x its base
+        # half-width a blade costs more in fill than the instances it replaced.
+        compensation: 1
+        maximumWiden: 1.35
     tileIds: [3, 4, 5, 6, 7, 8, 9, 12, 14]
     # Blade silhouette. The upstream Spring preset's 0.06 m width was carried over
     # unchanged while the length was adapted down to world scale, which left a blade
@@ -670,6 +705,46 @@ stylizedSurface:
         mixedWithBaseline:
           label: Authored mix + baseline
           profiles: [stylized-01, meadow-01, field-01, generated]
+        # The donor's silhouette families, generated rather than extracted. A biome
+        # can wear one without an asset to bake: a reed is a narrow spike, a
+        # broadleaf is a wide soft one, and both are drawn on the same 5-triangle
+        # strip as everything else. Named `family*` because the shapes themselves are
+        # also valid profile ids, and `slender` and `broadleaf` are already sets
+        # above — a set and a profile sharing a name would be read as the wrong one.
+        familySlender:
+          label: Slender blades (generated)
+          profiles: [slender]
+        familyReed:
+          label: Reeds
+          profiles: [reed]
+        familyBroadleaf:
+          label: Broadleaves
+          profiles: [broadleaf]
+        familyMeadow:
+          label: Meadow mix (slender + broadleaf)
+          profiles: [slender, broadleaf]
+      # Which set a chunk wears, by the biome most of its grass stands on. The vote
+      # is per chunk, so a boundary landing mid-chunk is resolved by whichever biome
+      # has more of it — the seam is not boundary-accurate, and does not need to be.
+      # An unmapped biome keeps the selected set above.
+      #
+      # Azgaar biome ids: 3 savanna, 4 grassland, 5 tropical seasonal forest,
+      # 6 temperate deciduous forest, 7 tropical rainforest, 8 temperate rainforest,
+      # 9 taiga, 10 tundra, 12 wetland. 14 is this world's custom biome.
+      biomeSets:
+        byTileId:
+          # Wetland is the one the donor called out by name: reeds, not meadow.
+          12: familyReed
+          # Open ground reads as a mixed meadow; a single shape across a whole
+          # biome is what makes a field look painted.
+          4: familyMeadow
+          3: familySlender
+          # Forest floors keep a narrower blade so the understory reads as shade.
+          6: familySlender
+          8: familySlender
+          9: familySlender
+          5: familyBroadleaf
+          7: familyBroadleaf
   streaming:
     grassBuildsPerFrame: 1
     flowerBuildsPerFrame: 1
@@ -679,6 +754,11 @@ stylizedSurface:
     detailBuildsPerFrame: 1
     heavyBuildBudgetMs: 3
     grassCellsPerBuildSlice: 64
+    # Source cells per frame when a chunk is built from the worker's scatter. The
+    # worker hands over a whole page at the world's full density, so without this
+    # the chunk's compaction, canopy suppression and buffer upload all land in one
+    # frame; 64x64 cells at 256 is sixteen frames of steady work instead of a hitch.
+    grassScatterGroupsPerSlice: 256
     inactiveReleaseFrames: 30
     treeManifestBuildsPerFrame: 1
     manifestBuildBudgetMs: 3
@@ -1001,6 +1081,100 @@ stylizedSurface:
     heightOffset: -0.02
     colorVariation: 0.1
     castShadow: false
+    # Procedural water plants, after grass-test's sea algae and lake flora. They
+    # ride this layer's authored variants on the same water rule, needing no asset:
+    # a bed is one draw call per species.
+    #
+    # Depth is each species' niche and the bands overlap on purpose — a bed that is
+    # only seagrass to 3 m and only kelp past it has a line drawn across it. Sway is
+    # the donor's own: 0.3 for kelp, 0.18 for seagrass, 0.1 for the algae.
+    proceduralVariants:
+      seagrass:
+        kind: seagrass
+        color: '#3f6b34'
+      kelp:
+        kind: kelp
+        color: '#4a5c2c'
+      redAlgae:
+        kind: redAlgae
+        color: '#8c3f3a'
+      eelgrass:
+        kind: eelgrass
+        color: '#43682f'
+      waterweed:
+        kind: waterweed
+        color: '#4f7434'
+      pondweed:
+        kind: pondweed
+        color: '#3d5f2e'
+      lilyPad:
+        kind: lilyPad
+        color: '#4c7a3a'
+  # Shore life: starfish, shells, driftwood and creeping leaves, after grass-test's
+  # beach scatter, starfish and coastal groundcover.
+  #
+  # Unlike the authored layers above, every shape here is generated in code
+  # (`proceduralFlora.js`), so the layer installs at boot with no asset, no
+  # residency entry and no load — a shore is one draw call per prototype. Each
+  # shape is built at its natural size and this layer's scale band is only
+  # variation around it.
+  #
+  # `strand` is the band in metres above sea level the layer places in, and a
+  # variant narrows it or names its own. Nothing is placed on dry land far inland
+  # or below the waterline: the donor places all of this against an authored
+  # coastline, and a height band is the streamed equivalent of that curve.
+  shoreLife:
+    enabled: true
+    # Shores are the third ring in: grass and rocks already occupy the near ones,
+    # and this is the layer the player notices last.
+    residentRadius: 2
+    # Candidate slots per chunk. One layer carries four species over a thin band,
+    # so most candidates land off the band and are rejected before they cost
+    # anything — the survivors are the ones that matter.
+    perChunk: 96
+    # Sea level is a height, not a biome, so a beach can cut through any of these.
+    # Deserts (1, 2) and glacier (11) are in because a hot desert coast has a
+    # strand line and a glacier's shore has dropped stones; they are sparse there
+    # because `densityByTile` says so below.
+    tileIds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14]
+    densityByTile:
+      1: 0.5
+      2: 0.5
+      10: 0.35
+      11: 0.3
+    minScale: 0.8
+    maxScale: 1.4
+    radius: 0.2
+    heightOffset: 0.01
+    colorVariation: 0.16
+    castShadow: false
+    strand:
+      placement: ground
+      minimumAbove: 0.02
+      maximumAbove: 26
+    # The species. `kind` selects the shape and the material; the default band is
+    # the donor's own placement, and any of it can be overridden per variant.
+    variants:
+      starfish:
+        kind: starfish
+        color: '#c4553a'
+        minimumAbove: 0.05
+        maximumAbove: 1.4
+      shell:
+        kind: shell
+        color: '#c9bea2'
+        minimumAbove: 0.02
+        maximumAbove: 1.8
+      driftwood:
+        kind: driftwood
+        color: '#7b674d'
+        minimumAbove: 0.1
+        maximumAbove: 2.4
+      groundcover:
+        kind: groundcover
+        color: '#667957'
+        minimumAbove: 1.4
+        maximumAbove: 26
   wildlife:
     enabled: true
     # Default ambience: one instanced draw using three-triangle billboard birds.

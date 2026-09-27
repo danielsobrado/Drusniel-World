@@ -5,13 +5,13 @@ Seed 3141, soft-limestone ruined wall (~30 m).
 | Metric | Value |
 | --- | ---: |
 | Modules | 3 |
-| Survivors | 72 |
-| Final removed | 107 |
+| Survivors | 112 |
+| Final removed | 84 |
 | Isolated holes restored | 0 |
-| Unsupported removed | 18 |
-| Damage resolve ms | 0.42 |
-| Support resolve ms | 1.53 |
-| Plan ms | 10.51 |
+| Unsupported removed | 34 |
+| Damage resolve ms | 1.02 |
+| Support resolve ms | 4.92 |
+| Plan ms | 20.32 |
 
 ## Gates
 

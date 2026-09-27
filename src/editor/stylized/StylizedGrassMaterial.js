@@ -10,6 +10,7 @@ import {
   float,
   length,
   max,
+  min,
   mix,
   normalize,
   oneMinus,
@@ -20,6 +21,7 @@ import {
   sin,
   smoothstep,
   texture,
+  uniform,
   vec2,
   vec3,
 } from 'three/tsl';
@@ -33,6 +35,10 @@ import { createSurfaceClassNodes } from './SurfaceMaskNodes.js';
 import { sampleWorldWindCanonical } from '../weather/wind/worldWindState.js';
 import { groundDeformationNode } from './deformation/groundDeformationNode.js';
 import { assignGrassMaterialData } from '../../render/postprocessing/PostProcessingMaterialData.js';
+import {
+  GRASS_LOD_PRESENCE_WINDOW,
+  GRASS_LOD_WIDEN_DEFAULTS,
+} from './grassLodMath.js';
 
 const TWO_PI = Math.PI * 2;
 
@@ -50,11 +56,25 @@ export function createStylizedGrassMaterial({
   sunDirection,
   config,
   tuning,
+  lodCoverage,
 }) {
   // Live-tunable values come through `tuning` as shared uniforms so a slider reaches
   // every chunk without a rebuild; everything else is a constant folded into the
   // graph. `GrassTuning` documents which parameters cannot be live and why.
   const tuned = tuning.uniforms;
+  // LOD thinning tuning, from the same defaults `grassLodWiden` and
+  // `grassLodPresence` use, so the two implementations cannot drift apart.
+  const coverageSettings = config.grass?.lod?.coverage ?? {};
+  const presenceWindow = Number.isFinite(coverageSettings.presenceWindow)
+    ? coverageSettings.presenceWindow
+    : GRASS_LOD_PRESENCE_WINDOW;
+  const halfWindow = presenceWindow * 0.5;
+  const widenCompensation = Number.isFinite(coverageSettings.compensation)
+    ? coverageSettings.compensation
+    : GRASS_LOD_WIDEN_DEFAULTS.compensation;
+  const widenMaximum = Number.isFinite(coverageSettings.maximumWiden)
+    ? coverageSettings.maximumWiden
+    : GRASS_LOD_WIDEN_DEFAULTS.maximumWiden;
   const base = attribute('instanceBase', 'vec3');
   const parameters = attribute('instanceParams', 'vec4');
   // Per-blade data is packed into three vertex buffers, not six: WebGPU allows
@@ -150,6 +170,53 @@ export function createStylizedGrassMaterial({
   const lengthFraction = lengthRank.pow(tuned.lengthSkew);
   const bladeLength = mix(tuned.minLength, tuned.maxLength, lengthFraction);
 
+  // Distance from the camera to this blade. Measured from the blade's own
+  // render-space position, not from the canonical `worldXZ` above: those are the
+  // same vector only while the floating origin sits at the world's centre, and on
+  // an imported planet-scale world the canonical coordinates are millions of
+  // metres from a camera that is always near the origin. Every distance taken from
+  // `worldXZ` therefore read as enormous there, which left the flutter fade and the
+  // blade-normal fade permanently off. Render space is exact wherever the origin is.
+  const worldPosition = positionWorld;
+  const cameraDistance = length(worldPosition.xz.sub(cameraPosition.xz));
+
+  // LOD thinning. The CPU resolves the density this chunk should be showing at its
+  // nearest and farthest corner — see `grassLodCoverage`, which owns the law — and
+  // this interpolates between them by the blade's own distance. So the field thins
+  // continuously across a chunk rather than in one step per chunk, which is the
+  // whole reason the density falloff is not left to the per-ring compaction.
+  //
+  // `lodCoverage` is `(inner metres, outer metres, coverage at each)`. A caller with
+  // no camera to measure from — a capture harness, a budget test — gets coverage of
+  // 1 everywhere, which is what the density law says when nothing is overdue for
+  // retiring; the uniform is built lazily so those callers do not carry it.
+  const coverageLod = lodCoverage ?? uniform(new THREE.Vector4(0, 1, 1, 1));
+  const coverageT = clamp(
+    cameraDistance.sub(coverageLod.x)
+      .div(max(coverageLod.y.sub(coverageLod.x), float(1e-3))),
+    0,
+    1,
+  );
+  const coverage = mix(coverageLod.z, coverageLod.w, coverageT);
+  // Retire by rank, with the ramp centred on the rank so the share still standing
+  // is the coverage exactly. The trailing factor closes the field off as the
+  // coverage reaches zero, or the lowest ranks would survive as half-width blades
+  // past the end of the fade. Mirrors `grassLodPresence`.
+  const lodPresence = clamp(
+    oneMinus(bladeWind.w.sub(coverage).add(halfWindow).div(presenceWindow)),
+    0,
+    1,
+  ).mul(clamp(coverage.div(presenceWindow), 0, 1));
+  // Survivors widen by the share already retired, so thinning keeps the carpet's
+  // opacity instead of opening it up. Capped: past about 1.35x the extra fill costs
+  // more than the instances it replaced. Mirrors `grassLodWiden`.
+  const lodWiden = oneMinus(
+    oneMinus(min(
+      float(widenMaximum),
+      max(float(1), float(1).div(max(coverage, float(1e-3)))),
+    )).mul(widenCompensation),
+  );
+
   // Per-blade width. `instanceParams.x` is the clump's roll over the configured
   // range, which on its own makes all 96 blades of a clump one gauge and turns the
   // batching unit into visible patches. This spreads them around that roll
@@ -169,9 +236,19 @@ export function createStylizedGrassMaterial({
   const widthMix = mix(widthRoll, oneMinus(lengthRank), tuned.widthLengthCorrelation);
   // `widthScale` is the live stand-in for the baked `minWidth`/`maxWidth` range,
   // which lives in the worker scatter and cannot change without re-paging.
+  //
+  // The last two factors are the LOD thinning. A chunk's population is a whole
+  // number of clumps per cell, so the density law it is trying to follow is always
+  // a step; the coverage is the gap between the two, and `presence` retires blades
+  // by rank until what is left is the density the chunk's distance actually calls
+  // for. Blades are thinned rather than shortened — a shortened blade reads as the
+  // field getting mown as you walk toward it — and the survivors widen by the share
+  // already retired, so the count drops without the carpet going bald.
   const bladeWidth = parameters.x
     .mul(tuned.widthScale)
-    .mul(float(1).sub(widthSpread.div(2)).add(widthMix.mul(widthSpread)));
+    .mul(float(1).sub(widthSpread.div(2)).add(widthMix.mul(widthSpread)))
+    .mul(lodPresence)
+    .mul(lodWiden);
 
   const clumpOffset = rotateByClump(
     bladeCenter.add(vec2(positionLocal.x, positionLocal.z).mul(bladeWidth)),
@@ -231,7 +308,6 @@ export function createStylizedGrassMaterial({
   // Past this range a blade is close enough to sub-pixel that flutter contributes
   // temporal noise rather than motion, so it is faded out instead of drawn. The
   // gust survives — broad movement is what distant grass should still show.
-  const cameraDistance = length(worldXZ.sub(cameraPosition.xz));
   const flutterFade = oneMinus(smoothstep(
     tuned.flutterFadeStart,
     tuned.flutterFadeEnd,
@@ -257,7 +333,6 @@ export function createStylizedGrassMaterial({
   const finalXZ = base.xz.add(clumpOffset).add(curveOffset).add(leanOffset)
     .add(windOffset).add(rockOffset);
   const finalPosition = vec3(finalXZ.x, base.y.add(bladeHeight), finalXZ.y);
-  const worldPosition = positionWorld;
 
   const gradient = pow(clamp(
     normalizedHeight.sub(config.color.gradientStart)

@@ -797,6 +797,11 @@ export class EditorUi {
     const parts = [];
     if (state.manifestError) parts.push(`manifest unavailable (${state.manifestError})`);
     parts.push(`shapes: ${state.activeProfiles.join(', ') || 'none'}`);
+    // The switch is the default, not the whole story: a mapped biome overrides it
+    // per chunk, and a readout that only named the selected set would look wrong
+    // the moment you stood in a wetland.
+    const mapped = Object.keys(state.biomeSets ?? {});
+    if (mapped.length > 0) parts.push(`${mapped.length} biomes override`);
     if (stats?.clumps) parts.push(`${stats.clumps.toLocaleString()} clumps/chunk`);
     if (stats?.blades) parts.push(`${stats.blades.toLocaleString()} blades/chunk`);
     if (stats?.triangles) parts.push(`${stats.triangles.toLocaleString()} tris/chunk`);

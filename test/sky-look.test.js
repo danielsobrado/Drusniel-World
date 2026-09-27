@@ -109,3 +109,21 @@ test('unlit water keeps its authored colours under the configured look and dims 
   assert.ok(night.brightness < 0.4);
   assert.ok(night.tint.every((channel) => channel < 1));
 });
+
+test('changing preset mid-transition carries on from the look on screen', () => {
+  const applied = [];
+  const skyView = { config: { sky: SKY }, applyLook: (look) => applied.push(look) };
+  const controller = new SkyLookController({ skyView });
+  controller.setPreset('emberfall');
+  // A fifth of the way: the eased mix is well behind the linear progress.
+  controller.update(0.25);
+  controller.update(0.25);
+  const onScreen = applied.at(-1);
+  controller.setPreset('moonrise');
+  // The very first frame of the new transition starts where the old one was.
+  controller.update(1e-6);
+  const next = applied.at(-1);
+  for (const key of ['sunElevation', 'directionalIntensity', 'ambientIntensity']) {
+    assert.ok(Math.abs(next[key] - onScreen[key]) < 1e-3, `${key} jumped from ${onScreen[key]} to ${next[key]}`);
+  }
+});

@@ -272,6 +272,171 @@ function validateGroundCover(groundCover) {
   }
 }
 
+/**
+ * The grass density falloff's tail and the thinning that carries the field down to
+ * it. `presenceWindow` is the one number here that is a fraction rather than a
+ * distance: it is the slice of the coverage range a single blade spends fading.
+ */
+function validateGrassCoverage(lod) {
+  if (!lod) return;
+  assertBoolean(lod.enabled, 'stylizedSurface.grass.lod.enabled');
+  if (!lod.enabled) return;
+  const coverage = lod.coverage;
+  if (!coverage) return;
+  assertBoolean(coverage.enabled, 'stylizedSurface.grass.lod.coverage.enabled');
+  if (!coverage.enabled) return;
+  if (coverage.outerFadeMeters !== undefined) {
+    assertNonNegative(
+      coverage.outerFadeMeters,
+      'stylizedSurface.grass.lod.coverage.outerFadeMeters',
+    );
+  }
+  // A window at zero would snap every blade at once, which is the ring this exists
+  // to remove; at it or above, blades spend the whole range fading and none of them
+  // is ever whole.
+  if (coverage.presenceWindow !== undefined) {
+    assertUnitInterval(coverage.presenceWindow, 'stylizedSurface.grass.lod.coverage.presenceWindow', false);
+    if (coverage.presenceWindow >= 0.5) {
+      throw new Error(
+        'Invalid editor configuration: stylizedSurface.grass.lod.coverage.presenceWindow must be under 0.5.',
+      );
+    }
+  }
+  if (coverage.compensation !== undefined) {
+    assertUnitInterval(coverage.compensation, 'stylizedSurface.grass.lod.coverage.compensation');
+  }
+  if (coverage.maximumWiden !== undefined) {
+    if (!Number.isFinite(coverage.maximumWiden) || coverage.maximumWiden < 1) {
+      throw new Error(
+        'Invalid editor configuration: stylizedSurface.grass.lod.coverage.maximumWiden must be at least 1.',
+      );
+    }
+  }
+}
+
+/**
+ * The procedural water plants. Their rule is the water rule the view hands to
+ * `evaluateAquaticPlacement`, so what has to hold is that each species' depth band
+ * is a real band in a real order — an inverted one would place a species nowhere,
+ * or everywhere, and neither shows up until someone looks at a lake.
+ */
+function validateAquaticFlora(layer) {
+  const variants = Object.entries(layer?.proceduralVariants ?? {});
+  if (variants.length === 0) return;
+  if (!layer.enabled) {
+    throw new Error('Invalid editor configuration: stylizedSurface.aquaticPlants needs enabled to carry water plants.');
+  }
+  for (const [id, variant] of variants) {
+    if (variant?.enabled === false) continue;
+    const path = `stylizedSurface.aquaticPlants.proceduralVariants.${id}`;
+    for (const name of ['minimumDepth', 'maximumDepth']) {
+      if (variant[name] === undefined) continue;
+      if (!Number.isFinite(variant[name]) || variant[name] < 0) {
+        throw new Error(`Invalid editor configuration: ${path}.${name} must not be negative.`);
+      }
+    }
+    if (variant.minimumDepth !== undefined && variant.maximumDepth !== undefined
+        && variant.maximumDepth <= variant.minimumDepth) {
+      throw new Error(`Invalid editor configuration: ${path}.maximumDepth must exceed minimumDepth.`);
+    }
+    if (variant.minimumShoreDistance !== undefined && variant.maximumShoreDistance !== undefined
+        && variant.maximumShoreDistance <= variant.minimumShoreDistance) {
+      throw new Error(`Invalid editor configuration: ${path}.maximumShoreDistance must exceed minimumShoreDistance.`);
+    }
+    if (variant.placement !== undefined
+        && variant.placement !== 'rooted'
+        && variant.placement !== 'surface') {
+      throw new Error(`Invalid editor configuration: ${path}.placement must be "rooted" or "surface".`);
+    }
+    if (variant.allowedKinds !== undefined
+        && (!Array.isArray(variant.allowedKinds) || variant.allowedKinds.length === 0)) {
+      throw new Error(`Invalid editor configuration: ${path}.allowedKinds must be a non-empty array.`);
+    }
+    if (variant.heightScale !== undefined) {
+      assertPositive(variant.heightScale, `${path}.heightScale`);
+    }
+  }
+}
+
+/**
+ * The procedural shore layer. Its geometry is built in code from `kind`, so the
+ * thing worth validating is not a scale band but that every variant names a band it
+ * actually occupies: a variant with no band would either place nothing or claim the
+ * whole world, and neither shows up as an error until someone looks at a beach.
+ */
+function validateShoreLife(layer) {
+  if (!layer) return;
+  assertBoolean(layer.enabled, 'stylizedSurface.shoreLife.enabled');
+  if (!layer.enabled) return;
+  assertNonNegativeInteger(layer.residentRadius, 'stylizedSurface.shoreLife.residentRadius');
+  assertPositiveInteger(layer.perChunk, 'stylizedSurface.shoreLife.perChunk');
+  if (layer.perChunk > 256) {
+    throw new Error('Invalid editor configuration: stylizedSurface.shoreLife.perChunk must not exceed 256.');
+  }
+  assertPositive(layer.minScale, 'stylizedSurface.shoreLife.minScale');
+  assertPositive(layer.maxScale, 'stylizedSurface.shoreLife.maxScale');
+  if (layer.maxScale < layer.minScale) {
+    throw new Error('Invalid editor configuration: shoreLife maxScale must cover its minimum.');
+  }
+  if (!Array.isArray(layer.tileIds) || layer.tileIds.length === 0) {
+    throw new Error('Invalid editor configuration: stylizedSurface.shoreLife.tileIds must be a non-empty array.');
+  }
+  for (const [tileId, density] of Object.entries(layer.densityByTile ?? {})) {
+    if (!Number.isInteger(Number(tileId))) {
+      throw new Error(`Invalid editor configuration: shoreLife densityByTile key "${tileId}" is not a tile id.`);
+    }
+    assertUnitInterval(density, `stylizedSurface.shoreLife.densityByTile.${tileId}`, false);
+  }
+  const layerBand = layer.strand;
+  if (layerBand) {
+    assertStrandBand(layerBand, 'stylizedSurface.shoreLife.strand');
+  }
+  const variants = Object.entries(layer.variants ?? {});
+  if (variants.length === 0) {
+    throw new Error('Invalid editor configuration: stylizedSurface.shoreLife needs at least one variant.');
+  }
+  for (const [id, variant] of variants) {
+    const path = `stylizedSurface.shoreLife.variants.${id}`;
+    if (variant?.enabled === false) continue;
+    // A variant carries its own species band, which came from the shape's default
+    // unless the config named one. The layer's band is the shore itself: a species
+    // outside it would place nothing and never say so, so that is an error rather
+    // than something to clamp.
+    const band = {
+      placement: variant?.placement ?? layerBand?.placement ?? 'ground',
+      minimumAbove: variant?.minimumAbove ?? layerBand?.minimumAbove,
+      maximumAbove: variant?.maximumAbove ?? layerBand?.maximumAbove,
+    };
+    if (variant?.minimumAbove !== undefined
+      || variant?.maximumAbove !== undefined
+      || !layerBand) {
+      assertStrandBand(band, `${path}.strand`);
+    }
+    if (layerBand && variant?.minimumAbove !== undefined && variant.minimumAbove < layerBand.minimumAbove) {
+      throw new Error(`Invalid editor configuration: ${path}.minimumAbove starts below the shore band.`);
+    }
+    if (layerBand && variant?.maximumAbove !== undefined && variant.maximumAbove > layerBand.maximumAbove) {
+      throw new Error(`Invalid editor configuration: ${path}.maximumAbove reaches past the shore band.`);
+    }
+  }
+}
+
+function assertStrandBand(band, path) {
+  const placement = band.placement ?? 'ground';
+  if (placement === 'ground' || placement === 'bed') {
+    assertFinite(band.minimumAbove ?? 0, `${path}.minimumAbove`);
+    assertFinite(band.maximumAbove ?? 0, `${path}.maximumAbove`);
+    if ((band.minimumAbove ?? 0) < 0) {
+      throw new Error(`Invalid editor configuration: ${path}.minimumAbove must not be negative.`);
+    }
+    if ((band.maximumAbove ?? 0) <= (band.minimumAbove ?? 0)) {
+      throw new Error(`Invalid editor configuration: ${path} must have a band: maximumAbove must exceed minimumAbove.`);
+    }
+    return;
+  }
+  throw new Error(`Invalid editor configuration: ${path}.placement must be "ground" or "bed".`);
+}
+
 export function validateStylizedLodConfig(config) {
   const surface = config.stylizedSurface;
   if (!surface?.enabled) return config;
@@ -322,6 +487,18 @@ export function validateStylizedLodConfig(config) {
   if (surface.grass.outerRingDensity !== undefined) {
     assertUnitInterval(surface.grass.outerRingDensity, 'stylizedSurface.grass.outerRingDensity', false);
   }
+  if (surface.grass.nearRadius !== undefined) {
+    assertNonNegativeInteger(surface.grass.nearRadius, 'stylizedSurface.grass.nearRadius');
+    // A near band wider than residency would leave the far geometry unreachable,
+    // and the slot drops it in that case — so the two keys would silently disagree
+    // with what is drawn.
+    if (surface.grass.nearRadius > surface.grass.residentRadius) {
+      throw new Error(
+        'Invalid editor configuration: stylizedSurface.grass.nearRadius must not exceed residentRadius.',
+      );
+    }
+  }
+  validateGrassCoverage(surface.grass.lod);
   if (surface.flowers.outerRingDensity !== undefined) {
     assertUnitInterval(surface.flowers.outerRingDensity, 'stylizedSurface.flowers.outerRingDensity', false);
   }
@@ -334,6 +511,12 @@ export function validateStylizedLodConfig(config) {
     assertPositiveInteger(
       surface.streaming.grassCellsPerBuildSlice,
       'stylizedSurface.streaming.grassCellsPerBuildSlice',
+    );
+  }
+  if (surface.streaming?.grassScatterGroupsPerSlice !== undefined) {
+    assertPositiveInteger(
+      surface.streaming.grassScatterGroupsPerSlice,
+      'stylizedSurface.streaming.grassScatterGroupsPerSlice',
     );
   }
   if (surface.streaming?.inactiveReleaseFrames !== undefined) {
@@ -362,6 +545,8 @@ export function validateStylizedLodConfig(config) {
   validateRockAppearance(surface.rocks);
   validateGroundDetailLayer(surface.groundDetails, 'stylizedSurface.groundDetails');
   validateGroundDetailLayer(surface.aquaticPlants, 'stylizedSurface.aquaticPlants');
+  validateAquaticFlora(surface.aquaticPlants);
+  validateShoreLife(surface.shoreLife);
   if (!surface.lod) return config;
   assertBoolean(surface.lod.enabled, 'stylizedSurface.lod.enabled');
   validateTreeBand(surface.lod.tree);

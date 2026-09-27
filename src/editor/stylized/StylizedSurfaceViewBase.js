@@ -15,6 +15,9 @@ import { StylizedBuildQueue } from './StylizedBuildQueue.js';
 import { StylizedChunkRevisionTracker } from './StylizedChunkRevisionTracker.js';
 import { StylizedFlowerView } from './StylizedFlowerView.js';
 import { StylizedGroundDetailView } from './StylizedGroundDetailView.js';
+import { createShoreLifePrototypes } from './shoreLifePrototypes.js';
+import { createAquaticFloraPrototypes } from './aquaticFloraPrototypes.js';
+import { advancePlantSway } from './plantSway.js';
 import {
   GRASS_BLADE_SEGMENTS,
   GRASS_FAR_BLADE_SEGMENTS,
@@ -137,6 +140,41 @@ export class StylizedSurfaceView {
         biomeAssetPalette,
       })
       : null;
+    // Water plants are procedural too: seagrass, kelp and the algae ride the same
+    // layer as the authored aquatic variants, on the same water rule, but they need
+    // no scene to load so they install here.
+    if (this.aquaticPlantView) {
+      this.aquaticPlantView.appendProceduralPrototypes(
+        createAquaticFloraPrototypes(config.aquaticPlants),
+      );
+    }
+    // Shore life is procedural, so unlike the authored layers it installs here and
+    // now: there is no scene to fetch and nothing to stream in through residency.
+    this.shoreLifeView = this.enabled
+      && !this.impostorBakeMode
+      && config.shoreLife?.enabled
+      ? new StylizedGroundDetailView({
+        terrainView,
+        config,
+        revisionTracker: this.revisionTracker,
+        layerConfig: config.shoreLife,
+        layerName: 'shoreLife',
+        priorityChannel: 47,
+      })
+      : null;
+    if (this.shoreLifeView) {
+      this.shoreLifeView.appendProceduralPrototypes(
+        createShoreLifePrototypes(config.shoreLife),
+      );
+    }
+    // Every per-chunk detail layer, authored or procedural, is rebuilt and disposed
+    // the same way; the array is what keeps a new layer from having to be added to
+    // three separate places.
+    this.detailViews = [
+      this.groundDetailView,
+      this.aquaticPlantView,
+      this.shoreLifeView,
+    ].filter(Boolean);
     this.wildlifeView = this.enabled
       && !this.impostorBakeMode
       && config.wildlife?.enabled
@@ -532,14 +570,19 @@ export class StylizedSurfaceView {
     }
     this.groundDetailView?.update();
     this.aquaticPlantView?.update();
-    for (const view of [this.groundDetailView, this.aquaticPlantView]) {
-      if (view?.pendingRebuild) this.detailBuildQueue.enqueue(view.pendingRebuild);
+    this.shoreLifeView?.update();
+    // One clock for every swaying plant, advanced once here rather than per layer.
+    advancePlantSway(timestamp);
+    for (const view of this.detailViews) {
+      if (view.pendingRebuild) this.detailBuildQueue.enqueue(view.pendingRebuild);
     }
     this.detailBuildQueue.flush((job) => {
-      if (job.key.startsWith('groundDetail:')) {
-        return this.groundDetailView?.applyPendingRebuild() ?? false;
+      for (const view of this.detailViews) {
+        if (job.key.startsWith(`${view.layerName}:`)) {
+          return view.applyPendingRebuild() ?? false;
+        }
       }
-      return this.aquaticPlantView?.applyPendingRebuild() ?? false;
+      return false;
     });
     this.updateForestGroundTextures();
     this.flowerView?.update(timestamp);
@@ -547,6 +590,13 @@ export class StylizedSurfaceView {
     this.prewarmOneDistantWaterSlot();
 
     const focusChunk = this.terrainView.focusChunkKey ? this.terrainView.focusChunk : null;
+    // Canonical camera XZ, once for the whole pass. Grass thins by how far each
+    // chunk actually is in metres, and render-local metres only mean the same thing
+    // near the origin — on an imported world the camera's render position is a few
+    // metres from zero while the ground under it is a planet away from it.
+    const canonicalFocus = camera
+      ? this.terrainView.floatingOrigin.toCanonical(camera.position.x, camera.position.z)
+      : null;
     const rockRadius = this.config.rocks.radius;
     const rockFalloff = this.config.rocks.falloff;
     const objectBoulders = collectObjectBoulderPlacements({
@@ -558,7 +608,7 @@ export class StylizedSurfaceView {
     for (const slot of this.slots) {
       const descriptor = slot.terrainSlot.descriptor;
       if (!descriptor) {
-        slot.update(timestamp, focusChunk, '', []);
+        slot.update(timestamp, focusChunk, '', [], canonicalFocus);
         continue;
       }
       const localRocks = rocksInfluencingChunk({
@@ -596,7 +646,7 @@ export class StylizedSurfaceView {
       slot.update(timestamp, focusChunk, signature, [
         ...localObjectBoulders,
         ...localRocks,
-      ]);
+      ], canonicalFocus);
       if (slot.pendingRebuild) {
         this.grassBuildQueue.enqueue({
           key: slot.pendingRebuild.key,
@@ -657,6 +707,8 @@ export class StylizedSurfaceView {
     this.flowerView?.dispose();
     this.groundDetailView?.dispose();
     this.aquaticPlantView?.dispose();
+    this.shoreLifeView?.dispose();
+    this.detailViews = [];
     this.bushView?.dispose();
     this.treeView?.dispose();
     this.rockView?.dispose();

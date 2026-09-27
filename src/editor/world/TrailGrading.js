@@ -143,14 +143,17 @@ export class TrailGrading {
     }
   }
 
-  /** The nearest route point to a cell: its route, distance (metres) and arclength (metres). */
-  nearest(x, z) {
+  /**
+   * Each route passing near a cell, at its point nearest the cell: the route,
+   * distance (metres) and arclength (metres). One entry per route.
+   */
+  nearbyRoutes(x, z) {
     const entries = this.buckets.get(this.bucketKey(
       Math.floor(x / this.cellsPerBucket),
       Math.floor(z / this.cellsPerBucket),
     ));
-    if (!entries) return null;
-    let best = null;
+    if (!entries) return [];
+    const nearestByRoute = new Map();
     for (let i = 0; i < entries.length; i += 2) {
       const route = entries[i];
       const segment = entries[i + 1];
@@ -161,12 +164,22 @@ export class TrailGrading {
       const lengthSquared = dx * dx + dz * dz;
       const t = lengthSquared > 0 ? Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / lengthSquared)) : 0;
       const distance = Math.hypot(x - (a.x + dx * t), z - (a.z + dz * t)) * this.metersPerCell;
-      // Rank by distance past the path's edge, so a road beats a trail beside it.
-      const rank = distance - route.halfWidth;
-      if (!best || rank < best.rank) {
+      const best = nearestByRoute.get(route);
+      if (!best || distance < best.distance) {
         const along = route.distances[segment] + (route.distances[segment + 1] - route.distances[segment]) * t;
-        best = { route, distance, along, rank };
+        nearestByRoute.set(route, { route, distance, along });
       }
+    }
+    return [...nearestByRoute.values()];
+  }
+
+  /** The nearest route point to a cell: its route, distance (metres) and arclength (metres). */
+  nearest(x, z) {
+    let best = null;
+    for (const candidate of this.nearbyRoutes(x, z)) {
+      // Rank by distance past the path's edge, so a road beats a trail beside it.
+      const rank = candidate.distance - candidate.route.halfWidth;
+      if (!best || rank < best.rank) best = { ...candidate, rank };
     }
     return best;
   }
@@ -233,24 +246,39 @@ export class TrailGrading {
     return traced.heights[low] + (traced.heights[high] - traced.heights[low]) * (position - low);
   }
 
-  /** The ground at a cell with any path graded into it. */
+  /**
+   * The ground at a cell with any path graded into it.
+   *
+   * Every route near the cell pulls the ground toward its own profile by its
+   * own bank weight, and the pulls are summed. Where two paths cross or run
+   * side by side, their profiles differ — one may be cut through a ridge the
+   * other runs along the top of — so handing the cell to whichever route is
+   * nearer left a step along the line where they tie. Summed, the ground ramps
+   * between them; once the weights add past one (both paths' full width) it is
+   * their weighted mean, so a crossing sits between the two profiles. With a
+   * single route this is exactly that route's own blend.
+   */
   grade(x, z, height) {
-    const nearest = this.nearest(x, z);
-    if (!nearest) return height;
-    const { route, distance, along } = nearest;
-    if (distance > route.halfWidth + this.maxShoulderMeters) return height;
-    const path = this.profileAt(route, along);
-    // `height` is the ground here, not on the centre line, so across a hillside
-    // it can differ from the path by far more than the cut and fill limits.
-    // Capped at the reach the early return above uses, so the bank has always
-    // finished blending where the shaping stops; uncapped it would still be
-    // pulling the ground part-way to the path there, and leave a step.
-    const shoulder = Math.min(
-      this.maxShoulderMeters,
-      this.grading.shoulderMeters + Math.abs(path - height) * this.grading.bankSlope,
-    );
-    const weight = 1 - smoothstep(route.halfWidth, route.halfWidth + shoulder, distance);
-    return height + (path - height) * weight;
+    let totalWeight = 0;
+    let pull = 0;
+    for (const { route, distance, along } of this.nearbyRoutes(x, z)) {
+      if (distance > route.halfWidth + this.maxShoulderMeters) continue;
+      const path = this.profileAt(route, along);
+      // `height` is the ground here, not on the centre line, so across a hillside
+      // it can differ from the path by far more than the cut and fill limits.
+      // Capped at the reach the check above uses, so the bank has always
+      // finished blending where the shaping stops; uncapped it would still be
+      // pulling the ground part-way to the path there, and leave a step.
+      const shoulder = Math.min(
+        this.maxShoulderMeters,
+        this.grading.shoulderMeters + Math.abs(path - height) * this.grading.bankSlope,
+      );
+      const weight = 1 - smoothstep(route.halfWidth, route.halfWidth + shoulder, distance);
+      if (!(weight > 0)) continue;
+      totalWeight += weight;
+      pull += (path - height) * weight;
+    }
+    return totalWeight > 0 ? height + pull / Math.max(1, totalWeight) : height;
   }
 
   /** 0..1 how much of a cell is path, for surface painting. */

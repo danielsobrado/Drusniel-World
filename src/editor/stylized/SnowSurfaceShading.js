@@ -19,11 +19,13 @@ import {
   select,
   smoothstep,
   uint,
+  uniform,
   vec2,
   vec3,
 } from 'three/tsl';
 import { latticeHashNode } from '../weather/wind/windNoise.js';
 import { directionFromAngles } from './StylizedGodRaysPostProcess.js';
+import { skyLightUniforms } from './sky/skyLight.js';
 
 /**
  * What a lit material leaves out of snow (after grass-test's snow shading,
@@ -77,11 +79,25 @@ function glintOctave({ localMeters, originMeters, cellMeters, salt, normal, half
  * @param {object} options.chunkCenter vec2 uniform, canonical chunk centre (whole metres)
  * @param {object} options.snow 0..1 snow weight
  * @param {object} options.stylizedConfig for the sky's sun and the snow colour
+ * @param {import('three').Vector3 | null} [options.sunDirection] the live sun, turned
+ *   in place as the time of day changes; without it the configured sun is fixed
  */
-export function createSnowSurfaceNodes({ terrainUv, chunkWorldSize, chunkCenter, snow, stylizedConfig }) {
+export function createSnowSurfaceNodes({
+  terrainUv,
+  chunkWorldSize,
+  chunkCenter,
+  snow,
+  stylizedConfig,
+  sunDirection = null,
+}) {
   const sky = stylizedConfig?.sky;
   const sunVector = directionFromAngles(sky?.sunElevation ?? 10, sky?.sunAzimuth ?? 258);
-  const sun = vec3(sunVector.x, sunVector.y, sunVector.z);
+  // Glints and backscatter follow the sun that actually lights the scene: at
+  // dusk or under the moon a fixed configured sun would still flash the snow
+  // from where the midday sun stands.
+  const sun = sunDirection
+    ? normalize(uniform(sunDirection))
+    : vec3(sunVector.x, sunVector.y, sunVector.z);
   const normal = normalize(normalWorld);
   const view = normalize(cameraPosition.sub(positionWorld));
   const halfVector = normalize(view.add(sun));
@@ -121,7 +137,10 @@ export function createSnowSurfaceNodes({ terrainUv, chunkWorldSize, chunkCenter,
     apply(color) {
       return mix(color, color.mul(vec3(0.78, 0.88, 1.08)), backscatter);
     },
-    /** Sparkle, added as emission so it survives the lit shading. */
-    emissive: vec3(glints.mul(2.2)),
+    /**
+     * Sparkle, added as emission so it survives the lit shading — and so it
+     * takes the sky's light itself (1 in the configured look, dim at night).
+     */
+    emissive: vec3(glints.mul(2.2).mul(skyLightUniforms.brightness)),
   };
 }

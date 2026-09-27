@@ -125,16 +125,13 @@ test('dropOn clears drag before store subscribers observe the move', () => {
   controller.dispose();
 });
 
-test('double-activate on a consumable stages use without consuming', () => {
+test('double-activate on a consumable consumes one unit immediately', () => {
   const { controller, store } = createController();
   const potionIndex = store.getState().bagSlots.findIndex((slot) => slot?.itemKey === 'healing_potion');
   const before = store.getState().bagSlots[potionIndex].quantity;
   const result = controller.doubleActivate(bagLocation(potionIndex));
   assert.equal(result.ok, true);
-  assert.equal(result.pending, true);
-  assert.ok(result.token?.operationId);
-  assert.equal(store.getState().bagSlots[potionIndex].quantity, before);
-  assert.equal(store.confirmUse(result.token).ok, true);
+  assert.equal(result.pending, undefined);
   assert.equal(store.getState().bagSlots[potionIndex].quantity, before - 1);
   controller.dispose();
 });

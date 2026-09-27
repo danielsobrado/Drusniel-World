@@ -28,6 +28,49 @@ export function forestFloorDensity(habitat, kind, config = {}) {
   return clamp01(1 - coverage * (1 - woodedDensity));
 }
 
+/**
+ * Bilinear canopy suppression over one chunk, as a `(localX, localZ) => 0..1`
+ * sampler, or null when this chunk has nothing to suppress.
+ *
+ * Lifting this out of `filterScatterByForest` lets a scatter build test each
+ * candidate as it writes it, instead of filtering a copy afterwards — which is one
+ * pass over the chunk and two fewer full-size arrays per rebuild.
+ *
+ * The null case is the common one. Most chunks in a world are open ground, and
+ * there the whole per-instance test disappears rather than costing a multiply.
+ */
+export function createForestDensitySampler({
+  descriptor,
+  field,
+  kind,
+  config,
+  chunkWorldSize,
+  gridSize = 16,
+}) {
+  if (!field || !descriptor) return null;
+  const size = Math.max(2, Math.trunc(gridSize) || 16);
+  const worldSize = Number(chunkWorldSize) || 128;
+  const half = worldSize * 0.5;
+  const densityGrid = new Float32Array(size * size);
+  let uniform = true;
+  for (let z = 0; z < size; z += 1) {
+    const worldZ = descriptor.centerWorldZ + half - z / (size - 1) * worldSize;
+    for (let x = 0; x < size; x += 1) {
+      const worldX = descriptor.centerWorldX - half + x / (size - 1) * worldSize;
+      const density = forestFloorDensity(field.sample(worldX, worldZ), kind, config);
+      densityGrid[z * size + x] = density;
+      if (density !== 1) uniform = false;
+    }
+  }
+  if (uniform) return null;
+  return (localX, localZ) => bilinearSample(
+    densityGrid,
+    size,
+    clamp01((localX + half) / worldSize) * (size - 1),
+    clamp01((half - localZ) / worldSize) * (size - 1),
+  );
+}
+
 export function filterScatterByForest({
   scatter,
   descriptor,
@@ -37,28 +80,16 @@ export function filterScatterByForest({
   chunkWorldSize,
   gridSize = 16,
 }) {
-  if (!scatter?.base || !scatter?.parameters || !field || !descriptor) return scatter;
-  const size = Math.max(2, Math.trunc(gridSize) || 16);
-  const worldSize = Number(chunkWorldSize) || 128;
-  const half = worldSize * 0.5;
-  const densityGrid = new Float32Array(size * size);
-  for (let z = 0; z < size; z += 1) {
-    const worldZ = descriptor.centerWorldZ + half - z / (size - 1) * worldSize;
-    for (let x = 0; x < size; x += 1) {
-      const worldX = descriptor.centerWorldX - half + x / (size - 1) * worldSize;
-      densityGrid[z * size + x] = forestFloorDensity(
-        field.sample(worldX, worldZ),
-        kind,
-        config,
-      );
-    }
-  }
-  const densityAt = (localX, localZ) => bilinearSample(
-    densityGrid,
-    size,
-    clamp01((localX + half) / worldSize) * (size - 1),
-    clamp01((half - localZ) / worldSize) * (size - 1),
-  );
+  if (!scatter?.base || !scatter?.parameters) return scatter;
+  const densityAt = createForestDensitySampler({
+    descriptor,
+    field,
+    kind,
+    config,
+    chunkWorldSize,
+    gridSize,
+  });
+  if (!densityAt) return scatter;
   const base = new Float32Array(scatter.base.length);
   const parameters = new Float32Array(scatter.parameters.length);
   let count = 0;

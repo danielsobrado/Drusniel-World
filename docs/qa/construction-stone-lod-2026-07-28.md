@@ -8,20 +8,20 @@ Deterministic soft-limestone wall (seed 3141, ~48 m path with curve + openings).
 | --- | ---: | ---: |
 | Stones | 280 | 129 |
 | Soft stones | 209 | 90 |
-| Soft triangles | 13376 | 2880 |
-| Stone triangles | 15364 | 3972 |
+| Soft triangles | 21616 | 2880 |
+| Stone triangles | 23604 | 3972 |
 | Mortar triangles | 3360 | 1548 |
 
 ## Timing
 
 | Band | p50 ms | p95 ms |
 | --- | ---: | ---: |
-| Near | 14.73 | 17.25 |
-| Coarse | 5.09 | 7.02 |
+| Near | 35.57 | 44.23 |
+| Coarse | 10.24 | 14.52 |
 
-Soft triangle ratio (coarse/near): **21.5%** (gate ≤ 55%)
+Soft triangle ratio (coarse/near): **13.3%** (gate ≤ 55%)
 
-Build p95 ratio (coarse/near): **40.7%** (gate ≤ 60%)
+Build p95 ratio (coarse/near): **32.8%** (gate ≤ 60%)
 
 ## Gates
 

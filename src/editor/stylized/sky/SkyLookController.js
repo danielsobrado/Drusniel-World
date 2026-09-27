@@ -14,6 +14,11 @@ function approach(value, target, maximumStep) {
   return value + Math.sign(delta) * Math.min(Math.abs(delta), maximumStep);
 }
 
+/** How far a preset transition shows at linear `progress` (0..1). */
+function easeTransition(progress) {
+  return progress * progress * (3 - 2 * progress);
+}
+
 /**
  * Chooses the sky's look: a time-of-day preset, eased into over a couple of
  * seconds, greyed by the weather's overcast and cooled in snow country. The
@@ -49,7 +54,9 @@ export class SkyLookController {
   setPreset(name) {
     if (!SKY_PRESETS[name] || name === this.preset) return;
     this.preset = name;
-    this.from = mixSkyLooks(this.from, this.to, this.progress);
+    // Start from the look on screen, which is the eased mix: re-basing at the
+    // linear progress would jump when a transition is interrupted mid-way.
+    this.from = mixSkyLooks(this.from, this.to, easeTransition(this.progress));
     this.to = resolveSkyLook(this.skyView.config.sky, name);
     this.progress = 0;
   }
@@ -82,9 +89,8 @@ export class SkyLookController {
       changed = true;
     }
     if (!changed) return false;
-    const eased = this.progress * this.progress * (3 - 2 * this.progress);
     this.current = snowCountryLook(
-      overcastSkyLook(mixSkyLooks(this.from, this.to, eased), this.overcast),
+      overcastSkyLook(mixSkyLooks(this.from, this.to, easeTransition(this.progress)), this.overcast),
       this.snowCountry,
     );
     this.skyView.applyLook(this.current);

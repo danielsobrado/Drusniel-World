@@ -3,6 +3,13 @@
 Status: **complete** — all nine phases landed 2026-07-27/28. Phase 10, the
 stone look (rounded fieldstone as the new default), landed 2026-09-24.
 
+Next quality pass: [Phase 11 — Wall appearance and building experience](phase-11-look-feel-and-usability.md)
+is **proposed** as of 2026-09-27. It covers the reference images, drawing and
+editing controls, masonry art direction, continuous previews, semantic joins,
+opening cuts, vegetation, workshop parity, and usability/performance gates.
+The completion status above describes the earlier implementation phases;
+Phase 11 has not been implemented.
+
 This folder is the execution plan for turning the live construction tool into a
 Tiny Glade-style procedural wall builder. It extends
 [`../procedural-medieval-construction/18-live-spline-editor-and-gpu-construction-renderer.md`](../procedural-medieval-construction/18-live-spline-editor-and-gpu-construction-renderer.md)

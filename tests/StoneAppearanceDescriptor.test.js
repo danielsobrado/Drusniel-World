@@ -69,7 +69,13 @@ test('category scaling works', () => {
   const field = descriptor({ category: 'field' });
   const coping = descriptor({ category: 'coping' });
   assert.equal(field.enabled, true);
-  assert.equal(coping.enabled, false);
+  // Dressings are category-scaled down, not disabled outright: coping relief
+  // is enabled but recedes less than a field stone's.
+  assert.equal(coping.enabled, true);
+  assert.ok(
+    coping.face.front.edgeRecession < field.face.front.edgeRecession,
+    `coping recedes ${coping.face.front.edgeRecession} vs field ${field.face.front.edgeRecession}`,
+  );
 });
 
 test('small stones disable unsupported effects safely', () => {

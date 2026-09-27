@@ -131,3 +131,39 @@ test('disposing mid-swap releases both heroes', async () => {
   assert.equal(await swapped, false);
   assert.ok(views[0].disposed && views[1].disposed);
 });
+
+test('a hero that failed to load can be picked again, and loads afresh', async () => {
+  const { switcher, views } = createSwitch();
+  const failed = switcher.setHero('goblin');
+  views[1].finishLoading(false);
+  assert.equal(await failed, false);
+  assert.equal(switcher.pendingHeroId, null, 'nothing is left pending after a failure');
+  const retry = switcher.setHero('goblin');
+  assert.equal(views.length, 3, 'the retry builds a new view');
+  views[2].finishLoading(true);
+  assert.equal(await retry, true);
+  assert.equal(switcher.heroId, 'goblin');
+});
+
+test('a hero whose preparation throws is dropped, not left pending', async () => {
+  const log = [];
+  const switcher = new SwitchableCharacterView({
+    createView: (heroId) => {
+      const view = fakeView(heroId, log);
+      if (heroId === 'goblin') view.ready = Promise.reject(new Error('compile failed'));
+      else view.finishLoading();
+      return view;
+    },
+    heroId: 'drusniel',
+  });
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    assert.equal(await switcher.setHero('goblin'), false);
+  } finally {
+    console.error = originalError;
+  }
+  assert.equal(switcher.heroId, 'drusniel');
+  assert.equal(switcher.pendingHeroId, null);
+  assert.ok(log.includes('dispose goblin'), 'the half-made hero is released');
+});

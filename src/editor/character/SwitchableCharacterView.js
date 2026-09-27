@@ -71,8 +71,14 @@ export class SwitchableCharacterView {
     next.setVisible(false);
     const swap = { heroId, view: next, abandoned: false, promise: null };
     this._swap = swap;
-    swap.promise = this._prepare(next).then((ready) => {
+    const prepared = this._prepare(next).catch((error) => {
+      console.error(`Hero "${heroId}" could not be prepared.`, error);
+      return false;
+    });
+    swap.promise = prepared.then((ready) => {
       if (swap.abandoned || this._disposed || !ready) {
+        // A failed load must not stay pending: picking the hero again retries.
+        if (this._swap === swap) this._swap = null;
         next.dispose();
         return false;
       }

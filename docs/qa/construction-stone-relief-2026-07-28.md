@@ -20,15 +20,16 @@ Headless QA for deterministic pillowed near-LOD field stones
 
 | Metric | Flat baseline | Relief enabled |
 | --- | ---: | ---: |
-| Near stone triangles | 7840 | 10760 |
+| Near stone triangles | 7840 | 11240 |
 | Mortar triangles | 3360 | 3360 |
-| Coarse stone triangles | 4984 | 4984 |
-| Relief stones | 0 | 146 |
+| Coarse stone triangles (flat / soft relief) | 4648 | 4980 |
+| Coarse soft-relief stones | 0 | 83 |
+| Relief stones | 0 | 170 |
 | Relief fallbacks | 0 | 0 |
-| Relief clamped | 0 | 35 |
+| Relief clamped | 0 | 18 |
 | Mesh count | 2 | 2 |
-| Module build p50 (ms) | 9.04 | 10.24 |
-| Module build p95 (ms) | 13.78 | 11.40 |
+| Module build p50 (ms) | 10.41 | 11.88 |
+| Module build p95 (ms) | 15.18 | 12.45 |
 
 ## Gates
 
@@ -36,9 +37,9 @@ Headless QA for deterministic pillowed near-LOD field stones
 | --- | --- | --- |
 | Extra meshes | 0 | PASS |
 | Mortar triangles unchanged | 0 delta | PASS |
-| Coarse unchanged / no relief | yes | PASS |
-| Near triangle multiplier | ≤ 1.65× | 1.372× PASS |
-| Module build p95 increase | ≤ 20% | -17.3% PASS |
+| Coarse keeps reduced soft relief | yes | PASS |
+| Near triangle multiplier | ≤ 1.65× | 1.434× PASS |
+| Module build p95 increase | ≤ 20% | -18.0% PASS |
 | Relief fallback rate | < 0.5% | 0.000% PASS |
 | Relief applied | > 0 stones | PASS |
 | Placement count unchanged | yes | PASS |
@@ -63,4 +64,5 @@ Overall: **PASS**
 
 - Packing, `placement.corners`, and `placement.mortarCorners` are untouched.
 - Relief is YAML-driven (`stone-face-relief.yml`) and sampled from seed + stableIndex + side.
-- Coarse and shell LOD keep the flat bevelled prism.
+- Near LOD applies full soft relief; coarse soft-limestone keeps *reduced* soft relief (`soft-coarse`), and the far shell LOD stays the flat ribbon.
+- Edge wear is a separate pass (`run-construction-stone-edge-wear-qa.mjs`), so this run isolates relief.

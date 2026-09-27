@@ -49,14 +49,27 @@ test('construction undo and save/load restore collider geometry and IDs', async 
     assert.notEqual(edited.collision.signature, initial.collision.signature);
 
     store.applyChange({ before, after }, 'undo');
-    const undone = await compiler.compile(store.get(record.id), { masonry: false });
-    assert.equal(undone.collision.signature, initial.collision.signature);
+    const undoneRecord = store.get(record.id);
+    const undone = await compiler.compile(undoneRecord, { masonry: false });
+    // `record.revision` is deliberately monotonic: `ConstructionStore.normalizeForRuntime`
+    // never re-issues a revision the store has already published (world replacement),
+    // so undoing a thickness edit moves the record 2 -> 3 instead of back to 1.
+    // `planSignature` hashes `record.revision` on purpose — that is what invalidates the
+    // collision cache — so the signature legitimately differs from `initial` even though
+    // the authored record is restored. Compare the revision-independent geometry and IDs
+    // this test is named for, and anchor the plan to the record revision it came from.
+    assert.deepEqual(undone.collision.boxes, initial.collision.boxes);
+    assert.deepEqual(undone.collision.bounds, initial.collision.bounds);
+    assert.equal(undone.collision.constructionRevision, undoneRecord.revision);
     assert.deepEqual(colliderIds(undone), colliderIds(initial));
 
     const document = store.toDocument();
     const loadedStore = new ConstructionStore(document);
-    const loaded = await compiler.compile(loadedStore.get(record.id), { masonry: false });
-    assert.equal(loaded.collision.signature, initial.collision.signature);
+    const loadedRecord = loadedStore.get(record.id);
+    const loaded = await compiler.compile(loadedRecord, { masonry: false });
+    assert.deepEqual(loaded.collision.boxes, initial.collision.boxes);
+    assert.deepEqual(loaded.collision.bounds, initial.collision.bounds);
+    assert.equal(loaded.collision.constructionRevision, loadedRecord.revision);
     assert.deepEqual(colliderIds(loaded), colliderIds(initial));
   } finally {
     compiler.dispose();

@@ -8,25 +8,25 @@ import {
 
 test('soft-limestone surface profile has the calm response values', () => {
   const profile = stoneSurfaceProfile('soft-limestone');
-  assert.equal(profile.unitShading.brightnessMin, 0.97);
-  assert.equal(profile.unitShading.brightnessMax, 1.025);
-  assert.equal(profile.unitShading.weatheringStrength, 0.075);
-  assert.equal(profile.proceduralAlbedo.broadCellSize, 24);
-  assert.equal(profile.proceduralAlbedo.broadVariation, 7);
-  assert.equal(profile.proceduralAlbedo.grainVariation, 3);
-  assert.equal(profile.proceduralAlbedo.dampDarkening, 8);
-  assert.equal(profile.proceduralAlbedo.dampGreenLift, 2);
-  assert.equal(profile.material.bumpTextureScale, 0.55);
-  assert.equal(profile.material.bumpScale, 0.028);
-  assert.equal(profile.material.roughnessBase, 238);
+  assert.equal(profile.unitShading.brightnessMin, 0.945);
+  assert.equal(profile.unitShading.brightnessMax, 1.055);
+  assert.equal(profile.unitShading.weatheringStrength, 0.065);
+  assert.equal(profile.proceduralAlbedo.broadCellSize, 28);
+  assert.equal(profile.proceduralAlbedo.broadVariation, 5);
+  assert.equal(profile.proceduralAlbedo.grainVariation, 2);
+  assert.equal(profile.proceduralAlbedo.dampDarkening, 7);
+  assert.equal(profile.proceduralAlbedo.dampGreenLift, 1.5);
+  assert.equal(profile.material.bumpTextureScale, 0.42);
+  assert.equal(profile.material.bumpScale, 0.020);
+  assert.equal(profile.material.roughnessBase, 236);
   assert.equal(profile.material.roughnessVariation, 10);
-  assert.equal(profile.material.roughnessBroadScale, 14);
+  assert.equal(profile.material.roughnessBroadScale, 16);
   assert.equal(profile.material.normalKind, 'stoneBlock');
-  assert.equal(profile.material.workshopNormalScale, 0.28);
-  assert.equal(profile.material.constructionNormalScale, 0.28);
-  assert.equal(profile.material.workshopEnvMapIntensity, 0.58);
-  assert.equal(profile.material.constructionEnvMapIntensity, 0.58);
-  assert.equal(profile.material.mortarColor, '#74746d');
+  assert.equal(profile.material.workshopNormalScale, 0.22);
+  assert.equal(profile.material.constructionNormalScale, 0.22);
+  assert.equal(profile.material.workshopEnvMapIntensity, 0.64);
+  assert.equal(profile.material.constructionEnvMapIntensity, 0.64);
+  assert.equal(profile.material.mortarColor, '#68675f');
 });
 
 test('legacy palettes fall back to the historical defaults', () => {

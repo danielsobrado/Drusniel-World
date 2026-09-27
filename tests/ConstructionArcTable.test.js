@@ -74,7 +74,7 @@ test('a straight path has effectively zero curvature and a curved one does not',
 });
 
 test('a flat wall with no profile points holds its base height', () => {
-  const built = record();
+  const built = record({ top: { style: 'flat', base: 4, profile: [] } });
   const profile = createWallTopProfile(built, arcTable(built.path));
   for (let step = 0; step <= 10; step += 1) {
     assert.equal(profile.heightAt(built.top.base * step), 4);

@@ -117,6 +117,40 @@ test('a path along a steep hillside blends back without a step where the shaping
   assert.ok(Math.abs(edge - hillside(5000, lastShaped)) < 0.25, `bank ${edge} short of ground at the edge`);
 });
 
+/**
+ * A trail along the ridge crest, crossing `trail` where it cuts through the
+ * ridge: `trail` sits about ten metres below the crest there, this one on it.
+ */
+const crestTrail = { id: 2, group: 'trails', points: [[50, 20], [50, 50], [50, 80]] };
+
+test('where two paths cross, the ground blends between them instead of stepping', () => {
+  const trails = grading([trail, crestTrail]);
+  // Across the crossing, a little off `trail`'s centre line, finely sampled: a
+  // hand-over from one path's profile to the other's would show as the same
+  // jump however fine the sampling, a blend as ever smaller steps.
+  const z = ROW_Z + 3;
+  let previous = trails.grade(4970, z, ground(4970, z));
+  let steepest = 0;
+  for (let x = 4970.02; x <= 5030; x += 0.02) {
+    const height = trails.grade(x, z, ground(x, z));
+    steepest = Math.max(steepest, Math.abs(height - previous));
+    previous = height;
+  }
+  assert.ok(steepest < 0.25, `the ground jumps ${steepest.toFixed(2)} m between samples 4 cm apart`);
+  // The crossing itself stands between the two profiles.
+  const alongTrail = grading([trail]).grade(5000, ROW_Z, ground(5000, ROW_Z));
+  const atCrossing = trails.grade(5000, ROW_Z, ground(5000, ROW_Z));
+  assert.ok(atCrossing > alongTrail + 1 && atCrossing < ground(5000, ROW_Z) - 1, `crossing at ${atCrossing}`);
+});
+
+test('crossing paths grade the same whichever route comes first', () => {
+  const forward = grading([trail, crestTrail]);
+  const reversed = grading([crestTrail, trail]);
+  for (const [x, z] of [[5000, 5000], [4996, 5003], [5007, 4995], [5012, 5012], [4990, 5001]]) {
+    assert.ok(Math.abs(forward.grade(x, z, ground(x, z)) - reversed.grade(x, z, ground(x, z))) < 1e-9);
+  }
+});
+
 test('a route with no length grades nothing instead of producing NaN', () => {
   const stuck = grading([{ id: 9, group: 'roads', points: [[50, 50], [50, 50]] }]);
   assert.equal(stuck.grade(5000, 5000, 12), 12);

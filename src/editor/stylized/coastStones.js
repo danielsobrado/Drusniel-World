@@ -1,4 +1,9 @@
-import { createStonePlacementSink, smoothstep, stoneHash01 } from './stonePlacementSink.js';
+import {
+  clusterNoise,
+  createStonePlacementSink,
+  smoothstep,
+  stoneHash01,
+} from './stonePlacementSink.js';
 
 /**
  * Pebbles and small stones on beaches (after grass-test's beach scatter).
@@ -26,23 +31,6 @@ export const DEFAULT_COAST_STONES = Object.freeze({
 
 /** Chunks whose sampled ground is further than this from sea level are skipped. */
 const CHUNK_REJECT_MARGIN = 12;
-
-/** Smooth 2D value noise over whole metres, 0..1; exact at any canonical position. */
-function clusterNoise(x, z, cellMeters, seed) {
-  const px = x / cellMeters;
-  const pz = z / cellMeters;
-  const cx = Math.floor(px);
-  const cz = Math.floor(pz);
-  const tx = px - cx;
-  const tz = pz - cz;
-  const fx = tx * tx * (3 - 2 * tx);
-  const fz = tz * tz * (3 - 2 * tz);
-  const a = stoneHash01(seed, cx, cz);
-  const b = stoneHash01(seed, cx + 1, cz);
-  const c = stoneHash01(seed, cx, cz + 1);
-  const d = stoneHash01(seed, cx + 1, cz + 1);
-  return (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fz;
-}
 
 /**
  * @param {object} options sink options (see createStonePlacementSink), plus:

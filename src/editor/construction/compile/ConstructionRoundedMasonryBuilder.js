@@ -218,6 +218,14 @@ export function buildRoundedModuleMasonry(placements, {
   // Full irregularity in both bands: a stone keeps its identity near and far.
   const recipe = constructionRecipe(record);
   const hasCustomStoneMaterial = Boolean(record.style?.materials?.stone);
+  // The record's openings in the wall's own arc domain, the form the shared
+  // contour takes. Derived with the arc table exactly as the planner and the
+  // shell derive them, so the mortar core clips to the same void the courses and
+  // the shell publish (phase 11 §7.3).
+  const openings = (record.features ?? []).map((feature) => ({
+    ...feature,
+    s: arcTable.toArc(feature.segmentId, feature.arcFraction),
+  }));
 
   let minS = Infinity;
   let maxS = -Infinity;
@@ -373,6 +381,7 @@ export function buildRoundedModuleMasonry(placements, {
           + (x - drapeFrame.x) * drapeFrame.tangentX
           + (z - drapeFrame.z) * drapeFrame.tangentZ,
       ),
+      openings,
     });
   } catch (error) {
     stoneGeometry.dispose();

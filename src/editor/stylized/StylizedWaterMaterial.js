@@ -140,6 +140,10 @@ export function createStylizedWaterMaterial({
   // The chunk's origin corner in whole metres on cell axes, for patterns that
   // must stay exact at planet scale (rain rings).
   rippleOrigin = null,
+  // The chunk centre wrapped to the waterfall pattern period (vec2 uniform,
+  // `waterfallPatternOrigin`), so fall strands stay sharp at planet scale.
+  // Without it the strands read canonical metres.
+  patternOrigin = null,
   // Build-time opt-out. Sampling the viewport colour and depth textures makes
   // the renderer copy both buffers for the whole frame, and it does so as soon
   // as a material carrying those nodes is used at all — hiding the mesh does
@@ -171,10 +175,12 @@ export function createStylizedWaterMaterial({
     max(float(water.optics.shorelineFadeDepth), 1e-4),
     waterDepth,
   );
-  const worldXZ = vec2(
-    chunkCenter.x.add(terrainUv.x.sub(0.5).mul(chunkWorldSize)),
-    chunkCenter.y.add(float(0.5).sub(terrainUv.y).mul(chunkWorldSize)),
+  // Metres from the chunk centre, canonical axes.
+  const localXZ = vec2(
+    terrainUv.x.sub(0.5).mul(chunkWorldSize),
+    float(0.5).sub(terrainUv.y).mul(chunkWorldSize),
   );
+  const worldXZ = chunkCenter.add(localXZ);
   const fallbackFlow = vec2(water.flowX, water.flowZ);
   let currentFlow = fallbackFlow;
   let currentStrength = float(0);
@@ -356,7 +362,9 @@ export function createStylizedWaterMaterial({
     whitewater = createWaterfallFoamNode({
       fallPlunge,
       flow: currentFlow,
-      worldXZ,
+      // Not `worldXZ`: its float32 sum of a planet-scale centre and the local
+      // offset has already lost the centimetres the strands are drawn in.
+      patternXZ: patternOrigin ? patternOrigin.add(localXZ) : worldXZ,
       time,
       config: water.waterfall,
     }).mul(waterCoverage);

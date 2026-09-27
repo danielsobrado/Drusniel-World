@@ -57,13 +57,12 @@ function featureArcs(record, arcTable) {
   return record.features
     .filter((feature) => OPENING_KINDS.has(feature.kind))
     .map((feature) => {
-      const [segmentStart, segmentEnd] = arcTable.segmentRange(feature.segmentId);
       const center = arcTable.toArc(feature.segmentId, feature.arcFraction);
       return Object.freeze({
         id: feature.id,
         segmentId: feature.segmentId,
-        start: Math.max(segmentStart, center - feature.width / 2),
-        end: Math.min(segmentEnd, center + feature.width / 2),
+        start: center - feature.width / 2,
+        end: center + feature.width / 2,
         bottom: feature.sill,
         top: feature.sill + feature.height,
       });
@@ -97,7 +96,15 @@ function boundariesForSegment({
       boundaries.push(start + length * index / count);
     }
   }
-  for (const opening of openings) boundaries.push(opening.start, opening.end);
+  // An opening is authored against the shared chained arc domain, so one that
+  // spans a joint reaches into both segments; clip its edges to this segment
+  // rather than assuming they already fall inside it.
+  for (const opening of openings) {
+    boundaries.push(
+      Math.max(start, Math.min(end, opening.start)),
+      Math.max(start, Math.min(end, opening.end)),
+    );
+  }
   for (const control of topControls) {
     if (control > start + EPSILON && control < end - EPSILON) boundaries.push(control);
   }
@@ -216,7 +223,12 @@ export function compileConstructionCollision(record, sampled, {
 
   for (const segment of record.path.segments) {
     const range = arcTable.segmentRange(segment.id);
-    const segmentOpenings = openings.filter(({ segmentId }) => segmentId === segment.id);
+    // Every opening whose interval reaches this segment, not only the one whose
+    // centre was authored here: a shared opening definition has to hollow out the
+    // whole void, or the neighbouring segment carries invisible masonry.
+    const segmentOpenings = openings.filter(
+      (opening) => opening.end > range[0] + EPSILON && opening.start < range[1] - EPSILON,
+    );
     const segmentTopControls = topControls.filter(
       (distance) => distance >= range[0] - EPSILON && distance <= range[1] + EPSILON,
     );
@@ -263,8 +275,15 @@ export function compileConstructionCollision(record, sampled, {
       ?? (record.path.closed ? intervals.at(-1) : null);
     const next = intervals[index + 1]
       ?? (record.path.closed ? intervals[0] : null);
-    const overlapLeft = previous && previous.signature === interval.signature ? overlap : 0;
-    const overlapRight = next && next.signature === interval.signature ? overlap : 0;
+    // Seam overlap may only grow into a neighbour that shares this band, and never
+    // past that neighbour's far edge: a short span between a partition cut and an
+    // opening's jamb would otherwise push solid geometry through the void.
+    const overlapLeft = previous && previous.signature === interval.signature
+      ? Math.min(overlap, previous.to - previous.from)
+      : 0;
+    const overlapRight = next && next.signature === interval.signature
+      ? Math.min(overlap, next.to - next.from)
+      : 0;
     const frame = arcTable.frameAt(interval.midpoint);
     const shift = (overlapRight - overlapLeft) / 2;
     const centerX = frame.x + frame.tangentX * shift;

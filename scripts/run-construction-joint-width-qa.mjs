@@ -24,7 +24,10 @@ import {
   sampleCubicBezierPath,
 } from '../src/editor/construction/curve/CubicBezierPath.js';
 import { coarsePlacements } from '../src/editor/construction/render/ConstructionLod.js';
-import { CONSTRUCTION_MORTAR_CONFIG } from '../src/editor/construction/render/ConstructionMortarConfig.js';
+import {
+  CONSTRUCTION_MORTAR_CONFIG,
+  mortarProfile,
+} from '../src/editor/construction/render/ConstructionMortarConfig.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -146,13 +149,13 @@ const soft = summarise('soft-limestone-rubble');
 
 const payloadDelta = soft.nearPayloadBytes - coursed.nearPayloadBytes;
 const gates = {
-  legacyJointsUnchanged: (
-    coursed.meanHeadJoint >= 0.012
-    && coursed.meanHeadJoint <= 0.03
-    && coursed.meanBedJoint >= 0.0084
-    && coursed.meanBedJoint <= 0.021
+  coursedInProfile: (
+    coursed.meanHeadJoint >= coursed.profile.headJoint.min
+    && coursed.meanHeadJoint <= coursed.profile.headJoint.max
+    && coursed.meanBedJoint >= coursed.profile.bedJoint.min
+    && coursed.meanBedJoint <= coursed.profile.bedJoint.max
   ),
-  softWiderThanLegacy: (
+  softWiderThanCoursed: (
     soft.meanHeadJoint > coursed.meanHeadJoint
     && soft.meanBedJoint > coursed.meanBedJoint
   ),
@@ -200,15 +203,15 @@ function pxRow(entry, band) {
 const md = `# Construction joint width — evidence (2026-07-28)
 
 Headless joint / mortar-footprint evidence for First pass 4. Soft limestone uses
-wider style-driven head and bed joints; legacy coursed rubble keeps prior
-dimensions. Visual captures remain a Simulator-Test checklist.
+wider style-driven head and bed joints; coursed rubble follows its own authored
+profile. Visual captures remain a Simulator-Test checklist.
 
 ## Gates
 
 | Gate | Result |
 | --- | --- |
-| Legacy joint means stay in 12–30 / 8.4–21 mm | ${gates.legacyJointsUnchanged ? 'PASS' : 'FAIL'} |
-| Soft limestone joints wider than legacy | ${gates.softWiderThanLegacy ? 'PASS' : 'FAIL'} |
+| Coursed means inside YAML profile | ${gates.coursedInProfile ? 'PASS' : 'FAIL'} |
+| Soft limestone joints wider than coursed rubble | ${gates.softWiderThanCoursed ? 'PASS' : 'FAIL'} |
 | Soft means inside YAML profile | ${gates.softInProfile ? 'PASS' : 'FAIL'} |
 | Coarse LOD amplifies soft joints | ${gates.coarseAmplified ? 'PASS' : 'FAIL'} |
 | Mortar safety overlap ≤ 3 mm | ${gates.safetyOverlapTiny ? 'PASS' : 'FAIL'} |
@@ -267,12 +270,12 @@ Soft vs coursed near payload delta: **${payloadDelta} bytes** (includes mortarCo
 | --- | --- |
 | faceRecess | ${CONSTRUCTION_MORTAR_CONFIG.faceRecess} m |
 | safetyOverlap | ${CONSTRUCTION_MORTAR_CONFIG.safetyOverlap} m |
-| soft mortar colour | \`#74746d\` |
+| soft mortar colour | \`${mortarProfile('soft-limestone-rubble').color}\` |
 
 ## Visual checklist (Simulator-Test)
 
 1. **Scene A** — soft limestone 24 m wall at 2 / 5 / 8 / 12 / 20 m: joints obvious at 5–8 m, subtle at 12–20 m, not a black grid.
-2. **Scene B** — coursed rubble beside soft limestone: legacy joints unchanged, soft wider but calmer.
+2. **Scene B** — coursed rubble beside soft limestone: coursed joints in profile, soft wider but calmer.
 3. **Scene C** — grazing light: recessed mortar, no background leaks, no dark silhouette rim.
 4. **Scene D** — tight curve: no wedge gaps, curvature stone widths unchanged.
 5. **Scene E** — doorway/arch: opening exact, mortar stops at jamb, dressings narrower.

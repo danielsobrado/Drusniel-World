@@ -27,6 +27,31 @@ export function smoothstep(edge0, edge1, value) {
 }
 
 /**
+ * Smooth 2D value noise over whole metres, 0..1, exact at any canonical position.
+ *
+ * How the stone layers gather into drifts instead of spreading evenly: a
+ * smoothstep of this decides which parts of a beach or a seabed a feature keeps.
+ * Hash-lattice rather than a fractal, because it only has to say "here, not
+ * there", and because it must agree between chunks that sample the same metre.
+ */
+export function clusterNoise(x, z, cellMeters, seed) {
+  const px = x / cellMeters;
+  const pz = z / cellMeters;
+  const cx = Math.floor(px);
+  const cz = Math.floor(pz);
+  const tx = px - cx;
+  const tz = pz - cz;
+  const fx = tx * tx * (3 - 2 * tx);
+  const fz = tz * tz * (3 - 2 * tz);
+  const a = stoneHash01(seed, cx, cz);
+  const b = stoneHash01(seed, cx + 1, cz);
+  const c = stoneHash01(seed, cx, cz + 1);
+  const d = stoneHash01(seed, cx + 1, cz + 1);
+  const top = a + (b - a) * fx;
+  return top + ((c + (d - c) * fx) - top) * fz;
+}
+
+/**
  * @param {object} options
  * @param {string} options.prefix stable-id namespace, e.g. `river-rock`
  * @param {number} options.chunkX

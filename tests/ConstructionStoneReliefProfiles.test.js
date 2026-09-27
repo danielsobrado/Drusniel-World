@@ -108,8 +108,14 @@ test('generator output is deterministic', () => {
   assert.equal(readFileSync(GENERATED_PATH, 'utf8'), afterFirst);
 });
 
-test('legacy styles fall back to disabled defaults', () => {
+test('coursed rubble carries its own enabled relief profile', () => {
   const profile = constructionStoneReliefProfile('coursed-rubble');
+  assert.equal(profile.enabled, true);
+  assert.notEqual(profile, CONSTRUCTION_STONE_RELIEF_PROFILES.default);
+});
+
+test('styles without an override fall back to disabled defaults', () => {
+  const profile = constructionStoneReliefProfile('does-not-exist');
   assert.equal(profile.enabled, false);
   assert.equal(profile, CONSTRUCTION_STONE_RELIEF_PROFILES.default);
 });

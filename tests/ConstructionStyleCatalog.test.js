@@ -75,18 +75,18 @@ test('existing styles keep their authored values and packer defaults', () => {
   assert.equal(coursed.courseHeight, 0.56);
   assert.equal(coursed.targetWidth, 1.2);
   assert.equal(coursed.minWidth, 0.26);
-  assert.equal(coursed.irregularity, 0.45);
-  assert.equal(coursed.bedAmplitude, 0.14);
-  assert.equal(coursed.jointTilt, 0.16);
+  assert.equal(coursed.irregularity, 0.56);
+  assert.equal(coursed.bedAmplitude, 0.16);
+  assert.equal(coursed.jointTilt, 0.18);
   assert.equal(coursed.splitChance, 0.42);
   assert.equal(coursed.splitMaxDepth, 2);
   assert.equal(coursed.jointInsetMin, 0.012);
   assert.equal(coursed.jointInsetMax, 0.03);
   assert.equal(coursed.jointInsetVerticalRatio, 0.7);
-  assert.equal(coursed.depthScaleMin, 0.95);
-  assert.equal(coursed.depthScaleMax, 0.985);
-  assert.equal(coursed.faceOffsetAmplitude, 0.009);
-  assert.equal(coursed.stonePalette, 'limestone');
+  assert.equal(coursed.depthScaleMin, 0.92);
+  assert.equal(coursed.depthScaleMax, 1.025);
+  assert.equal(coursed.faceOffsetAmplitude, 0.018);
+  assert.equal(coursed.stonePalette, 'soft-limestone');
 });
 
 test('all descriptors are frozen', () => {

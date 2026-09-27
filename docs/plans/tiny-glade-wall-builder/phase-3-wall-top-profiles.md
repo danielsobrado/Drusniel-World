@@ -48,7 +48,7 @@ Phase 1 shipped the schema. Nothing new is needed:
 
 ```js
 top: {
-  style: 'flat' | 'irregular' | 'crenellated' | 'ruined',   // default 'flat'
+  style: 'flat' | 'irregular' | 'crenellated' | 'ruined',   // default 'irregular' for walls, 'flat' otherwise
   base: number,                                             // default dimensions.height
   profile: [ { segmentId, arcFraction, height } ],          // <= 64, sorted
 }

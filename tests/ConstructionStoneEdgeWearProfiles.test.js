@@ -28,7 +28,7 @@ test('generated config matches YAML and soft limestone is enabled', () => {
   assert.equal(soft.enabled, true);
   assert.equal(soft.bevel.widthRatio.min, document.styles['soft-limestone-rubble'].bevel.widthRatio.min);
   assert.equal(soft.cornerVariation.amount, document.styles['soft-limestone-rubble'].cornerVariation.amount);
-  assert.equal(constructionStoneEdgeWearProfile('coursed-rubble').enabled, false);
+  assert.equal(constructionStoneEdgeWearProfile('coursed-rubble').enabled, true);
   assert.equal(Object.isFrozen(CONSTRUCTION_STONE_EDGE_WEAR_PROFILES), true);
   assert.equal(Object.isFrozen(soft.bevel), true);
 });

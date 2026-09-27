@@ -424,34 +424,32 @@ export function deleteCubicBezierAnchor(input, anchorId) {
     throw new Error('A construction path needs at least two anchors.');
   }
 
-  const anchors = path.anchors.filter((_, position) => position !== index);
-
   if (path.closed) {
     // Reopen at the gap: the surviving segments start after the deleted anchor
-    // and run around to the one before it.
+    // and run around to the one before it. The anchors rotate with their
+    // segments so every survivor keeps the endpoint pair — and so the id — it
+    // already had. Relinking the survivors onto an anchor list left in its
+    // original order rebinds each one to two different endpoints and silently
+    // moves every segment the delete never touched.
     const count = path.segments.length;
-    const ordered = [];
+    const anchors = [];
+    const segments = [];
     for (let step = 0; step < count; step += 1) {
       const segmentIndex = (index + 1 + step) % count;
-      if (segmentIndex === index) continue;
-      ordered.push(path.segments[segmentIndex]);
+      if (segmentIndex === index || segmentIndex === (index - 1 + count) % count) continue;
+      anchors.push(path.anchors[segmentIndex]);
+      segments.push(path.segments[segmentIndex]);
     }
-    const rotated = [];
-    for (let step = 0; step < anchors.length - 1; step += 1) {
-      rotated.push({
-        ...ordered[step],
-        startAnchorId: anchors[step].id,
-        endAnchorId: anchors[step + 1].id,
-      });
-    }
+    anchors.push(path.anchors[(index - 1 + count) % count]);
     return normalizeConstructionPath({
       ...path,
       closed: false,
       anchors,
-      segments: rotated,
+      segments,
     });
   }
 
+  const anchors = path.anchors.filter((_, position) => position !== index);
   const segments = [];
   for (let position = 0; position < path.segments.length; position += 1) {
     const segment = path.segments[position];

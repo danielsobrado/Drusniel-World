@@ -87,6 +87,8 @@ export function watchWalkModeEntry({
     if (state.mode !== walkMode || previous === walkMode || previous === null) return;
     const session = loading.begin({
       title: 'Entering player mode',
+      // The player is already in the world: a card over it, not a curtain.
+      presentation: 'compact',
       steps: [
         { id: 'spawn', label: 'Placing the camera' },
         { id: 'stream', label: 'Streaming chunks around the spawn' },

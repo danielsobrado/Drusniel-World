@@ -39,8 +39,13 @@ import {
   GRASS_LOD_PRESENCE_WINDOW,
   GRASS_LOD_WIDEN_DEFAULTS,
 } from './grassLodMath.js';
+import { applyJungleMist } from './ambient/jungleMistOutput.js';
 
 const TWO_PI = Math.PI * 2;
+
+/** The donor's straw fringe: dry tips on the grass beside a track. */
+const DEFAULT_PATH_FRINGE_STRENGTH = 0.55;
+const DEFAULT_PATH_FRINGE_COLOR = '#c2ad62';
 
 function colorNode(value) {
   const color = new THREE.Color(value);
@@ -342,8 +347,27 @@ export function createStylizedGrassMaterial({
   ), config.color.gradientPower);
   const patch = stylizedPatchMask(worldXZ, patchSettings);
   const baseColor = mix(tuned.colorBottom, tuned.colorTop, gradient);
+  // Straw fringe along a path's verge, after grass-test's: the grass that still
+  // grows beside a track is trampled and dry, so its tips go straw rather than
+  // green. Our path wear already splits the smoothstep into a tread and the verge
+  // outside it, which is exactly the band the donor read off its exclusion channel.
+  //
+  // Weighted by the height gradient, so it is the *tips* that dry out: a whole
+  // blade going straw reads as a different plant rather than as the same grass
+  // underfoot.
+  const fringeSettings = config.path?.fringe ?? {};
+  const fringeStrength = fringeSettings.enabled === false
+    ? float(0)
+    : float(fringeSettings.strength ?? DEFAULT_PATH_FRINGE_STRENGTH);
+  const strawColor = colorNode(fringeSettings.color ?? DEFAULT_PATH_FRINGE_COLOR)
+    .mul(dot(baseColor, vec3(0.3, 0.59, 0.11)).mul(1.6).add(0.35));
+  const fringedColor = mix(
+    baseColor,
+    strawColor,
+    pathWear.verge.mul(fringeStrength).mul(gradient).clamp(0, 1),
+  );
   const patchColor = mix(tuned.patchLush, tuned.patchDry, patch);
-  const variedColor = mix(baseColor, patchColor, tuned.patchStrength);
+  const variedColor = mix(fringedColor, patchColor, tuned.patchStrength);
 
   // Per-blade colour. `patch` is a world-space noise, so a whole clump — 96
   // blades inside one instance — reads a single value from it and the field
@@ -446,5 +470,6 @@ export function createStylizedGrassMaterial({
   material.alphaTest = 0.5;
   material.depthWrite = true;
   material.transparent = false;
+  applyJungleMist(material, config.ambientEffects);
   return assignGrassMaterialData(material);
 }

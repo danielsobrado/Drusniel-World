@@ -79,6 +79,8 @@ const base = Object.freeze({
     crestLift: 0.12,
     whitecapThreshold: 0.8,
     stormWhitecapThreshold: 0.45,
+    crestTransmission: 0.5,
+    crestColor: '#8fd0a8',
   }),
   coast: Object.freeze({
     enabled: true,

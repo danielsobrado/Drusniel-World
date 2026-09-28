@@ -65,7 +65,7 @@
     "js-yaml": "4.3.0",
     "polygon-clipping": "0.15.7",
     "straight-skeleton": "1.1.0",
-    "three": "0.185.1",
+    "three": "0.186.1",
     "three-mesh-bvh": "0.9.13"
   },
   "devDependencies": {

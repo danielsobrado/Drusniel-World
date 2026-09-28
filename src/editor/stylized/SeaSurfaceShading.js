@@ -95,5 +95,24 @@ export function createSeaSurfaceNodes({
     whitecap() {
       return smoothstep(threshold, 1, height).mul(strength).mul(breakup);
     },
+    /**
+     * Light coming through a crest, after grass-test's crest transmission.
+     *
+     * A wave seen edge-on with the sun beyond it glows: the crest has to be high,
+     * the view has to be grazing — look straight down and you are looking at the
+     * water, not through it — and the light has to be behind the wave rather than
+     * bouncing off it. Squaring the grazing term concentrates it in the last few
+     * degrees, which is where it happens on a real sea.
+     *
+     * Returned as an amount rather than a colour, so the material mixes its own.
+     */
+    transmissionAmount(viewDirection) {
+      const grazing = oneMinus(abs(dot(normal, viewDirection)));
+      const backlit = clamp(dot(viewDirection, sun.negate()), 0, 1);
+      return crest
+        .mul(grazing.mul(grazing))
+        .mul(backlit)
+        .mul(config.crestTransmission ?? 0);
+    },
   };
 }

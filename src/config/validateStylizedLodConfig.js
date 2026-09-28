@@ -1,3 +1,10 @@
+import { resolveRockWeathering } from '../editor/stylized/rockWeathering.js';
+import { resolveContactShade } from '../editor/stylized/contactShade.js';
+import { resolveBlownStreaks } from '../editor/stylized/ambient/BlownStreaks.js';
+import { resolveFrost } from '../editor/stylized/ambient/FrostShading.js';
+import { resolveValleyFogConfig } from '../editor/stylized/mist/valleyFogConfig.js';
+import { resolveMeadowGrassConfig } from '../editor/stylized/meadow/meadowGrassConfig.js';
+
 function assertBoolean(value, path) {
   if (typeof value !== 'boolean') {
     throw new Error(`Invalid editor configuration: ${path} must be boolean.`);
@@ -117,6 +124,95 @@ function validateAerial(aerial) {
   }
 }
 
+/**
+ * The animated clock that drives the sky's time presets. It only ever chooses a
+ * preset name, so the thing worth checking is that its inputs are real numbers:
+ * a bad hour or a zero-length day would step the clock nowhere or jump the look
+ * every frame. Absent, it is simply not run.
+ */
+function validateSkyCycle(sky) {
+  const cycle = sky?.cycle;
+  if (!cycle) return;
+  assertBoolean(cycle.enabled, 'stylizedSurface.sky.cycle.enabled');
+  assertBoolean(cycle.paused, 'stylizedSurface.sky.cycle.paused');
+  if (cycle.hour !== undefined) {
+    assertFinite(cycle.hour, 'stylizedSurface.sky.cycle.hour');
+    if (cycle.hour < 0 || cycle.hour >= 24) {
+      throw new Error('Invalid editor configuration: stylizedSurface.sky.cycle.hour must be within [0, 24).');
+    }
+  }
+  if (cycle.dayLengthSeconds !== undefined) {
+    assertPositive(cycle.dayLengthSeconds, 'stylizedSurface.sky.cycle.dayLengthSeconds');
+  }
+  if (cycle.latitudeDegrees !== undefined) {
+    assertFinite(cycle.latitudeDegrees, 'stylizedSurface.sky.cycle.latitudeDegrees');
+  }
+}
+
+/**
+ * The star field and the moon inside the dome material. Their numbers go
+ * straight into a shader, so a typo that reaches here is a night sky that is
+ * blank, striped or wrong-coloured with nothing to point at.
+ */
+function validateSkyStars(sky) {
+  const stars = sky?.stars;
+  if (!stars) return;
+  assertBoolean(stars.enabled, 'stylizedSurface.sky.stars.enabled');
+  if (stars.enabled === false) return;
+  if (stars.density !== undefined) {
+    assertNonNegativeInteger(stars.density, 'stylizedSurface.sky.stars.density');
+  }
+  if (stars.presence !== undefined) {
+    assertUnitInterval(stars.presence, 'stylizedSurface.sky.stars.presence');
+  }
+  if (stars.magnitudePower !== undefined) {
+    assertPositive(stars.magnitudePower, 'stylizedSurface.sky.stars.magnitudePower');
+  }
+  if (stars.rotationDegreesPerSecond !== undefined) {
+    assertFinite(stars.rotationDegreesPerSecond, 'stylizedSurface.sky.stars.rotationDegreesPerSecond');
+  }
+  if (stars.brightness !== undefined) {
+    assertNonNegative(stars.brightness, 'stylizedSurface.sky.stars.brightness');
+  }
+  const moon = stars.moon;
+  if (!moon) return;
+  assertBoolean(moon.enabled, 'stylizedSurface.sky.stars.moon.enabled');
+  if (moon.enabled === false) return;
+  if (moon.elevation !== undefined) {
+    assertFinite(moon.elevation, 'stylizedSurface.sky.stars.moon.elevation');
+    if (moon.elevation < -90 || moon.elevation > 90) {
+      throw new Error('Invalid editor configuration: stylizedSurface.sky.stars.moon.elevation must be within [-90, 90].');
+    }
+  }
+  if (moon.azimuth !== undefined) {
+    assertFinite(moon.azimuth, 'stylizedSurface.sky.stars.moon.azimuth');
+  }
+  if (moon.size !== undefined) assertPositive(moon.size, 'stylizedSurface.sky.stars.moon.size');
+  if (moon.softness !== undefined) assertNonNegative(moon.softness, 'stylizedSurface.sky.stars.moon.softness');
+  if (moon.emission !== undefined) assertNonNegative(moon.emission, 'stylizedSurface.sky.stars.moon.emission');
+  if (moon.illumination !== undefined) {
+    assertUnitInterval(moon.illumination, 'stylizedSurface.sky.stars.moon.illumination');
+  }
+  if (moon.color !== undefined && (typeof moon.color !== 'string' || moon.color.length === 0)) {
+    throw new Error('Invalid editor configuration: stylizedSurface.sky.stars.moon.color must be a colour string.');
+  }
+}
+
+/**
+ * The gorge mist. Its shape is resolved here — a bad step count, an inverted clear
+ * span or a `maxDistance` past the height patch all have to be an error naming
+ * their path rather than mist that reads off the edge of its own patch — and its
+ * quality share, which the module does not resolve, is checked too.
+ */
+function validateValleyFog(sky) {
+  const valleyFog = sky?.valleyFog;
+  if (valleyFog === undefined) return;
+  if (valleyFog.quality !== undefined) {
+    assertUnitInterval(valleyFog.quality, 'stylizedSurface.sky.valleyFog.quality');
+  }
+  resolveValleyFogConfig(valleyFog);
+}
+
 /** Shared shape for every clustered scatter layer (bushes, boulders). */
 function validateClusterField(cluster, path) {
   for (const [name, value] of [
@@ -194,6 +290,9 @@ function validateRockAppearance(rocks) {
     && (typeof rocks.proxyColor !== 'string' || rocks.proxyColor.length === 0)) {
     throw new Error('Invalid editor configuration: stylizedSurface.rocks.proxyColor must be a colour string.');
   }
+  // Resolved here so a bad strength is a config error naming its path, rather than
+  // a stone that turns green in the world with nothing to point at.
+  resolveRockWeathering(rocks.weathering);
   validateClusterField(rocks, 'stylizedSurface.rocks');
 }
 
@@ -499,6 +598,11 @@ export function validateStylizedLodConfig(config) {
     }
   }
   validateGrassCoverage(surface.grass.lod);
+  if (surface.grass.system !== undefined && !['meadow', 'clumps'].includes(surface.grass.system)) {
+    throw new Error('Invalid editor configuration: stylizedSurface.grass.system must be meadow or clumps.');
+  }
+  // Resolving throws on a bad band set or shape name, so a typo fails at load.
+  resolveMeadowGrassConfig(surface.grass.meadow);
   if (surface.flowers.outerRingDensity !== undefined) {
     assertUnitInterval(surface.flowers.outerRingDensity, 'stylizedSurface.flowers.outerRingDensity', false);
   }
@@ -541,12 +645,23 @@ export function validateStylizedLodConfig(config) {
 
   validateGroundCover(surface.groundCover);
   validateAerial(surface.sky?.aerial);
+  validateSkyCycle(surface.sky);
+  validateSkyStars(surface.sky);
+  validateValleyFog(surface.sky);
   validateBushes(surface.bushes);
   validateRockAppearance(surface.rocks);
   validateGroundDetailLayer(surface.groundDetails, 'stylizedSurface.groundDetails');
   validateGroundDetailLayer(surface.aquaticPlants, 'stylizedSurface.aquaticPlants');
   validateAquaticFlora(surface.aquaticPlants);
   validateShoreLife(surface.shoreLife);
+  // Resolved so an out-of-range contact strength is a config error naming its path
+  // rather than ground that goes black under every tree.
+  resolveContactShade(surface);
+  // The surface terms inside the terrain material resolve here too, so a bad shape
+  // key in ambient-effects.yaml (`snowStreaks.hardness`, `frost.facing`, …) is an
+  // error naming its path rather than a term that silently does nothing.
+  resolveBlownStreaks(surface.ambientEffects);
+  resolveFrost(surface.ambientEffects);
   if (!surface.lod) return config;
   assertBoolean(surface.lod.enabled, 'stylizedSurface.lod.enabled');
   validateTreeBand(surface.lod.tree);

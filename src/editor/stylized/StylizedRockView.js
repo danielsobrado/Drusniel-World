@@ -33,6 +33,7 @@ import { buildRiverbankRocks, DEFAULT_RIVERBANK_ROCKS } from './riverbankRocks.j
 import { RiverRockSource } from './RiverRockSource.js';
 import { buildCoastStones, DEFAULT_COAST_STONES } from './coastStones.js';
 import { buildSeabedRocks, DEFAULT_SEABED_ROCKS } from './seabedRocks.js';
+import { applyRockWeathering, resolveRockWeathering } from './rockWeathering.js';
 
 const ROCK_CLUSTER_SEED_OFFSET = 0xa7;
 
@@ -41,7 +42,7 @@ const ROCK_CLUSTER_SEED_OFFSET = 0xa7;
  * PBR response (roughness, metalness and flat shading); deleting the map turns
  * its warm, painted rocks into featureless silhouettes.
  */
-function cloneMaterial(mesh, config) {
+function cloneMaterial(mesh, config, weathering) {
   const source = materialList(mesh)[0];
   const material = source.clone();
   if ('roughness' in material) material.roughness = 1;
@@ -50,6 +51,14 @@ function cloneMaterial(mesh, config) {
     material.color = new THREE.Color(config.rocks.color);
   }
   material.flatShading = true;
+  // Moss, shaded undersides and a toned albedo, so the near-white pack stops
+  // reading as plastic dropped on the grass.
+  if (weathering) {
+    applyRockWeathering(material, {
+      settings: weathering.settings,
+      seaLevel: weathering.seaLevel,
+    });
+  }
   material.needsUpdate = true;
   return material;
 }
@@ -102,6 +111,7 @@ export class StylizedRockView {
     this.riverbankConfig = { ...DEFAULT_RIVERBANK_ROCKS, ...(config.rocks?.riverbank ?? {}) };
     this.coastStoneConfig = { ...DEFAULT_COAST_STONES, ...(config.rocks?.coast ?? {}) };
     this.seabedRockConfig = { ...DEFAULT_SEABED_ROCKS, ...(config.rocks?.seabed ?? {}) };
+    this.rockWeatheringSettings = resolveRockWeathering(config.rocks?.weathering);
     this.biomeAssetPalette = biomeAssetPalette;
     this.regionalCharacterField = regionalCharacterField;
     this.prototypeIndicesByAsset = new Map();
@@ -183,7 +193,7 @@ export class StylizedRockView {
     this.prototypeBiomeRulesSignature = JSON.stringify(this.prototypeBiomeRules);
     const newPrototypes = extracted.map(({ geometry, source }) => ({
       geometry,
-      material: cloneMaterial(source, this.config),
+      material: cloneMaterial(source, this.config, this.rockWeathering()),
       kind: 'rock',
     }));
     this.prototypes.push(...newPrototypes);
@@ -448,6 +458,22 @@ export class StylizedRockView {
       radiusForScale: options.radiusForScale,
       config: this.coastStoneConfig,
     });
+  }
+
+  /**
+   * The weathering settings, plus the one water level this world has globally.
+   *
+   * Read at prototype-build time rather than stored, because the sea level arrives
+   * with the imported world: a world imported after the view was built would
+   * otherwise carry a splash line at whatever the sea was before it.
+   */
+  rockWeathering() {
+    if (!this.rockWeatheringSettings) return null;
+    const seaLevel = this.terrainView.worldStore?.generator?.seaLevel;
+    return {
+      settings: this.rockWeatheringSettings,
+      seaLevel: Number.isFinite(seaLevel) ? seaLevel : null,
+    };
   }
 
   /** Boulders sitting on the seabed in a chunk's shallows. */

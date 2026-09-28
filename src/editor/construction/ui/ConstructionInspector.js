@@ -1,10 +1,12 @@
 import { CONSTRUCTION_STYLES } from '../masonry/ConstructionStyleCatalog.js';
+import { wallMaterialOptionsMarkup, wallMaterialPresets } from './ConstructionWallMaterials.js';
 
 /**
  * Compact wall inspector opened from the construction palette's "More…".
  *
  * Height, thickness and masonry style are the edits the radial petals do not
- * cover. Albedo import stays deferred — the material store and its caps are
+ * cover, and the material list is complete here where the ring shows only a
+ * few presets. Albedo import stays deferred — the material store and its caps are
  * ready; the file picker belongs with a fuller inspector later.
  */
 
@@ -24,10 +26,11 @@ export function masonryStyleStatusMessage(styleKey) {
 }
 
 export class ConstructionInspector {
-  constructor({ host, controller, onStatus = null }) {
+  constructor({ host, controller, materialStore = null, onStatus = null }) {
     if (!host) throw new Error('ConstructionInspector needs a host element.');
     this.host = host;
     this.controller = controller;
+    this.materialStore = materialStore;
     this.onStatus = onStatus;
     this.constructionId = null;
 
@@ -54,6 +57,8 @@ export class ConstructionInspector {
     this.constructionId = constructionId;
     this.controller.setSelectedConstruction?.(constructionId);
     const styles = constructionStyleOptionsMarkup(record.style.key);
+    this.materialPresets = wallMaterialPresets(this.materialStore?.document);
+    const materials = wallMaterialOptionsMarkup(this.materialPresets, record.style.materials?.stone ?? null);
     this.element.innerHTML = `
       <header>
         <strong>${escapeText(record.label ?? 'Wall')}</strong>
@@ -69,6 +74,9 @@ export class ConstructionInspector {
       </label>
       <label>Masonry style
         <select data-inspector-field="style">${styles}</select>
+      </label>
+      <label>Material
+        <select data-inspector-field="material">${materials}</select>
       </label>
     `;
     this.element.hidden = false;
@@ -89,6 +97,17 @@ export class ConstructionInspector {
     if (!this.constructionId) return;
     const field = event.target.dataset.inspectorField;
     if (!field) return;
+    if (field === 'material') {
+      if (!event.target.value) return;
+      this.controller.runConstructionCommand({
+        type: 'set_material',
+        constructionId: this.constructionId,
+        materials: { stone: event.target.value },
+      });
+      const preset = this.materialPresets?.find(({ id }) => id === event.target.value);
+      this.onStatus?.(`Applied ${preset?.label ?? event.target.value}.`);
+      return;
+    }
     if (field === 'style') {
       this.controller.runConstructionCommand({
         type: 'set_style',

@@ -4,8 +4,8 @@
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  color: var(--glade-ink);
-  font-family: var(--glade-font);
+  color: var(--hud-ink);
+  font-family: var(--hud-font);
 }
 
 /* Paper keycap shared by the status line and the control hints. */
@@ -35,27 +35,28 @@
   gap: 9px;
   align-items: center;
   max-width: min(560px, calc(100% - 32px));
-  padding: 5px 12px 5px 5px;
+  min-height: 34px;
+  padding: 5px 14px 5px 6px;
   transform: translateX(-50%);
-  border-radius: 999px;
-  background: var(--glade-paper);
-  box-shadow: var(--glade-shadow);
-  backdrop-filter: var(--glade-blur);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.2;
-  animation: glade-rise-in 260ms var(--glade-spring) both;
+  border: 1px solid var(--hud-hairline);
+  border-radius: 6px;
+  background: var(--hud-glass);
+  backdrop-filter: blur(18px);
+  color: #ece5d5;
+  font: 500 11px/1.2 var(--hud-font);
+  letter-spacing: 0.02em;
+  animation: glade-rise-in 260ms ease both;
 }
 
 .hud-status__icon {
   display: grid;
   flex: none;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: var(--glade-accent);
-  color: var(--glade-cream);
+  background: #ffffff10;
+  color: var(--hud-gold);
 }
 
 .hud-status__icon svg {
@@ -69,11 +70,11 @@
 }
 
 .hud-status[data-tone='busy'] .hud-status__icon {
-  background: var(--glade-leaf);
+  color: var(--hud-accent);
 }
 
 .hud-status[data-tone='danger'] .hud-status__icon {
-  background: var(--glade-danger);
+  color: #ff9a8a;
 }
 
 .hud-status__text {
@@ -89,9 +90,21 @@
   gap: 5px;
   align-items: center;
   padding-left: 9px;
-  border-left: 1px solid var(--glade-line);
-  color: var(--glade-ink-soft);
-  font-size: 11px;
+  border-left: 1px solid var(--hud-hairline);
+  color: rgb(221 217 203 / 62%);
+  font-size: 10px;
+}
+
+/* Keys inside the status chip: the donor's outlined kbd. */
+.hud-status .hud-key {
+  min-width: 17px;
+  height: 17px;
+  border: 1px solid var(--hud-hairline);
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  color: #ece5d5;
+  font: 600 9px/1 var(--hud-font);
 }
 
 .hud-spin {
@@ -130,41 +143,72 @@
   box-shadow: 0 0 2px rgb(0 0 0 / 16%);
 }
 
-/* ── Control hints ───────────────────────────────────────────────────────── */
+/* ── Scene legend and controls (grass-test's reference HUD) ─────────────── */
+
+.hud-legend {
+  position: absolute;
+  bottom: var(--hud-inset-y);
+  left: var(--hud-inset-x);
+  display: grid;
+  gap: 20px;
+  color: var(--hud-ink);
+  font-family: var(--hud-font);
+  text-shadow: var(--hud-text-shadow);
+  animation: glade-rise-in 320ms ease both;
+}
+
+.hud-legend__scene {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.hud-legend__scene[hidden] {
+  display: none;
+}
+
+.hud-legend__scene strong {
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: 0.08em;
+}
+
+.hud-legend__scene span {
+  color: var(--hud-accent);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  opacity: 0.6;
+  text-transform: uppercase;
+}
 
 .hud-keys {
-  position: absolute;
-  bottom: 18px;
-  left: 16px;
-  display: grid;
-  grid-template-columns: auto auto;
-  gap: 5px 9px;
-  align-items: center;
+  display: flex;
+  gap: 22px;
   margin: 0;
-  padding: 9px 13px 9px 9px;
-  border-radius: 16px;
-  background: var(--glade-paper);
-  box-shadow: var(--glade-shadow);
-  backdrop-filter: var(--glade-blur);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
   transition:
     opacity 700ms ease,
     translate 700ms ease;
-  animation: glade-rise-in 320ms var(--glade-spring) both;
+}
+
+.hud-keys > div {
+  display: grid;
+  gap: 2px;
 }
 
 .hud-keys dt {
-  display: flex;
-  gap: 3px;
-  justify-content: flex-end;
   margin: 0;
+  color: var(--hud-ink-strong);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .hud-keys dd {
   margin: 0;
-  color: var(--glade-ink-soft);
+  color: var(--hud-ink-soft);
+  font-size: 10px;
 }
 
 .hud-keys.is-resting {
@@ -172,9 +216,40 @@
   translate: 0 6px;
 }
 
+/* ── Frame-rate readout, beside the minimap ──────────────────────────────── */
+
+.hud-metrics {
+  position: absolute;
+  right: calc(var(--hud-inset-x) + var(--minimap-size, 160px) + 18px);
+  bottom: var(--hud-inset-y);
+  display: flex;
+  gap: 12px;
+  color: rgb(239 246 232 / 78%);
+  font: 700 9px/1 var(--hud-font);
+  letter-spacing: 0.05em;
+  opacity: 0.65;
+  text-shadow: 0 1px 4px rgb(0 0 0 / 45%);
+}
+
+.hud-metrics strong {
+  color: var(--hud-ink);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-metrics[hidden] {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .hud-keys {
     display: none;
+  }
+
+  .hud-metrics {
+    right: var(--hud-inset-x);
+    bottom: calc(var(--hud-inset-y) + var(--minimap-size, 96px) + 14px);
+    font-size: 8px;
   }
 
   .hud-status {

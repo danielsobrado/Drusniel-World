@@ -1,7 +1,7 @@
 # Phase 11 — Wall appearance and building experience
 
 Date: 2026-09-27  
-Status: Proposed; implementation has not started  
+Status: In progress. Parts of W2, W3 and W5 have landed; see [status](#status-2026-09-27)  
 Scope: Live wall construction and matching workshop walls  
 Predecessor: [Rounded fieldstone](phase-10-rounded-fieldstone.md)
 
@@ -74,6 +74,51 @@ This inventory comes from source inspection on September 27. Existing QA reports
 11. **The initial material list is truncated.** `ConstructionPaletteController.materialPresets()` takes the first eight presets. Add an explicit browser for the complete collection and custom materials.
 
 Two cached images inspected in `tmp/construction-rounded-qa/` were written on September 24, before the September 26 lighting follow-up. They are historical evidence only. Fresh captures must establish present shading quality; do not use those images to justify reversing the lighting fix.
+
+## Status (2026-09-27)
+
+Checked against the source and the full test suite (2,811 tests, all passing)
+on September 27, after the first implementation passes. Test files are the
+evidence; no interactive W0 baseline or usability round has run yet.
+
+| # | Finding | State | Evidence / what remains |
+| --- | --- | --- | --- |
+| 1 | Drawing stops after one wall | **Fixed** | Tool stays in draw mode after a stroke (`ConstructionControlPolicy.test.js`) |
+| 2 | A full loop fails the length check | **Fixed** | Stroke length is accumulated; closure is tested before rejection (`ConstructionStrokeClosure.test.js`) |
+| 3 | Cutting has no preview | **Fixed** | The cut stroke previews the carved shell and commits the same opening |
+| 4 | Reshaping hides the full wall | **Fixed** | Only the dirty arc is replaced; buffers reused; seed carried through commit (`ConstructionDraftContinuity.test.js`). A valid draft now draws with the wall's own stone shell — style colour and stone pattern, or the selection tint — instead of a translucent green ribbon; only an invalid draft keeps a tool colour (`ConstructionDraftAppearance.test.js`) |
+| 5 | Ctrl has inconsistent meanings | **Fixed** | One snapping predicate; Shift is fine motion (`ConstructionControlPolicy.test.js`) |
+| 6 | Hidden grid, fixed radius, first candidate wins | **Fixed** | Grid opt-in; nearest centreline with stable-id ties; radii are 12 px acquire / 20 px release converted at the pointer's depth, and a held target yields only to a stronger kind (`ConstructionSnapHysteresis.test.js`). The pixel values are the plan's starting hypothesis, still to calibrate in W0/W7 |
+| 7 | Snapping creates no lasting join | Open | Needs the W1 semantic join relationship |
+| 8 | Openings cut at the course centre | **Partial** | One shared contour (`OpeningLayout`) now drives shell, mortar core, collision and decoration masks (`ConstructionStructuralMasks`, `ConstructionShellOpenings`, `ConstructionMortarVoidWiring`). Near stones are still packed at the course centre and can reach past a sill or into an arch crown: W5 per-stone contour clipping |
+| 9 | Seed stability only partial | **Verified for the tested edits** | Distant modules stay bit-identical through inserts, trims, top raises and thickness changes (`ConstructionEditIdentity`, `ConstructionArcDomainStability`, `ConstructionPlannerSeedStability`). Loop-seam repair and cell lineage through splits remain W4 |
+| 10 | World/workshop stones differ | Open | W4 |
+| 11 | Material list truncated | **Fixed** | The ring still shows eight petals; the inspector behind "More…" lists every wall preset, custom ones included (`ConstructionWallMaterials.test.js`) |
+
+Also landed outside the findings: appearance-only edits skip layout and do not
+cancel queued builds (`ConstructionAppearanceCompilation.test.js`); material
+ids stay out of geometry hashes; the shell carries wall-local UVs and a subtle
+stone pattern baked from the authored `rubble-wall-mossy` image
+(`npm run prepare:construction-textures`), so far walls and drafts read as
+stone rather than a plain strip.
+
+**Next, in order:**
+
+1. **W0 baseline** — fresh captures of the fixture set in §11.1 under neutral
+   and warm light, including the new draft shell, and calibration of the snap
+   radii at the overview and player cameras.
+2. **W4 stone-look swatches** — the "padded" critique in §6.1 is not yet
+   addressed. Compare, one family at a time: a flatter face profile (plateau
+   instead of the `(1 − ρ²)²` dome), lower bulge, and the §6.1 limestone scale
+   (0.30–0.45 m courses, 0.45–0.90 m stones). Unequal corner softness needs
+   per-corner radii, which the outline's single-offset construction
+   (`PillowStoneOutline`) does not support yet. Keep the default until the
+   swatches are reviewed.
+3. **Wall ends** — exposed ends currently read as flat posts at medium range;
+   terminal stones and end caps (§6.2).
+4. **W5 per-stone opening clipping** (finding 8), then **W1** joins (finding 7).
+5. Shape tools (line, circle, rectangle), Trim, Duplicate and Match look are
+   not started (§5.1, §5.4).
 
 ## 4. The first minute of building
 

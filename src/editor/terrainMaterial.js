@@ -36,6 +36,10 @@ import {
 } from './stylized/StylizedNoiseNodes.js';
 import { createCoastSwashNodes, DEFAULT_COAST_SWASH } from './stylized/CoastSwashShading.js';
 import { createSnowSurfaceNodes } from './stylized/SnowSurfaceShading.js';
+import { blownStreaks } from './stylized/ambient/BlownStreaks.js';
+import { createFrostShading } from './stylized/ambient/FrostShading.js';
+import { applyJungleMist } from './stylized/ambient/jungleMistOutput.js';
+import { createValleyFogNodes } from './stylized/mist/ValleyFogShading.js';
 import { createFootprintShading } from './stylized/deformation/FootprintShading.js';
 import { applyCloudShadow } from './stylized/CloudShadow.js';
 import { createRainWetnessShading } from './stylized/RainWetnessShading.js';
@@ -43,6 +47,8 @@ import { resolveSurfaceWetnessConfig } from './weather/surfaceWetnessConfig.js';
 import { createSlotBakeGpuState, slotTexture, slotVector2 } from './materials/TerrainSlotBindings.js';
 
 const HEIGHT_SHADE_SCALE = 0.018;
+/** How dark the ground goes under a trunk or boulder at full contact shade. */
+const DEFAULT_CONTACT_SHADE_DEPTH = 0.45;
 const MINIMUM_HEIGHT_SHADE = 0.72;
 const MAXIMUM_HEIGHT_SHADE = 1.22;
 
@@ -67,6 +73,9 @@ export function createTerrainMaterial({
   chunkWorldSize,
   stylizedConfig,
   bakeGpuState = null,
+  // The ambient surface terms (blown snow/sand streaks, rime), resolved once by
+  // the caller from the ambient layer's block. Null (or disabled) adds no nodes.
+  surfaceEffects = null,
   // The live sun (a Vector3 the sky turns in place for each time of day), for
   // snow shading. Without it, the configured sun.
   sunDirection = null,
@@ -75,7 +84,11 @@ export function createTerrainMaterial({
   const tileColor = slotTexture('tileTexture', tileTexture, terrainUv).rgb;
   const terrainHeight = slotTexture('heightTexture', heightTexture, terrainUv).r;
   const surface = slotTexture('surfaceMaskTexture', surfaceMaskTexture, terrainUv);
-  const forestFloor = slotTexture('forestFloorTexture', forestFloorTexture, terrainUv).r;
+  const forestFloorSample = slotTexture('forestFloorTexture', forestFloorTexture, terrainUv);
+  const forestFloor = forestFloorSample.r;
+  // The don't-hover patch under trunks and boulders: ambient occlusion rather than
+  // shadow, so it does not move with the sun and it holds past the shadow map.
+  const contactShade = forestFloorSample.g;
   const chunkCenter = slotVector2('chunkCenter', chunkCenterTemplate);
   const heightShade = clamp(
     terrainHeight.mul(HEIGHT_SHADE_SCALE).add(1),
@@ -215,6 +228,11 @@ export function createTerrainMaterial({
     );
   }
 
+  // The contact shade darkens the ground where something solid is standing on it,
+  // last, so nothing painted after it can lift the patch back off the ground.
+  // `contactShade` is 0 on bare ground and 1 under a trunk's centre.
+  const contactShadeStrength = Number(stylizedConfig.contactShade?.depth ?? DEFAULT_CONTACT_SHADE_DEPTH);
+  groundColor = groundColor.mul(oneMinus(contactShade.mul(contactShadeStrength)));
   groundColor = max(groundColor, vec3(0));
   const proceduralColor = groundColor.mul(heightShade);
   const ownBakeGpu = bakeGpuState ? null : createTerrainMaterialBakeGpuState(stylizedConfig.materialBake);
@@ -285,6 +303,66 @@ export function createTerrainMaterial({
     material.roughnessNode = surface.roughness;
     if (snowSurface) material.emissiveNode = snowSurface.emissive;
     if (bakedSurface.normal) material.normalNode = bakedSurface.normal;
+    // Wind-blown snow and sand streaming across the ground, behind the ambient
+    // layer's own weights. The snow streak keys on the baked snow the terrain
+    // already draws (so a material with no snow field adds none) and the sand
+    // streak on open, bare ground — the region gate in the shared uniform keeps
+    // that to beaches and deserts.
+    const streaks = surfaceEffects?.blownStreaks ?? null;
+    const airStreak = streaks?.enabled
+      ? max(
+        streaks.snow && bakedSurface.snow
+          ? blownStreaks({ worldXZ, kind: 'snow', weight: bakedSurface.snow, settings: streaks })
+          : float(0),
+        streaks.sand
+          ? blownStreaks({ worldXZ, kind: 'sand', weight: oneMinus(grassCoverage), settings: streaks })
+          : float(0),
+      )
+      : null;
+    if (airStreak) {
+      // Airborne snow and sand scatter their own light, so they add rather than
+      // lighten the ground they cross.
+      material.emissiveNode = material.emissiveNode
+        ? max(material.emissiveNode, airStreak)
+        : airStreak;
+    }
+    // Rime on the up-facing faces, keyed on the same baked snow: the deposition the
+    // terrain would otherwise wash out. Needs a surface normal, so it too compiles
+    // to nothing where the terrain has no normal to read.
+    const frost = surfaceEffects?.frost?.enabled && bakedSurface.normal && bakedSurface.snow
+      ? createFrostShading({
+        normal: bakedSurface.normal,
+        worldXZ,
+        cold: bakedSurface.snow,
+        settings: surfaceEffects.frost,
+      })
+      : null;
+    if (frost) {
+      material.colorNode = frost.applyColor(material.colorNode);
+      material.roughnessNode = frost.applyRoughness(material.roughnessNode);
+    }
+    // Valley mist pooling in the gorges below the view, marched against the
+    // camera-local height patch. It blends last, over everything, because it sits
+    // in the air in front of the ground rather than on it. Null (no config, no
+    // patch, quality zero) adds nothing; a runtime weight of zero skips its loop.
+    const fog = surfaceEffects?.valleyFog
+      ? createValleyFogNodes({
+        heightSampler: surfaceEffects.valleyFog.patch,
+        config: surfaceEffects.valleyFog.settings,
+        time: surfaceEffects.valleyFog.uniforms.time,
+        weight: surfaceEffects.valleyFog.uniforms.weight,
+        quality: surfaceEffects.valleyFog.quality,
+        sunDirection: surfaceEffects.valleyFog.uniforms.sunDirection,
+        sunColor: surfaceEffects.valleyFog.uniforms.sunColor,
+        fogColor: surfaceEffects.valleyFog.uniforms.fogColor,
+      })
+      : null;
+    if (fog) {
+      material.colorNode = mix(material.colorNode, fog.color, fog.amount);
+    }
+    // Jungle ground mist, blended over the lit output like the grass and trees
+    // that stand in it; a zero region weight skips it with one compare.
+    applyJungleMist(material, surfaceEffects?.ambientEffects);
     // Geometry displacement and the baked surface normal are derived from the same heightfield.
     material.positionNode = positionLocal.add(vec3(0, 0, terrainHeight));
     applyCloudShadow(material, stylizedConfig.sky);

@@ -1,21 +1,34 @@
 /*
- * Heading-up minimap dial. `HudMinimap` docks the editor's `.minimap-frame`
+ * Heading-up minimap dial, lower right, dressed as grass-test's: a dark ring with a
+ * vignette so the map melts into it, the north badge riding the rim and the biome
+ * as a pill on the lower rim. `HudMinimap` docks the editor's `.minimap-frame`
  * inside the dial and publishes three values on `.hud-minimap`:
  *   --hud-heading  camera yaw
  *   --hud-map-x/z  player offset from the bitmap centre, in window fractions
+ *
+ * The size follows the shorter screen side; `--minimap-size` lives on the HUD so
+ * the frame-rate readout can sit beside the dial.
  */
+.player-hud {
+  --minimap-size: clamp(84px, 19vmin, 184px);
+}
+
 .hud-minimap {
-  --hud-map-size: 132px;
+  --hud-map-size: var(--minimap-size);
 
   position: absolute;
-  top: 16px;
-  right: 18px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-  justify-items: center;
+  right: var(--hud-inset-x);
+  bottom: var(--hud-inset-y);
+  display: block;
   width: var(--hud-map-size);
-  animation: glade-pop-in 360ms var(--glade-spring) both;
+  animation: hud-minimap-in 600ms ease both;
+}
+
+@keyframes hud-minimap-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 
 .hud-minimap__disc {
@@ -28,23 +41,23 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
+  border: 1px solid #e9e0cb59;
   border-radius: 50%;
-  background: #e8e0cc;
+  background: #0d1a22;
   box-shadow:
-    0 0 0 4px var(--glade-paper-strong),
-    var(--glade-shadow);
+    0 0 0 3px #13211987,
+    0 10px 30px #0008,
+    inset 0 0 18px #0006;
   isolation: isolate;
 }
 
-/* Soft inner rim so the map sits in the ring rather than on it. */
+/* Vignette so the map edge melts into the ring. */
 .hud-minimap__dial::after {
   position: absolute;
   inset: 0;
   z-index: 3;
   border-radius: 50%;
-  box-shadow:
-    inset 0 0 0 1px rgb(80 60 40 / 16%),
-    inset 0 0 16px rgb(40 28 16 / 24%);
+  background: radial-gradient(circle, transparent 62%, #0a111a73 100%);
   content: '';
   pointer-events: none;
 }
@@ -87,8 +100,8 @@
 
 .hud-minimap .minimap-frame canvas {
   image-rendering: auto;
-  /* Biome colours are loud; a warm, faded wash reads as a painted map. */
-  filter: saturate(0.55) sepia(0.28) brightness(1.06) contrast(0.92);
+  /* Natural, slightly settled colour: the donor's map is terrain, not a legend. */
+  filter: saturate(0.78) brightness(0.92) contrast(1.04);
 }
 
 /* Settlement names undo the mirror and the turn so they read level. */
@@ -100,22 +113,20 @@
 }
 
 .hud-minimap .minimap-burg__dot {
-  box-shadow: 0 0 0 1.5px var(--glade-cream);
+  background: #f0d68e;
+  box-shadow: 0 0 0 1.5px #13211de0;
 }
 
 .hud-minimap .minimap-burg__name {
-  color: var(--glade-ink);
-  font: 800 9px/1 var(--glade-font);
-  text-shadow:
-    0 0 2px var(--glade-cream),
-    0 0 3px var(--glade-cream),
-    0 0 5px var(--glade-cream);
+  color: #f6f1e4;
+  font: 700 8.5px/1 var(--hud-font);
+  text-shadow: 0 1px 2px #000c, 0 0 4px #000a;
 }
 
 .hud-minimap .minimap-burg.is-capital .minimap-burg__dot {
   box-shadow:
-    0 0 0 1.5px var(--glade-cream),
-    0 0 0 3px var(--glade-accent);
+    0 0 0 1.5px #13211de0,
+    0 0 0 3px #d5bd86;
 }
 
 /* The view cone: the map is heading-up, so it always points straight up. */
@@ -125,7 +136,7 @@
   z-index: 1;
   background: conic-gradient(
     from -34deg at 50% 50%,
-    rgb(255 250 236 / 46%) 0deg 68deg,
+    rgb(240 246 255 / 34%) 0deg 68deg,
     transparent 68deg
   );
   -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0 6%, transparent 48%);
@@ -141,11 +152,11 @@
   height: 20px;
   overflow: visible;
   transform: translate(-50%, -58%);
-  fill: var(--glade-accent);
-  stroke: var(--glade-cream);
-  stroke-width: 2;
+  fill: #f4f1ea;
+  stroke: #12202a;
+  stroke-width: 1.6;
   stroke-linejoin: round;
-  filter: drop-shadow(0 1px 1.5px rgb(40 26 12 / 45%));
+  filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 55%));
 }
 
 /*
@@ -162,57 +173,63 @@
 
 .hud-minimap__north {
   position: absolute;
-  top: -11px;
+  top: 4px;
   left: 50%;
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
-  margin-left: -9px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
   border-radius: 50%;
-  background: var(--glade-ink);
-  box-shadow:
-    0 0 0 2px var(--glade-paper-strong),
-    var(--glade-shadow-soft);
-  color: var(--glade-cream);
-  font: 800 9.5px/1 var(--glade-font);
+  background: #13211de0;
+  color: #ead29c;
+  font: 700 8px/1 var(--hud-font);
   transform: rotate(calc(-1 * (var(--hud-heading, 0rad) + 180deg)));
 }
 
+/* The biome rides the dial's lower rim instead of taking a row of its own. */
 .hud-minimap__place {
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  z-index: 5;
   display: inline-flex;
   gap: 6px;
   align-items: center;
-  max-width: calc(var(--hud-map-size) + 20px);
-  padding: 4px 10px 4px 6px;
-  border-radius: 11px;
-  background: var(--glade-paper);
-  box-shadow: var(--glade-shadow-soft);
-  backdrop-filter: var(--glade-blur);
-  color: var(--glade-ink);
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1.2;
-  text-align: center;
+  max-width: calc(var(--hud-map-size) + 40px);
+  padding: 3px 9px;
+  overflow: hidden;
+  transform: translateX(-50%);
+  border: 1px solid #e9e0cb38;
+  border-radius: 999px;
+  background: #132119e0;
+  color: #f0ebdf;
+  font: 650 8px/1.2 var(--hud-font);
+  letter-spacing: 0.14em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.hud-minimap__place[hidden] {
+  display: none;
 }
 
 .hud-minimap__swatch {
-  flex: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1px rgb(40 30 20 / 20%);
+  display: none;
 }
 
 @media (max-width: 760px) {
-  .hud-minimap {
-    --hud-map-size: 96px;
-
-    top: 12px;
-    right: 12px;
+  .hud-minimap__north {
+    width: 14px;
+    height: 14px;
+    margin-left: -7px;
+    font-size: 7px;
   }
 
   .hud-minimap__place {
-    display: none;
+    padding: 2px 7px;
+    font-size: 7px;
+    letter-spacing: 0.1em;
   }
 }

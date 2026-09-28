@@ -1,136 +1,441 @@
 /*
- * The overlay sits above the viewport but does not capture input: boot keeps the
- * editor interactive, and walk-mode streaming must never trap the player behind a
- * modal while the world fills in around them.
+ * The loading screen, after grass-test's (see LoadingOverlay.js). It never takes
+ * input: boot keeps the editor usable, and walk-mode streaming must never trap the
+ * player behind a modal while the world fills in around them.
+ *
+ * No `backdrop-filter` anywhere: over a live WebGPU canvas it makes the compositor
+ * re-blur the framebuffer every frame, and it cost most of the frame rate while
+ * the screen was up — taxing the very load it reports on. The card's glass is a
+ * translucent fill with a faint sheen instead.
  */
 .loading-overlay {
+  --iris: 0vmax;
+  --lime: #b6ee43;
+  --ink: #eef4e8;
+  --text-shadow: 0 1px 3px rgb(4 10 14 / 95%), 0 0 16px rgb(4 10 14 / 80%);
+
   position: fixed;
   inset: 0;
   z-index: 60;
   display: grid;
-  place-items: center;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  padding: 28px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 42%, #17252a 0, #071015 62%);
+  color: var(--ink);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   pointer-events: none;
-  background: rgb(6 10 8 / 42%);
-  animation: loading-overlay-in 140ms ease-out;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent 0 var(--iris), #000 calc(var(--iris) + 1px));
+  mask-image: radial-gradient(circle at 50% 50%, transparent 0 var(--iris), #000 calc(var(--iris) + 1px));
+  animation: loading-overlay-in 220ms ease-out;
 }
 
-/*
- * No `backdrop-filter` here. A blur on a full-viewport fixed layer makes the
- * compositor re-blur the whole framebuffer every frame, over a live WebGPU canvas
- * that is already the most expensive thing on the page. It cost most of the frame
- * rate for the entire time the overlay was up — and because the overlay is shown
- * exactly during the heaviest work, it taxed the thing it was reporting on. The
- * flat scrim above costs nothing and reads the same at this opacity.
- */
+.loading-overlay[hidden] {
+  display: none;
+}
 
 @keyframes loading-overlay-in {
   from { opacity: 0; }
-  to { opacity: 1; }
 }
 
-.loading-panel {
-  width: min(420px, calc(100vw - 48px));
-  padding: 20px 22px;
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
-  background: var(--surface-1);
-  box-shadow: 0 18px 48px rgb(0 0 0 / 45%);
+/* The full-screen curtain covers the editor chrome too (its first-run tip, the
+   tool trays); the compact card stays under it, at the base z-index. */
+.loading-overlay[data-presentation='cinematic'] {
+  z-index: 1000;
 }
 
-.loading-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+.loading-overlay > :not(.loading-art) {
+  position: relative;
+  z-index: 1;
 }
 
-.loading-heading h2 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
+/* ── Key art ─────────────────────────────────────────────────────────────── */
 
-.loading-percent {
-  font-variant-numeric: tabular-nums;
-  font-size: 13px;
-  color: var(--text-dim);
-}
-
-.loading-bar {
-  height: 6px;
+.loading-art {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   overflow: hidden;
-  border-radius: 999px;
-  background: var(--surface-3);
 }
 
-.loading-bar-fill {
-  width: 0;
+.loading-art-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
   height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
-  /* Slower than a frame so streaming updates read as motion, not as jitter. */
-  transition: width 220ms ease-out;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 600ms ease;
+}
+
+.loading-overlay.is-art-loaded .loading-art-image {
+  opacity: 0.72;
+}
+
+/* Darkest where the wordmark, the line and the card sit, opening towards the edges. */
+.loading-art-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 57% 53% at 50% 45%, rgb(7 16 21 / 88%), rgb(7 16 21 / 42%) 60%, rgb(7 16 21 / 0%) 100%),
+    linear-gradient(to bottom, rgb(7 16 21 / 58%), rgb(7 16 21 / 12%) 26%, rgb(7 16 21 / 44%) 70%, rgb(7 16 21 / 88%));
+}
+
+/* ── Wordmark: an outline that fills with light from the baseline up ─────── */
+
+.loading-logo {
+  position: relative;
+  width: min(1120px, 94vw);
+  height: clamp(30px, 5vw, 52px);
+  font-family: "Inter Display", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(21px, 4.4vw, 44px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-shadow: 0 2px 6px rgb(4 10 14 / 95%), 0 0 34px rgb(4 10 14 / 85%);
+}
+
+.loading-logo > span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  white-space: nowrap;
+}
+
+.logo-outline {
+  color: rgb(238 244 232 / 15%);
+  -webkit-text-stroke: 1px rgb(238 244 232 / 50%);
+}
+
+.logo-fill {
+  color: var(--ink);
+  clip-path: inset(100% 0 0 0);
+  transition: clip-path 600ms cubic-bezier(0.22, 0.68, 0.3, 1);
+}
+
+/* ── Progress line ───────────────────────────────────────────────────────── */
+
+.loading-progress {
+  width: min(430px, 76vw);
+}
+
+.loading-progress-track {
+  height: 3px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 9%);
+}
+
+.loading-progress-bar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--lime);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 500ms cubic-bezier(0.22, 0.68, 0.3, 1);
+}
+
+.loading-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 9px;
+  color: var(--lime);
+  font-size: 11px;
+  text-shadow: var(--text-shadow);
+}
+
+.loading-row strong {
+  font-variant-numeric: tabular-nums;
 }
 
 .loading-detail {
-  min-height: 1.2em;
-  margin: 10px 0 0;
+  min-height: 14px;
+  margin-top: 6px;
   overflow: hidden;
-  font-size: 12px;
-  color: var(--text-dim);
+  color: rgb(238 244 232 / 72%);
+  font-size: 10px;
+  line-height: 1.35;
   text-overflow: ellipsis;
+  text-shadow: var(--text-shadow);
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
 }
 
-.loading-steps {
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
+/* ── The traveller's card: translucent glass, the character and the ring ──── */
+
+.loading-card {
   display: grid;
-  gap: 3px;
-  max-height: 260px;
-  overflow-y: auto;
+  gap: 14px;
+  width: min(460px, 86vw);
+  padding: 18px 22px 16px;
+  border: 1px solid rgb(233 224 203 / 22%);
+  border-radius: 10px;
+  background:
+    linear-gradient(160deg, rgb(255 255 255 / 7%), rgb(255 255 255 / 0%) 45%),
+    rgb(14 26 20 / 52%);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 35%), inset 0 1px 0 rgb(255 255 255 / 8%);
 }
 
-.loading-steps li {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  align-items: baseline;
-  gap: 6px;
+.loading-card__eyebrow {
+  margin: 0;
+  color: rgb(238 244 232 / 82%);
   font-size: 12px;
-  color: var(--text-dim);
-}
-
-.loading-step-mark {
+  font-weight: 700;
+  letter-spacing: 0.2em;
   text-align: center;
-  font-size: 11px;
+  text-shadow: var(--text-shadow);
+  text-transform: uppercase;
 }
 
-.loading-steps li[data-state='active'] {
-  color: var(--text);
+.loading-card__body {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.loading-card__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 1px solid rgb(233 224 203 / 28%);
+  border-radius: 50%;
+  color: #e6ecf2;
+}
+
+.loading-card__icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.loading-card__who {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.loading-card__who strong {
+  font-size: 20px;
   font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
-.loading-steps li[data-state='active'] .loading-step-mark { color: var(--accent); }
-.loading-steps li[data-state='done'] .loading-step-mark { color: var(--accent); opacity: 0.7; }
-.loading-steps li[data-state='failed'] { color: var(--danger); }
+.loading-card__who span {
+  color: rgb(238 244 232 / 58%);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
 
-.loading-step-label {
+/* The ring: the screen's main readout, beside the traveller. */
+.loading-ring {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 112px;
+  height: 112px;
+  margin-left: auto;
+}
+
+.loading-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  /* 12 o'clock start, filling clockwise. */
+  transform: rotate(-90deg);
+}
+
+.loading-ring circle {
+  fill: none;
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+
+.loading-ring__track {
+  stroke: rgb(238 244 232 / 16%);
+}
+
+.loading-ring__fill {
+  stroke: #dfe6ee;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  filter: drop-shadow(0 0 5px rgb(223 230 238 / 45%));
+  transition: stroke-dashoffset 600ms cubic-bezier(0.22, 0.68, 0.3, 1);
+}
+
+.loading-ring__percent {
+  font-size: 26px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  text-shadow: var(--text-shadow);
+}
+
+/* A slow breath while the world builds, a clean flare on the last frame. */
+.loading-ring::after {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  content: '';
+  animation: loading-ring-breath 2.6s ease-out infinite;
+}
+
+.loading-overlay.is-ready .loading-ring::after {
+  animation: loading-ring-complete 900ms cubic-bezier(0.16, 0.84, 0.28, 1) both;
+}
+
+.loading-overlay.is-ready .loading-ring__fill {
+  stroke: var(--lime);
+  filter: drop-shadow(0 0 6px rgb(182 238 67 / 55%));
+}
+
+.loading-overlay.is-ready .loading-ring__percent {
+  color: var(--lime);
+}
+
+@keyframes loading-ring-breath {
+  0% { box-shadow: 0 0 0 0 rgb(223 230 238 / 22%); }
+  70% { box-shadow: 0 0 0 14px rgb(223 230 238 / 0%); }
+  100% { box-shadow: 0 0 0 0 rgb(223 230 238 / 0%); }
+}
+
+@keyframes loading-ring-complete {
+  from { box-shadow: 0 0 0 0 rgb(182 238 67 / 55%); }
+  to { box-shadow: 0 0 0 26px rgb(182 238 67 / 0%); }
+}
+
+/* ── Stage ticker: the active stage holds the bottom row; finished stages rise
+      above it and fade as they climb (loadingTicker.js places the rows). ───── */
+
+.loading-ticker {
+  --row: 20px;
+
+  position: relative;
+  height: calc(var(--row) * 4);
+  margin: 0;
+  padding: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  list-style: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 45%);
+  mask-image: linear-gradient(to bottom, transparent, #000 45%);
+}
+
+.loading-ticker li {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  height: var(--row);
+  color: rgb(238 244 232 / 78%);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-shadow: var(--text-shadow);
+  transition:
+    transform 550ms cubic-bezier(0.22, 0.68, 0.3, 1),
+    opacity 550ms ease;
+}
+
+.loading-ticker__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  color: var(--lime);
+  font-size: 10px;
+}
+
+/* The running stage spins a small arc where its tick will land. */
+.loading-ticker li[data-state='active'] {
+  color: var(--ink);
+}
+
+.loading-ticker li[data-state='active'] .loading-ticker__mark::before {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgb(238 244 232 / 25%);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  content: '';
+  animation: loading-spin 800ms linear infinite;
+}
+
+.loading-ticker li[data-state='failed'] {
+  color: #ff9a8a;
+}
+
+.loading-ticker li[data-state='failed'] .loading-ticker__mark {
+  color: #ff9a8a;
+}
+
+@keyframes loading-spin {
+  to { rotate: 360deg; }
 }
 
 .loading-error {
-  margin: 12px 0 0;
-  font-size: 12px;
-  color: var(--danger);
+  margin: 0;
+  color: #ff9a8a;
+  font-size: 11px;
+  line-height: 1.4;
+  text-shadow: var(--text-shadow);
+}
+
+/* ── Compact: the card alone over the live world (walk-mode streaming) ───── */
+
+.loading-overlay[data-presentation='compact'] {
+  place-content: end center;
+  padding-bottom: 14vh;
+  background: none;
+}
+
+.loading-overlay[data-presentation='compact'] .loading-art,
+.loading-overlay[data-presentation='compact'] .loading-logo,
+.loading-overlay[data-presentation='compact'] .loading-progress {
+  display: none;
+}
+
+.loading-overlay[data-presentation='compact'] .loading-card {
+  width: min(400px, 86vw);
+  background: rgb(12 22 17 / 62%);
+}
+
+.loading-overlay[data-presentation='compact'].is-leaving {
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+@media (max-width: 560px) {
+  .loading-ring {
+    width: 84px;
+    height: 84px;
+  }
+
+  .loading-ring__percent {
+    font-size: 19px;
+  }
+
+  .loading-card__who strong {
+    font-size: 16px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .loading-overlay { animation: none; }
-  .loading-bar-fill { transition: none; }
+  .loading-overlay,
+  .loading-overlay *,
+  .loading-overlay *::after,
+  .loading-overlay *::before {
+    animation: none !important;
+    transition: none !important;
+  }
 }

@@ -1,7 +1,16 @@
 import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import { PerfCounters } from './performance/qa/PerfCounters.js';
+import {
+  PERF_COUNTER_OCCLUSION_CANDIDATES,
+  PERF_COUNTER_OCCLUSION_CULLED_DRAWS,
+  PERF_COUNTER_OCCLUSION_OCCLUDERS,
+  PERF_COUNTER_OCCLUSION_PREPARE_MS,
+  PerfCounters,
+} from './performance/qa/PerfCounters.js';
 import { createTerrainMaterial } from './terrainMaterial.js';
+import { resolveBlownStreaks } from './stylized/ambient/BlownStreaks.js';
+import { resolveFrost } from './stylized/ambient/FrostShading.js';
+import { ValleyFogController } from './stylized/mist/ValleyFogController.js';
 import {
   attachTerrainMaterialBakeGpuState,
   createTerrainMaterialBakeGpuState,
@@ -33,6 +42,9 @@ import {
   directionFromAngles,
 } from './stylized/StylizedGodRaysPostProcess.js';
 import { patchViewportFramebufferSources } from '../render/patchViewportFramebufferSources.js';
+import { raiseDeviceLimits } from '../render/deviceLimits.js';
+import { GpuOcclusion } from '../render/occlusion/GpuOcclusion.js';
+import { createTerrainOccluderGeometry } from './world/terrainOccluderProxy.js';
 import { createSlotGeometry, fitSlotBounds } from './world/TerrainSlotBounds.js';
 
 // Water refraction / transmission sample viewport colour+depth via
@@ -81,8 +93,27 @@ function createWaterDistanceField(terrainView, stylizedConfig) {
  * One terrain material for every slot (see TerrainSlotBindings): built from
  * the first slot's data, which fixes the texture formats, then shared.
  */
-function createSharedTerrainMaterialSource({ worldStore, stylizedConfig, sunDirection = null }) {
+function createSharedTerrainMaterialSource({
+  worldStore,
+  stylizedConfig,
+  sunDirection = null,
+  valleyFog = null,
+}) {
   let material = null;
+  // Resolved once, from the ambient layer's block, and handed to the material as
+  // resolved settings: a bad shape key is already an error at config load (see
+  // validateStylizedLodConfig), so this cannot fail for a caller that got here.
+  // With no ambient block at all — a capture or budget harness — the material
+  // keeps its plain shading rather than adding terms keyed on fields it lacks.
+  const ambient = stylizedConfig?.ambientEffects;
+  const surfaceEffects = {
+    blownStreaks: ambient ? resolveBlownStreaks(ambient) : null,
+    frost: ambient ? resolveFrost(ambient) : null,
+    ambientEffects: ambient ?? null,
+    valleyFog: valleyFog?.enabled
+      ? { settings: valleyFog.settings, patch: valleyFog.patch, uniforms: valleyFog.uniforms, quality: valleyFog.quality }
+      : null,
+  };
   return (slotData, bakeGpuState) => {
     material ??= createTerrainMaterial({
       ...slotData,
@@ -91,6 +122,7 @@ function createSharedTerrainMaterialSource({ worldStore, stylizedConfig, sunDire
       height: worldStore.chunkSize,
       stylizedConfig,
       bakeGpuState,
+      surfaceEffects,
       sunDirection,
     });
     return material;
@@ -103,7 +135,11 @@ function createSlot({ slotIndex, scene, geometry, worldStore, stylizedConfig, sh
   const surfaceMaskPixels = new Uint8Array(chunkSize * chunkSize * 4);
   const heightPixels = new Float32Array((chunkSize + 1) * (chunkSize + 1));
   const forestFloorSize = 16;
-  const forestFloorPixels = new Uint8Array(forestFloorSize * forestFloorSize);
+  // Two channels: R is the forest canopy's shading of the ground, G the contact
+  // shade under trunks and boulders. One texture, because the ground reads both in
+  // the same fetch — and 16 texels over a 128 m chunk is eight metres each, which
+  // is why the contact patch is canopy-sized rather than trunk-sized.
+  const forestFloorPixels = new Uint8Array(forestFloorSize * forestFloorSize * 4);
   const tileTexture = new THREE.DataTexture(
     texturePixels,
     chunkSize,
@@ -144,7 +180,7 @@ function createSlot({ slotIndex, scene, geometry, worldStore, stylizedConfig, sh
     forestFloorPixels,
     forestFloorSize,
     forestFloorSize,
-    THREE.RedFormat,
+    THREE.RGBAFormat,
     THREE.UnsignedByteType,
   );
   forestFloorTexture.magFilter = THREE.LinearFilter;
@@ -254,10 +290,13 @@ export class InfiniteTerrainView {
     // place the world view on integrated graphics on hybrid machines, which
     // costs an order of magnitude of frame rate for identical scene content.
     // The workshop preview renderer already requests high-performance.
+    // Filled from the adapter just before `init()` requests the device (deviceLimits.js).
+    this.requiredLimits = {};
     this.renderer = new THREE.WebGPURenderer({
       antialias: rendererConfig.antialias,
       forceWebGL: rendererConfig.forceWebGL,
       powerPreference: rendererConfig.powerPreference ?? 'high-performance',
+      requiredLimits: this.requiredLimits,
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, rendererConfig.maxPixelRatio));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -298,11 +337,20 @@ export class InfiniteTerrainView {
       this.chunkSize,
       this.chunkSize,
     );
+    // The valley mist's height patch and uniforms, built here because one terrain
+    // material is shared by every slot and has to hold them from construction. The
+    // surface view (or main) drives it once a frame — see updateValleyFog.
+    this.valleyFog = new ValleyFogController({
+      getHeight: (x, z) => this.getCanonicalHeight(x, z),
+      config: skyConfig?.valleyFog,
+      quality: skyConfig?.valleyFog?.quality,
+    });
     // The god rays' sun is the one the sky turns for each time of day.
     const sharedMaterial = createSharedTerrainMaterialSource({
       worldStore,
       stylizedConfig,
       sunDirection: this.godRays.sunDirection,
+      valleyFog: this.valleyFog,
     });
     this.slots = Array.from(
       { length: streamingConfig.maxResidentChunks },
@@ -334,10 +382,25 @@ export class InfiniteTerrainView {
   }
 
   async initialize() {
+    if (!this.rendererConfig.forceWebGL) {
+      await raiseDeviceLimits(this.requiredLimits, {
+        powerPreference: this.rendererConfig.powerPreference ?? 'high-performance',
+      });
+    }
     await this.renderer.init();
     this.rendererBackendStatus = inspectRendererBackend(this.renderer);
     PerfCounters.set('rendererWebGPUBackend', this.rendererBackendStatus.webgpu ? 1 : 0);
     PerfCounters.set('rendererWebGLBackend', this.rendererBackendStatus.webgl ? 1 : 0);
+    // Hi-Z occlusion culling, after `init()` so the backend it gates on exists. It
+    // disables itself on anything but the WebGPU backend (GpuOcclusion#init), so it is
+    // built whenever the config asks for it and costs nothing where it cannot run.
+    const occlusionSettings = this.rendererConfig.gpuOcclusion;
+    this.occlusion = occlusionSettings?.enabled
+      ? new GpuOcclusion(
+        { renderer: this.renderer, scene: this.scene, camera: null },
+        occlusionSettings,
+      )
+      : null;
     if (!this.rendererBackendStatus.webgpu && !this.rendererConfig.forceWebGL) {
       console.warn(
         `WebGPU backend unavailable; using ${this.rendererBackendStatus.mode} fallback. `
@@ -385,18 +448,69 @@ export class InfiniteTerrainView {
     }
   }
 
+  /**
+   * Drive the valley mist for this frame: rebuild its camera-local height patch if
+   * the camera moved past its middle, and hand it the sky's live sun and fog
+   * colours and the region weight that fades the mist out where there are no
+   * gorges. A no-op without the config, so worlds that do not want it pay nothing.
+   */
+  updateValleyFog({ focus, origin, timeSeconds, weight, sunDirection, sunColor, fogColor } = {}) {
+    if (!focus || !origin) return;
+    this.valleyFog?.update(focus, origin, { timeSeconds, weight, sunDirection, sunColor, fogColor });
+  }
+
+  /**
+   * The page's hills as the slot's occluder for the Hi-Z pass: the drawn surface is
+   * a flat grid displaced in its shader, so the host supplies the depth proxy and
+   * opts the slot in. The slot is also a cull candidate — its fitted bounds cover
+   * the page's heights, plus the headroom the material adds.
+   */
+  attachOccluderProxy(slot, page) {
+    const userData = slot.mesh.userData;
+    userData.occlusionGeometry?.dispose();
+    userData.occlusionGeometry = null;
+    if (!this.rendererConfig.gpuOcclusion?.enabled) return;
+    userData.occlusionGeometry = createTerrainOccluderGeometry({
+      heights: page.heights,
+      chunkSize: this.worldStore.chunkSize,
+      tileSize: this.worldStore.tileSize,
+    });
+    userData.occlusionOccluder = true;
+    userData.occlusionUpright = true;
+    userData.occlusionPadding = 2;
+  }
+
   render(camera) {
-    if (
-      this.godRays.enabled
-      && this.godRays.technique === 'volumetric'
-      && this.godRays.render(camera)
-    ) {
+    const draw = () => {
+      if (
+        this.godRays.enabled
+        && this.godRays.technique === 'volumetric'
+        && this.godRays.render(camera)
+      ) {
+        return;
+      }
+      if (this.postProcessing?.render(camera)) return;
+      if (!this.godRays.render(camera)) {
+        this.renderer.render(this.scene, camera);
+      }
+    };
+    if (!this.occlusion) {
+      draw();
       return;
     }
-    if (this.postProcessing?.render(camera)) return;
-    if (!this.godRays.render(camera)) {
-      this.renderer.render(this.scene, camera);
-    }
+    // Hi-Z prepare runs immediately before the frame's draw, and its indirect-record
+    // bridge stays installed across it. The bridge is geometry-keyed — only a draw
+    // whose geometry has no indirect record of its own is redirected — so the post
+    // passes inside the same pipeline call are untouched, and this project's
+    // compute-compacted impostor and voxel draws are never candidates.
+    this.occlusion.world.camera = camera;
+    this.occlusion.prepare();
+    this.occlusion.render(draw);
+    const stats = this.occlusion.stats;
+    PerfCounters.set(PERF_COUNTER_OCCLUSION_CANDIDATES, stats.candidates);
+    PerfCounters.set(PERF_COUNTER_OCCLUSION_OCCLUDERS, stats.occluders);
+    PerfCounters.set(PERF_COUNTER_OCCLUSION_CULLED_DRAWS, stats.culledDraws);
+    PerfCounters.set(PERF_COUNTER_OCCLUSION_PREPARE_MS, this.occlusion.lastPrepareMs);
   }
 
   prewarmPostProcessing(camera) {
@@ -595,6 +709,7 @@ export class InfiniteTerrainView {
     slot.surfaceMaskPixels.set(ready.surfaceMaskPixels);
     slot.heightPixels.set(ready.heights);
     fitSlotBounds(slot.mesh.geometry, ready.heights, this.chunkWorldSize);
+    this.attachOccluderProxy(slot, ready);
     slot.tileTexture.needsUpdate = true;
     slot.surfaceMaskTexture.needsUpdate = true;
     slot.heightTexture.needsUpdate = true;
@@ -903,16 +1018,20 @@ export class InfiniteTerrainView {
     this.preview.material.dispose();
     // Slots share one material; each mesh carries its own bake state.
     new Set(this.slots.map((slot) => slot.material)).forEach((material) => material.dispose());
+    this.valleyFog?.dispose();
+    this.valleyFog = null;
     for (const slot of this.slots) {
       this.scene.remove(slot.mesh);
       slot.mesh.dispatchEvent({ type: 'dispose' });
       slot.tileTexture.dispose();
       slot.surfaceMaskTexture.dispose();
+      slot.mesh.userData?.occlusionGeometry?.dispose();
       slot.heightTexture.dispose();
       slot.forestFloorTexture.dispose();
     }
     this.geometry.dispose();
     this.godRays.dispose();
+    this.occlusion?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

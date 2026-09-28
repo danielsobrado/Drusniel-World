@@ -26,6 +26,10 @@ export function validateSeaConfig(config) {
   assertFiniteRange(config.crestLift, field('crestLift'), 0, 1);
   assertFiniteRange(config.whitecapThreshold, field('whitecapThreshold'), 0, 1);
   assertFiniteRange(config.stormWhitecapThreshold, field('stormWhitecapThreshold'), 0, 1);
+  assertFiniteRange(config.crestTransmission, field('crestTransmission'), 0, 1);
+  if (typeof config.crestColor !== 'string' || !HEX_COLOR.test(config.crestColor)) {
+    throw new Error(`${field('crestColor')} must be a six-digit hex colour.`);
+  }
   return config;
 }
 

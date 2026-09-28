@@ -3,6 +3,7 @@ import { validateUnderwaterConfig } from './UnderwaterConfig.js';
 import { advanceUnderwaterBlend, mixNumber } from './UnderwaterTransition.js';
 import { resolveWaterQualityFeatures } from './WaterQuality.js';
 import { UnderwaterCausticsPostProcess } from './UnderwaterCausticsPostProcess.js';
+import { setUnderwaterBlend } from './underwaterState.js';
 
 const MAX_DELTA_SECONDS = 0.1;
 const SKY_HIDE_THRESHOLD = 0.98;
@@ -154,6 +155,10 @@ export class UnderwaterViewController {
     }
     this.causticsPostProcess?.update(causticsState);
     this.applyEnvironment();
+    // Published for the surface view, which stands its land streaming down while
+    // the camera is under: the water and the fog occlude all of it, and the cost
+    // here is the rebuilding rather than the drawing.
+    setUnderwaterBlend(this.blend);
     return this.blend;
   }
 
@@ -168,6 +173,7 @@ export class UnderwaterViewController {
 
   restoreSurfaceEnvironment() {
     this.blend = 0;
+    setUnderwaterBlend(0);
     this.causticsPostProcess?.update({ blend: 0 });
     this.scene.background = this.surfaceBackground;
     if (this.originalFogExists) {

@@ -1,12 +1,10 @@
 import { RadialPalette } from '../../ui/RadialPalette.js';
-import {
-  BUILTIN_WORKSHOP_MATERIAL_PRESETS,
-  getWorkshopMaterialPreset,
-} from '../../workshop/ProceduralWorkshopMaterialConfig.js';
+import { getWorkshopMaterialPreset } from '../../workshop/ProceduralWorkshopMaterialConfig.js';
 import { captureConstructionMaterialLease } from '../render/ConstructionMaterials.js';
 import { CONSTRUCTION_STYLES } from '../masonry/ConstructionStyleCatalog.js';
 import { icon } from '../../ui/icons.js';
 import { ConstructionInspector } from './ConstructionInspector.js';
+import { RING_MATERIAL_LIMIT, wallMaterialPresets } from './ConstructionWallMaterials.js';
 
 /**
  * The right-click palette for live constructions.
@@ -23,12 +21,6 @@ import { ConstructionInspector } from './ConstructionInspector.js';
  * can carry and more choices than the difference warrants.
  */
 
-/**
- * Families that make sense on a wall. The built-in masonry and plaster presets
- * are all `walls`; `stone` exists for custom presets authored against the
- * construction stone slot.
- */
-const WALL_PRESET_FAMILIES = new Set(['walls', 'stone']);
 
 const TOP_ACTIONS = Object.freeze([
   { id: 'top:flat', label: 'Flat top', color: '#cfd6e4', glyph: icon('top-flat', { size: 16 }) },
@@ -85,7 +77,7 @@ export class ConstructionPaletteController {
       onHoverEnd: () => this.clearPreview(),
       onAction: (action) => this.action(action),
     });
-    this.inspector = new ConstructionInspector({ host, controller, onStatus });
+    this.inspector = new ConstructionInspector({ host, controller, materialStore, onStatus });
   }
 
   get isOpen() {
@@ -96,18 +88,9 @@ export class ConstructionPaletteController {
     return this.inspector.isOpen;
   }
 
-  /**
-   * The built-ins plus any custom presets in the world's material library.
-   *
-   * `materialLibrary.presets` holds **only** custom presets — the built-ins are
-   * a separate constant that `availablePreset` consults alongside it — so
-   * reading the library alone yields an empty palette on a fresh world.
-   */
+  /** The ring's petals: the first few wall presets; the inspector lists them all. */
   materialPresets() {
-    const custom = this.materialStore?.document?.materialLibrary?.presets ?? {};
-    return [...Object.values(BUILTIN_WORKSHOP_MATERIAL_PRESETS), ...Object.values(custom)]
-      .filter((preset) => WALL_PRESET_FAMILIES.has(preset.family))
-      .slice(0, 8);
+    return wallMaterialPresets(this.materialStore?.document).slice(0, RING_MATERIAL_LIMIT);
   }
 
   /** One petal per masonry bond, in catalog order. */

@@ -40,7 +40,7 @@ function slot(slotIndex, chunkX, chunkZ) {
     page: page(chunkX, chunkZ),
     mesh: { visible: true },
     forestFloorKey: null,
-    forestFloorPixels: new Uint8Array(4),
+    forestFloorPixels: new Uint8Array(16),
     forestFloorSize: 2,
   };
 }

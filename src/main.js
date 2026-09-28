@@ -61,6 +61,7 @@ import { WorldSoundscape } from './editor/audio/world_soundscape.js';
 import { SurfaceWetness } from './editor/weather/surfaceWetness.js';
 import { SkyLookController } from './editor/stylized/sky/SkyLookController.js';
 import { SKY_PRESETS } from './editor/stylized/sky/SkyPresets.js';
+import { DayNightCycle } from './editor/stylized/sky/dayNightCycle.js';
 import { SnowCountryWeight } from './editor/stylized/sky/SnowCountryWeight.js';
 import { FallingLeaves } from './editor/stylized/leaves/FallingLeaves.js';
 import { SnowPowderKicks } from './editor/stylized/powder/SnowPowderKicks.js';
@@ -401,6 +402,10 @@ async function startEditor() {
     config: config.stylizedSurface,
     baseUrl: import.meta.env.BASE_URL,
     biomeAssetPalette,
+    // The snow band lives in the world's own configuration, so it is handed down
+    // here rather than guessed at in the surface config: bark and ground have to
+    // whiten at the same altitude, and this is the only place that can see both.
+    snowBand: config.world?.farTerrain,
   });
   boot.start('assets');
   const releaseAssetProgress = bindAssetProgress(boot);
@@ -718,10 +723,21 @@ async function startEditor() {
     },
   });
   ui.attachWorkshop(proceduralWorkshop);
+  const sceneLabel = (preset) => {
+    const label = SKY_PRESETS[preset]?.label ?? '';
+    return preset === 'configured' ? 'Drusniel World' : label.replace(/\s*\(.*\)\s*$/, '');
+  };
   const viewModeUi = new ViewModeUi({
     root,
     controller: viewModeController,
-    hud: { minimap: createHudMinimapSource({ ui, controller, tileMap }) },
+    hud: {
+      minimap: createHudMinimapSource({ ui, controller, tileMap }),
+      getRenderer: () => terrainView.renderer,
+      // The time of day titles the legend, as the donor's scene preset did:
+      // "Emberfall (golden hour)" reads as "Emberfall". Read lazily — the sky
+      // looks are built after the HUD.
+      getSceneLabel: () => sceneLabel(skyLooks?.preset),
+    },
   });
 
   let farViewActive = false;
@@ -812,6 +828,19 @@ async function startEditor() {
       skyView: stylizedSurface.skyView,
       preset: storedSkyPreset ?? undefined,
       onLook: (look) => macroFarTerrain.setFogColor(look.fogColor),
+    })
+    : null;
+  // The animated clock, when a world turns it on: it only chooses a time preset,
+  // which the sky eases in, so the sky stays the one lighting authority. Disabled
+  // or paused it is a no-op, and the manual Time selector and capture tools that
+  // set the lights directly keep their look.
+  const skyCycleConfig = config.stylizedSurface?.sky?.cycle;
+  const dayNightCycle = skyLooks && skyCycleConfig?.enabled
+    ? new DayNightCycle({
+      hour: skyCycleConfig.hour,
+      dayLengthSeconds: skyCycleConfig.dayLengthSeconds,
+      latitudeDegrees: skyCycleConfig.latitudeDegrees,
+      paused: skyCycleConfig.paused,
     })
     : null;
   const fallingLeaves = new FallingLeaves({
@@ -1217,6 +1246,7 @@ async function startEditor() {
       characterView?.shiftWorld(rebase.shiftX, rebase.shiftZ);
       snowPowder.shiftWorld(rebase.shiftX, rebase.shiftZ);
       worldAmbience.shiftWorld(rebase.shiftX, rebase.shiftZ);
+      stylizedSurface.shiftOrigin(rebase.shiftX, rebase.shiftZ);
       renderFocus = viewModeController.getFocusWorld();
     }
     if (profiling) perfQa.mark('floatingOrigin');
@@ -1278,7 +1308,20 @@ async function startEditor() {
     });
     if (profiling) perfQa.mark('streaming');
 
-    stylizedSurface.update(frameTimestamp, viewModeController.camera);
+    // The player's feet, in render space like the layers' own state, for the layers
+    // that react to the body standing in them. A paused or non-walking view passes
+    // null, which lets what the body pressed stand back up rather than freezing it.
+    const bodyStatus = viewModeController.mode === PLAYER_MODE_WALK && !viewModeController.paused
+      ? playerController.getStatus()
+      : null;
+    const playerBody = bodyStatus
+      ? {
+        x: bodyStatus.position.x,
+        y: Number.isFinite(bodyStatus.footY) ? bodyStatus.footY : bodyStatus.position.y,
+        z: bodyStatus.position.z,
+      }
+      : null;
+    stylizedSurface.update(frameTimestamp, viewModeController.camera, playerBody);
     if (profiling) perfQa.mark('stylized');
 
     if (weatherController) {
@@ -1339,7 +1382,26 @@ async function startEditor() {
     const snowCountryWeight = snowCountry.update(frameDelta, viewModeController.camera);
     skyLooks?.setSnowCountry(snowCountryWeight);
     weatherController?.setRegionalSnow(snowCountryWeight);
+    if (dayNightCycle) {
+      // A paused cycle reports the same preset every frame and `setPreset` ignores
+      // a repeat, so this is a genuine no-op. The moon follows the clock's own
+      // astronomy; the sky still writes the light.
+      skyLooks?.setPreset(dayNightCycle.update(frameDelta));
+      stylizedSurface.skyView?.setCelestial(dayNightCycle.evaluate());
+    }
     skyLooks?.update(frameDelta);
+    // The gorge mist's local height patch and colours, from the sky the look just
+    // wrote. Weighted by the snow country the sky is also tinted by, so it appears
+    // in the gorges and fades out of the lowlands.
+    terrainView.updateValleyFog({
+      focus: viewModeController.camera.position,
+      origin: terrainView.floatingOrigin.getState(),
+      timeSeconds: frameSeconds,
+      weight: snowCountryWeight,
+      sunDirection: stylizedSurface.skyView?.sunDirectionValue,
+      sunColor: skyLooks?.current?.directionalColor,
+      fogColor: skyLooks?.current?.fogColor,
+    });
     snowPowder.update(frameSeconds);
     worldAmbience.update(frameDelta, {
       camera: viewModeController.camera,

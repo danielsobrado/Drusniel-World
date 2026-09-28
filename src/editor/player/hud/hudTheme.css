@@ -1,0 +1,49 @@
+/*
+ * The walking HUD's look, after grass-test's cinematic HUD: plain light type over
+ * the world with a soft shadow for legibility, and dark translucent glass for the
+ * few things that need a surface (the minimap dial, the status chip). Inter is
+ * the donor's face (OFL — public/assets/fonts/Inter-LICENSE.txt).
+ */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/assets/fonts/InterVariable.woff2") format("woff2");
+}
+
+/*
+ * The Black cut alone, for the stroked loading wordmark: a variable face strokes
+ * its default instance as well as the requested one, ghosting Regular contours
+ * inside every glyph where -webkit-text-stroke paints over a translucent fill.
+ */
+@font-face {
+  font-family: "Inter Display";
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("/assets/fonts/InterDisplay-Black.woff2") format("woff2");
+}
+
+:root {
+  --hud-font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --hud-ink: #eef4e8;
+  --hud-ink-strong: #efe6d0;
+  --hud-ink-soft: #ece8dbd9;
+  --hud-ink-dim: rgb(239 246 232 / 55%);
+  --hud-accent: #b9e84d;
+  --hud-gold: #ead29c;
+  --hud-glass: #13211987;
+  --hud-glass-strong: #132119e0;
+  --hud-hairline: #e9e0cb38;
+  --hud-text-shadow: 0 1px 3px #000000a6, 0 0 16px #0a0f1499;
+  --hud-inset-x: 36px;
+  --hud-inset-y: clamp(26px, 3.6vh, 44px);
+}
+
+@media (max-width: 767px) {
+  :root {
+    --hud-inset-x: max(22px, env(safe-area-inset-left));
+    --hud-inset-y: 20px;
+  }
+}

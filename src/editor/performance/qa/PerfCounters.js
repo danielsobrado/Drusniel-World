@@ -17,6 +17,14 @@ export const PERF_COUNTER_WATER_CHUNKS_DRY = 'waterChunksDry';
 // watch when the frame rate drops on approaching a shoreline.
 export const PERF_COUNTER_WATER_CHUNKS_REFRACTIVE = 'waterChunksRefractive';
 
+// Hi-Z occlusion culling (render/occlusion): what the pass looked at, and what it cost.
+// `culledDraws` only moves when the pass runs with `gpuOcclusion.diagnostics`, which
+// the editor runtime leaves off because it needs a GPU-to-CPU readback.
+export const PERF_COUNTER_OCCLUSION_CANDIDATES = 'gpuOcclusionCandidates';
+export const PERF_COUNTER_OCCLUSION_OCCLUDERS = 'gpuOcclusionOccluders';
+export const PERF_COUNTER_OCCLUSION_CULLED_DRAWS = 'gpuOcclusionCulledDraws';
+export const PERF_COUNTER_OCCLUSION_PREPARE_MS = 'gpuOcclusionPrepareMs';
+
 export const PerfCounters = {
   inc(name, amount = 1) {
     counts[name] = (counts[name] ?? 0) + amount;

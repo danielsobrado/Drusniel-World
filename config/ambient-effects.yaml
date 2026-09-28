@@ -429,3 +429,33 @@ ambientEffects:
     presets:
       rainy: 0.8
       moonlight: 1.2
+  # Heat haze over distant sunny sand, warping the sky dome's own ray rather than
+  # the rendered frame: the donor's post pass sampled the scene colour, which this
+  # project does not do outside a deliberate exception.
+  heatShimmer:
+    strength: 1
+    presetDefault: 0
+    presets:
+      sunny: 1
+      calm: 1
+      windy: 0.4
+      bowed: 0.6
+      goldenHour: 0.3
+  # Humid ground mist between the jungle trees: the donor's closed form, with the
+  # distance to the shaded fragment standing in for the depth sample it would have
+  # taken.
+  jungleMist:
+    strength: 1
+    presets:
+      rainy: 1.4
+      goldenHour: 1.1
+      moonlight: 1.2
+      windy: 0.5
+    density: 0.012
+    height: 6
+    maxDistance: 260
+    nearStart: 6
+    nearEnd: 30
+    pocketScale: 0.02
+    pocketStrength: 0.55
+    color: '#c9d6c4'

@@ -51,7 +51,9 @@ function terrainSlot(slotIndex, chunkX, chunkZ = 0) {
     page: page(chunkX * 4, chunkZ * 4),
     mesh: { visible: true },
     forestFloorKey: null,
-    forestFloorPixels: new Uint8Array(4),
+    // RGBA: the canopy is R of each texel and the contact shade G, so four bytes
+    // a texel rather than one.
+    forestFloorPixels: new Uint8Array(16),
     forestFloorSize: 2,
   };
 }
@@ -131,7 +133,7 @@ test('runtime bakes resident terrain slots and releases leases on reassignment',
 
 test('valid forest-floor changes invalidate canopy material revision and refresh the bake', async () => {
   const slot = terrainSlot(0, 0);
-  slot.forestFloorPixels = new Uint8Array([0, 0, 0, 0]);
+  slot.forestFloorPixels = new Uint8Array(16);
   const tracker = createRevisionTracker();
   const terrainView = {
     slots: [slot],

@@ -16,6 +16,7 @@ import {
   vec4,
 } from 'three/tsl';
 import { buildDustGodRays } from './GodRaysScreenScattering.js';
+import { setPipelineOutput } from './pipelineOutput.js';
 export {
   advectedDustDensityReference,
   dustModulationReference,
@@ -266,11 +267,10 @@ export class StylizedGodRaysPostProcess {
     this.raysTexture = rtt(rays).setResolutionScale(this.config.resolutionScale ?? 0.5);
     this.raysTexture.renderTarget.texture.name = 'God Rays Half Resolution';
 
-    this.screenPipeline = new THREE.RenderPipeline(this.renderer);
-    this.screenPipeline.outputNode = vec4(
+    this.screenPipeline = setPipelineOutput(new THREE.RenderPipeline(this.renderer), vec4(
       beauty.rgb.add(this.raysTexture.sample(screenUV).rgb.mul(this.tint).mul(this.lightScale)),
       beauty.a,
-    );
+    ), { fxaa: this.config.fxaa !== false });
     return this.screenPipeline;
   }
 
@@ -331,11 +331,10 @@ export class StylizedGodRaysPostProcess {
       .mul(cloudTransmissionFactor)
       .mul(this.volumetricIntensity);
 
-    this.volumetricPipeline = new THREE.RenderPipeline(this.renderer);
-    this.volumetricPipeline.outputNode = vec4(
+    this.volumetricPipeline = setPipelineOutput(new THREE.RenderPipeline(this.renderer), vec4(
       beauty.rgb.add(this.tint.mul(this.lightScale).mul(rayAmount)),
       beauty.a,
-    );
+    ), { fxaa: this.config.fxaa !== false });
     this.volumetricCamera = camera;
     return this.volumetricPipeline;
   }

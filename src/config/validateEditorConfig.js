@@ -84,6 +84,35 @@ function assertToneMappingExposure(config) {
   }
 }
 
+const GPU_OCCLUSION_NUMBERS = Object.freeze([
+  'resolutionScale', 'minTriangles', 'boundsPadding', 'minSavedTriangles',
+  'minSavedTrianglesPerMs', 'probeInterval',
+]);
+
+/** Optional: the whole block may be omitted, which leaves occlusion culling off. */
+function assertGpuOcclusion(config) {
+  const block = config.renderer?.gpuOcclusion;
+  if (block === undefined) return;
+  for (const name of ['enabled', 'diagnostics']) {
+    if (typeof block[name] !== 'boolean') {
+      throw new Error(`Invalid editor configuration: renderer.gpuOcclusion.${name} must be boolean.`);
+    }
+  }
+  for (const name of GPU_OCCLUSION_NUMBERS) {
+    if (!Number.isFinite(block[name]) || block[name] < 0) {
+      throw new Error(
+        `Invalid editor configuration: renderer.gpuOcclusion.${name} must be a non-negative number.`,
+      );
+    }
+  }
+  if (block.resolutionScale <= 0 || block.resolutionScale > 1) {
+    throw new Error('Invalid editor configuration: renderer.gpuOcclusion.resolutionScale must be within (0, 1].');
+  }
+  if (block.probeInterval < 1) {
+    throw new Error('Invalid editor configuration: renderer.gpuOcclusion.probeInterval must be at least 1 frame.');
+  }
+}
+
 function assertNonNegativeInteger(config, path) {
   const value = readPath(config, path);
   if (!Number.isInteger(value) || value < 0) {
@@ -883,6 +912,7 @@ export function validateEditorConfig(config) {
   for (const path of REQUIRED_BOOLEAN_PATHS) assertBoolean(config, path);
   assertPowerPreference(config);
   assertToneMappingExposure(config);
+  assertGpuOcclusion(config);
   assertNonNegativeInteger(config, ['world', 'loadRadius']);
   assertNonNegativeInteger(config, ['world', 'unloadRadius']);
 

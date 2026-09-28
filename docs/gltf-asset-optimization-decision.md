@@ -22,7 +22,7 @@ and repeated in CI.
 
 This is a better fit than selecting a tool only for its smallest output file.
 The game renders many instances of authored natural assets through a
-Three.js r185, WebGPU-first renderer. Vertex layout and fetch efficiency matter
+Three.js r186, WebGPU-first renderer. Vertex layout and fetch efficiency matter
 after an asset has loaded; download-only compression does not address that.
 
 ## Current project baseline
@@ -206,9 +206,9 @@ const loader = new GLTFLoader()
 ```
 
 Vite bundles the Basis Universal JavaScript/WASM transcoder from the pinned
-Three.js 0.185.1 dependency, so runtime loading has no CDN dependency.
+Three.js 0.186.1 dependency, so runtime loading has no CDN dependency.
 
-Three.js r185 in this repository supports both `EXT_meshopt_compression` and
+Three.js r186 in this repository supports both `EXT_meshopt_compression` and
 `KHR_meshopt_compression`. Use the established `EXT`/`-cc` path first. Evaluate
 `KHR`/`-cz` separately only if its smaller result is material and the pinned
 Three.js decoder, glTF validator, target browsers, and asset inspection all

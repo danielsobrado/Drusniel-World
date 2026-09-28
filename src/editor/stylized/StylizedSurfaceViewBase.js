@@ -18,6 +18,8 @@ import { StylizedGroundDetailView } from './StylizedGroundDetailView.js';
 import { createShoreLifePrototypes } from './shoreLifePrototypes.js';
 import { createAquaticFloraPrototypes } from './aquaticFloraPrototypes.js';
 import { advancePlantSway } from './plantSway.js';
+import { paintContactShade, resolveContactShade } from './contactShade.js';
+import { isLandStreamingSuspended } from '../water/underwaterState.js';
 import {
   GRASS_BLADE_SEGMENTS,
   GRASS_FAR_BLADE_SEGMENTS,
@@ -33,6 +35,8 @@ import { StylizedVariantResidency } from './StylizedVariantResidency.js';
 import { StylizedWildlifeView } from './StylizedWildlifeView.js';
 import { RegionalCharacterField } from './RegionalCharacterField.js';
 import { GrassTuning } from './GrassTuning.js';
+import { MeadowGrassField } from './meadow/MeadowGrassField.js';
+import { resolveMeadowGrassConfig } from './meadow/meadowGrassConfig.js';
 import { resolveForestSeed } from './forest/ForestRuntimeConfig.js';
 
 export class StylizedSurfaceView {
@@ -42,10 +46,13 @@ export class StylizedSurfaceView {
     config,
     baseUrl = '/',
     biomeAssetPalette = null,
+    snowBand = null,
   }) {
     this.terrainView = terrainView;
     this.objectMap = objectMap;
     this.config = config;
+    // The dark patch where trunks and boulders meet the ground, resolved once.
+    this.contactShadeSettings = resolveContactShade(config);
     this.enabled = Boolean(config?.enabled);
     this.impostorBakeMode = isTreeImpostorBakeMode();
     this.sceneAssets = this.enabled
@@ -91,6 +98,10 @@ export class StylizedSurfaceView {
         baseUrl,
         biomeAssetPalette,
         regionalCharacterField: this.regionalCharacterField,
+        // The snow band lives in the world's configuration, which this config
+        // cannot see, so the composition root hands it down: bark has to whiten at
+        // the altitude the ground under it does.
+        snowBand,
       })
       : null;
     this.flowerView = this.enabled && !this.impostorBakeMode
@@ -206,7 +217,24 @@ export class StylizedSurfaceView {
     // One tuning object for the whole field: its uniforms are shared node objects,
     // so a slider write reaches every slot's material without touching geometry.
     this.grassTuning = new GrassTuning(config);
-    this.slots = this.enabled && !this.impostorBakeMode
+    // `grass.system: meadow` draws grass-test's meadow (meadow/MeadowGrassField.js)
+    // in place of the per-chunk clump slots; `clumps` keeps the slots for A/B.
+    const meadowSettings = config.grass?.system === 'meadow' ? resolveMeadowGrassConfig(config.grass.meadow) : null;
+    this.meadowGrass = this.enabled && !this.impostorBakeMode && meadowSettings
+      ? new MeadowGrassField({
+        scene: terrainView.scene,
+        terrainView,
+        config,
+        settings: meadowSettings,
+        tuning: this.grassTuning,
+        sunDirection,
+        forestFieldProvider: () => this.treeView?.manifestStore?.forestField ?? null,
+        skyView: this.skyView,
+        baseUrl,
+        rockPlacementsProvider: () => this.rockView?.getPlacements() ?? [],
+      })
+      : null;
+    this.slots = this.enabled && !this.impostorBakeMode && !this.meadowGrass
       ? terrainView.slots.map((terrainSlot) => new StylizedGrassSlot({
         terrainSlot,
         terrainView,
@@ -524,7 +552,21 @@ export class StylizedSurfaceView {
     return true;
   }
 
-  update(timestamp, camera) {
+  /**
+   * The floating origin moved by (dx, dz). Layers that keep render-space state move
+   * it with the world here rather than treating a re-centre as movement.
+   */
+  shiftOrigin(dx, dz) {
+    this.meadowGrass?.shiftOrigin(dx, dz);
+  }
+
+  /**
+   * @param {number} timestamp
+   * @param {object} camera
+   * @param {{ x: number, y: number, z: number } | null} [body] the player's feet in
+   *   render space, for the layers that react to the body standing in them
+   */
+  update(timestamp, camera, body = null) {
     if (!this.enabled || this.impostorBakeMode) return;
     this.frameStartedAt = performance.now();
     // These are gauges, not lifetime counters. Reset them before the slot pass
@@ -537,6 +579,17 @@ export class StylizedSurfaceView {
     this.variantResidency?.update(this.frameStartedAt);
     this.skyView?.update(timestamp, camera);
     this.wildlifeView?.update(timestamp, camera);
+    // Under water, the land stands down: the water sheet and the fog occlude
+    // everything above the surface, and this project's cost is in the rebuilding —
+    // scatter compactions, buffer uploads, ground-texture paints — rather than in
+    // the drawing, so suspending the work is what saves the frame. Nothing is
+    // hidden, so nothing pops on surfacing; the field catches up over the next few
+    // frames. Water itself keeps updating: it is what you are looking at.
+    const landStreaming = !isLandStreamingSuspended();
+    if (!landStreaming) {
+      for (const slot of this.waterSlots) slot.update(timestamp);
+      return;
+    }
     this.rockView?.update(timestamp, camera);
     if (this.rockView?.pendingRebuild) {
       this.rockBuildQueue.enqueue(this.rockView.pendingRebuild);
@@ -586,6 +639,7 @@ export class StylizedSurfaceView {
     });
     this.updateForestGroundTextures();
     this.flowerView?.update(timestamp);
+    this.meadowGrass?.update(timestamp, camera, body);
     for (const slot of this.waterSlots) slot.update(timestamp);
     this.prewarmOneDistantWaterSlot();
 
@@ -674,7 +728,8 @@ export class StylizedSurfaceView {
     for (const terrainSlot of this.terrainView.slots) {
       const descriptor = terrainSlot.descriptor;
       if (!descriptor) continue;
-      const key = `${descriptor.key}:${terrainSlot.pageRevision}:${field.signature}`;
+      const contactKey = this.contactShadeKey(descriptor);
+      const key = `${descriptor.key}:${terrainSlot.pageRevision}:${field.signature}:${contactKey}`;
       if (terrainSlot.forestFloorKey === key) continue;
       const size = terrainSlot.forestFloorSize;
       const half = this.chunkWorldSize * 0.5;
@@ -685,11 +740,19 @@ export class StylizedSurfaceView {
           const worldX = descriptor.centerWorldX - half
             + (x + 0.5) / size * this.chunkWorldSize;
           const habitat = field.sample(worldX, worldZ);
-          terrainSlot.forestFloorPixels[z * size + x] = Math.round(
+          // R is the canopy, G the contact shade: painting the canopy clears the
+          // previous shade with it, so the contact pass below starts from a clean
+          // texture instead of compounding on the last one.
+          const index = (z * size + x) * 4;
+          terrainSlot.forestFloorPixels[index] = Math.round(
             Math.min(1, habitat.patchCoverage * habitat.suitability * 1.35) * 255,
           );
+          terrainSlot.forestFloorPixels[index + 1] = 0;
+          terrainSlot.forestFloorPixels[index + 2] = 0;
+          terrainSlot.forestFloorPixels[index + 3] = 255;
         }
       }
+      this.paintContactShade(terrainSlot, descriptor);
       terrainSlot.forestFloorTexture.needsUpdate = true;
       terrainSlot.forestFloorKey = key;
       PerfCounters.inc('forestFloorTextureUploads');
@@ -697,6 +760,77 @@ export class StylizedSurfaceView {
       // per frame so chunk streaming cannot trigger an unbounded rebuild burst.
       return;
     }
+  }
+
+  /**
+   * The soft dark patch where trunks and boulders meet the ground, in the ground
+   * texture's second channel — the donor's contact shade.
+   *
+   * Canopy-sized rather than trunk-sized, because that is what the texture can
+   * carry: eight metres to a texel at this resolution, so a trunk's own width is a
+   * fraction of a texel and would paint nothing.
+   */
+  paintContactShade(terrainSlot, descriptor) {
+    if (!this.contactShadeSettings) return;
+    const sources = [];
+    const manifest = this.treeView?.manifestStore?.get(
+      descriptor.chunkX,
+      descriptor.chunkZ,
+      this.rockView,
+    ) ?? [];
+    for (const placement of manifest) {
+      const scale = placement.heightScale ?? placement.scale ?? 1;
+      sources.push({
+        x: placement.x,
+        z: placement.z,
+        radius: this.contactShadeSettings.radiusPerScale * scale,
+        strength: this.contactShadeSettings.treeStrength,
+      });
+    }
+    for (const placement of this.rockView?.getPlacements() ?? []) {
+      if (placement.ownerChunkX !== descriptor.chunkX
+        || placement.ownerChunkZ !== descriptor.chunkZ) continue;
+      sources.push({
+        x: placement.x,
+        z: placement.z,
+        radius: this.contactShadeSettings.radiusPerScale * (placement.scale ?? 1) * 0.5,
+        strength: this.contactShadeSettings.rockStrength,
+      });
+    }
+    if (sources.length === 0) return;
+    paintContactShade({
+      pixels: terrainSlot.forestFloorPixels,
+      size: terrainSlot.forestFloorSize,
+      centerWorldX: descriptor.centerWorldX,
+      centerWorldZ: descriptor.centerWorldZ,
+      chunkWorldSize: this.chunkWorldSize,
+      sources,
+      channel: 1,
+    });
+    PerfCounters.inc('contactShadeSlotsPainted', sources.length);
+  }
+
+  /**
+   * The part of the ground texture's key that depends on what is standing on it.
+   *
+   * Without this a chunk keeps the contact shade of whatever stood there when its
+   * canopy was last written, so a felled tree would leave its patch behind until
+   * the canopy happened to change — the same class of bug as a stale canopy.
+   */
+  contactShadeKey(descriptor) {
+    if (!this.contactShadeSettings) return 'no-contact-shade';
+    const manifest = this.treeView?.manifestStore?.get(
+      descriptor.chunkX,
+      descriptor.chunkZ,
+      this.rockView,
+    ) ?? [];
+    const rocks = this.rockView?.getPlacements() ?? [];
+    let rocksHere = 0;
+    for (const placement of rocks) {
+      if (placement.ownerChunkX === descriptor.chunkX
+        && placement.ownerChunkZ === descriptor.chunkZ) rocksHere += 1;
+    }
+    return `${manifest.length}:${rocksHere}`;
   }
 
   dispose() {
@@ -737,6 +871,7 @@ export class StylizedSurfaceView {
     for (const slot of this.waterSlots) slot.dispose();
     this.waterSlots.length = 0;
     for (const slot of this.slots) slot.dispose();
+    this.meadowGrass?.dispose();
     this.slots.length = 0;
     this.revisionTracker?.dispose();
     this.revisionTracker = null;

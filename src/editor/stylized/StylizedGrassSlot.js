@@ -391,7 +391,13 @@ export class StylizedGrassSlot {
     this.trampleTexture.needsUpdate = true;
   }
 
-  ensureResources() {
+  /**
+   * @param {string | null} [setId] the silhouette set to build with — the chunk's
+   *   own when `update` knows it, else the one already built. Building with the old
+   *   set instead would leave `update` seeing a changed shape every frame and
+   *   tearing the chunk down before its scatter could finish.
+   */
+  ensureResources(setId = this.builtProfileSetId) {
     if (this.geometry) return;
     const allocationStartedAt = performance.now();
     this.createTrampleTexture();
@@ -404,7 +410,7 @@ export class StylizedGrassSlot {
       4,
     );
     const pool = this.bladeProfileProvider?.();
-    const bands = pool?.forSet(this.builtProfileSetId ?? undefined) ?? null;
+    const bands = pool?.forSet(setId ?? undefined) ?? null;
     this.builtProfileRevision = pool?.revision ?? -1;
     this.builtProfileSetId = bands?.setId ?? null;
     const geometryBands = {
@@ -612,7 +618,7 @@ export class StylizedGrassSlot {
     const shapeChanged = profileRevision !== this.builtProfileRevision
       || (profileSetId !== null && profileSetId !== this.builtProfileSetId);
     if (this.geometry && shapeChanged) this.releaseResources();
-    this.ensureResources();
+    this.ensureResources(profileSetId ?? this.builtProfileSetId);
     this.ringDistance = Number.isFinite(distance) ? distance : 0;
     this.updateCoverage(descriptor, focus);
     this.setBand(grassLodBand(distance, this.nearRadius));

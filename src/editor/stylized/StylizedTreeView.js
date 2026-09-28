@@ -15,6 +15,7 @@ import {
   createStylizedLeafMaterial,
   createStylizedTrunkMaterial,
 } from './StylizedTreeMaterials.js';
+import { resolveBarkWeathering } from './barkWeathering.js';
 import {
   FOREST_SPECIES_PALETTES,
   createForestSpeciesPrototypeGeometry,
@@ -47,6 +48,7 @@ import { TreeImpostorBatch } from './impostor/TreeImpostorBatch.js';
 import { createTreeImpostorSourceSignature } from './impostor/TreeImpostorManifest.js';
 import { registerPrototypeIndices } from './BiomeAssetPalette.js';
 import { applyCloudShadow } from './CloudShadow.js';
+import { applyJungleMist } from './ambient/jungleMistOutput.js';
 
 function firstMaterial(mesh, name) {
   return materialList(mesh).find((material) => material?.name === name) ?? materialList(mesh)[0];
@@ -155,9 +157,15 @@ export class StylizedTreeView {
     baseUrl = '/',
     biomeAssetPalette = null,
     regionalCharacterField = null,
+    snowBand = null,
   }) {
     this.terrainView = terrainView;
     this.config = config;
+    // Bark moss, rain streaks and snow, resolved once: every trunk in the world
+    // shares the settings. The snow band is handed down from the composition root
+    // because it lives in the world configuration, and bark has to whiten where the
+    // ground under it does.
+    this.barkWeatheringSettings = resolveBarkWeathering(config, { snow: snowBand });
     this.revisionTracker = revisionTracker;
     this.objectMap = objectMap;
     this.baseUrl = normalizeBaseUrl(baseUrl);
@@ -423,6 +431,7 @@ export class StylizedTreeView {
                 sourceMap,
                 barkTextures: authoredBarkTextures,
                 barkScale: authoredBarkScale,
+                barkWeathering: this.barkWeatheringSettings,
               })
               : createStylizedTrunkMaterial({ textures: barkTextures, config: this.config }));
           return {
@@ -490,9 +499,12 @@ export class StylizedTreeView {
     return generated.map((prototype) => prototype.speciesId);
   }
 
-  /** Parts whose materials take cloud shadows; the LOD clones inherit it. */
+  /** Parts whose materials take cloud shadows and jungle mist; the LOD clones inherit both. */
   withCloudShadow(parts) {
-    for (const part of parts) applyCloudShadow(part.material, this.config.sky);
+    for (const part of parts) {
+      applyCloudShadow(part.material, this.config.sky);
+      applyJungleMist(part.material, this.config.ambientEffects);
+    }
     return parts;
   }
 

@@ -17,11 +17,17 @@ import:
   # stamped into the world at import: re-import for a change to apply.
   # heightMeters is crest over gully at full strength; the relief fractions
   # (0 coast … 1 highest peak) set where ridges begin and reach full strength.
+  # couloirMeters is how deep the rock chutes between the ribs cut at full
+  # strength, and notchMeters how deep a saddle cuts the ridge line. Both are
+  # conservative fine detail over the 90 m ridges and both are additive: 0 turns
+  # a term off, and removing a key leaves a world imported before it the same.
   # Remove the block to import smooth mountains.
   azgaarRidges:
     heightMeters: 90
     startRelief: 0.3
     fullRelief: 0.65
+    couloirMeters: 8
+    notchMeters: 9
   # Azgaar roads and trails graded into walkable paths (world/TrailGrading.js):
   # the ground along each is cut and filled toward a profile no steeper than
   # maxGrade, within maxCut/maxFill, with banks that widen with the cut.
@@ -133,6 +139,29 @@ renderer:
   # ACES exposure. Kept equal to the workshop preview renderer so a baked
   # building looks the same placed in the world as it did while authoring.
   toneMappingExposure: 1.12
+  # Same-frame Hi-Z occlusion culling, ported from grass-test. It renders the scene's
+  # solid occluders into a half-resolution depth target, builds a max-depth pyramid,
+  # and zeroes the drawn count of whole draws that sit entirely behind them. Off is
+  # the plain frame. `diagnostics` reads the culled triangle counts back to the CPU
+  # for QA only — the editor runtime keeps that off (see webGpuRuntimeContract).
+  #
+  # Off by default on measurement (2026-09-28, walking, vsync off): it works — the
+  # terrain occludes through per-chunk proxies of its hills (terrainOccluderProxy)
+  # and in an Eldara valley it hid 5–7 draws / ~57k triangles behind relief — but
+  # it cost 1–9% frame rate there (255–270 fps on, 264–281 off) and ~5% on open
+  # ground where it culled nothing (151–154 vs 160–162). The draws that cost the
+  # most are not candidates: the meadow is one batch per band across every tile,
+  # and trees and rocks are wind-displaced instanced meshes. Turn it on for a scene
+  # whose heavy, solid meshes sit behind hills or walls.
+  gpuOcclusion:
+    enabled: false
+    resolutionScale: 0.5
+    minTriangles: 256
+    boundsPadding: 0.15
+    minSavedTriangles: 25000
+    minSavedTrianglesPerMs: 50000
+    probeInterval: 30
+    diagnostics: false
 terrain:
   minHeight: -16
   maxHeight: 48
@@ -473,6 +502,24 @@ stylizedSurface:
         tileIds: [1, 2, 9, 10]
         prototypeGroups:
           - [chunk-06]
+      # The tropical kit does NOT belong here, and this is the place to say so.
+      # Ten members of grass-test's coastal-jungle kit are prepared in
+      # `assets/runtime-sources/ground/tropical/` and five of them publish cleanly
+      # (jungle grass short/tall/broad, jungle groundcover, elephant ear), but
+      # `groundDetailVariants` cannot carry them: the layer is deliberately capped —
+      # `tests/authoredAssetExtraction.test.js` asserts every entry here is a
+      # PUBLISHED EXTRACTION output and streams at most 350 triangles, because this
+      # is the ambient ground-cover layer and its budget was measured (clover at
+      # 10 912 triangles cost ~87 FPS streamed). The jungle grasses are 1 540-1 960
+      # triangles, which is a different job.
+      #
+      # They also cannot go in `bushVariants`, which the same pipeline scans but which
+      # has no per-variant biome gate — tropical grass would scatter through temperate
+      # meadow. So the kit needs a LAYER OF ITS OWN: a new asset key added to
+      # `scripts/lib/runtime-asset-sources.mjs`'s scanned list plus a second scatter
+      # tier, a `stylizedSurface.tropicalKit` layer block with `tileIds: [5, 7]`, and a
+      # `StylizedGroundDetailView` instance beside the ground-detail and aquatic ones.
+      # That is a deliberate piece of work with its own budget, not a config line.
     # The same authored wet plants are reused as short submerged silhouettes.
     # The water surface follows terrain at +0.12 m, so these remain visible below
     # it instead of becoming reeds floating at an unrelated sea plane.
@@ -571,6 +618,46 @@ stylizedSurface:
     contrast: 2.4
     minimumInfluence: 0.28
   grass:
+    # Which grass draws. `meadow` is grass-test's meadow (stylized/meadow/): single
+    # blades at the meadow's real scale on 8 m tiles, four LOD bands out to 50 m,
+    # one draw per band — about 50x fewer triangles than the clump slots. `clumps`
+    # keeps the per-chunk clump slots below, for A/B.
+    system: meadow
+    meadow:
+      tileSize: 8
+      maxDistance: 50
+      bladeHeight: 0.54
+      bladeWidth: 0.071
+      heightScale: [0.88, 1.22]
+      appearance:
+        # Sky fill on the pigment. The donor's 0.06 sat under a far stronger fill
+        # light than ours; 0.6 is what brings the front-lit meadow up to its look.
+        fill: 0.6
+      # Which silhouette each biome's grass wears (meadow/meadowGrassShapes.js).
+      shapes:
+        default: slender
+        byTileId:
+          12: reed
+          5: broadleaf
+          7: broadleaf
+      # grass-test's "high" profile in metres: detail is blade segments, density
+      # stems per metre along a tile side, distance a share of maxDistance.
+      lod:
+        high: { detail: 5, density: 12.6, distance: 0.12 }
+        medium: { detail: 3, density: 12.6, distance: 0.28 }
+        low: { detail: 3, density: 5.6, distance: 0.6 }
+        veryLow: { detail: 2, density: 2.8, distance: 1 }
+      # Billboard clumps past the blades (grass-test's far grass): 64 m tiles, a
+      # screen-door handoff from 40 to 50 m, dissolving out by 180 m where the
+      # terrain's painted ground cover has taken over.
+      far:
+        tileSize: 64
+        density: 1.3
+        distance: 180
+        width: 1.2
+        height: 0.72
+        transitionStart: 0.8
+        fadeStart: 0.9
     # How far real grass geometry reaches, in chunk rings. Rings beyond nearRadius
     # draw single-triangle blades instead of the tapered five-triangle ones.
     #
@@ -615,6 +702,7 @@ stylizedSurface:
     # falloff reads as a gradient and the residency edge fades instead of ending at
     # a line. `grassLodCoverage` owns the law; the shader only interpolates it.
     lod:
+      enabled: true
       coverage:
         enabled: true
         # Metres past the residency radius over which the last ring thins to
@@ -633,30 +721,23 @@ stylizedSurface:
         compensation: 1
         maximumWiden: 1.35
     tileIds: [3, 4, 5, 6, 7, 8, 9, 12, 14]
-    # Blade silhouette. The upstream Spring preset's 0.06 m width was carried over
-    # unchanged while the length was adapted down to world scale, which left a blade
-    # 6 cm wide and 15–25 cm long — a 3:1 strip, and the reason the foreground read
-    # as green ribbons rather than grass. Narrowing to 1.4–3.2 cm puts the blade
-    # near 9:1 and cuts fragment overdraw from roughly 1.7 to 0.7 blade-areas per
-    # square metre, which is what makes ground visible between the blades again.
+    # Blade silhouette, matched to grass-test's meadow (2026-09-28): its blades are
+    # 1.5 × 0.2 donor units, about 0.54 × 0.07 m, and together they read as one
+    # knee-high field rather than a short sward of separate blades. The earlier
+    # 1.4–3.2 cm × 0.10–0.32 m tuning left the ground showing between blades,
+    # which is the look this replaces. Measured uncapped at the taiga orbit focus
+    # the retune cost ~1% (168.5 → 167.3 fps into the sun, 169.8 → 171.5 away).
     #
-    # Narrowing is only safe because `clumpRadius` below is now independent of it.
-    minWidth: 0.014
-    maxWidth: 0.032
-    minLength: 0.10
-    maxLength: 0.32
+    # Widths stay independent of `clumpRadius` below, so the carpet guard holds.
+    minWidth: 0.027
+    maxWidth: 0.061
+    minLength: 0.32
+    maxLength: 0.62
     # Length is rolled flat and then raised to this power, which skews it toward the
-    # short end. A flat roll over the range above concentrates the field around "all
-    # medium" and reads as a mown lawn or a standing crop; real sward is mostly short
-    # with a scattered tall minority. At 5.0 that is roughly 77% under 0.16 m, 14%
-    # between 0.16 and 0.24 m, and 9% above — the split is pinned by
-    # `bladeLengthFraction` in tests/grassLodMath.test.js rather than left to this
-    # comment.
-    #
-    # It also drops mean blade length from 0.21 m to 0.14 m, and apparent coverage
-    # with it, from roughly 0.70 to 0.45 blade-areas per m². If the field reads too
-    # thin, `bladesPerCell` is the compensation — it costs raster, not streaming.
-    lengthSkew: 5.0
+    # short end (`bladeLengthFraction` in tests/grassLodMath.test.js). The donor's
+    # meadow is an even stand with a little height jitter, not a short sward with a
+    # tall minority, so the skew is kept mild: at 1.2 the mean blade is ~0.46 m.
+    lengthSkew: 1.2
     # `minWidth`/`maxWidth` are rolled per clump. This spreads the blades inside one
     # clump multiplicatively around that roll (±spread/2), so a clump is not 96
     # blades of one gauge, and `widthLengthCorrelation` decides how much of the
@@ -831,11 +912,13 @@ stylizedSurface:
       enabled: true
   wind:
     direction: [1, 0]
-    strength: 0.1
+    # Stronger than the old short sward's: a knee-high field visibly leans and
+    # sways with the breeze in the donor, where a stiff one reads as spikes.
+    strength: 0.2
     speed: 1.3
     frequency: 0.47
     turbulence: 0.04
-    lean: 0.05
+    lean: 0.22
     # How much of a gust the stiffest blade refuses. Phase separation alone still
     # moves every blade the same distance, which reads as the whole sward shearing;
     # this is what makes it a field of blades with different give.
@@ -850,13 +933,15 @@ stylizedSurface:
       heightStart: 0.62
       fadeStart: 22
       fadeEnd: 38
+  # The donor meadow's pigment: a dark olive root that stays dark most of the way
+  # up (its gradient power is 2.6) and a lime tip.
   color:
-    bottom: '#4f7c13'
-    top: '#79a01c'
-    brightness: 0.8
+    bottom: '#354d12'
+    top: '#6da300'
+    brightness: 1.1
     gradientStart: 0.15
     gradientEnd: 1.0
-    gradientPower: 1.6
+    gradientPower: 2.2
     # Upstream scatters every blade separately, so each one samples the patch
     # noise at its own base and neighbours differ. Blades are batched into clumps
     # here, so 96 of them share one sample — which is why raising bladesPerCell
@@ -867,7 +952,7 @@ stylizedSurface:
       # sun-bleached one at the top of it. Kept either side of bottom/top so the
       # mix widens the field's range rather than shifting its hue.
       cool: '#3c6a1c'
-      warm: '#a8c63e'
+      warm: '#8fb82e'
       # How far a blade may travel along that ramp. This flattens the base→tip
       # gradient by the same fraction, which `rootShade` below pays back.
       strength: 0.4
@@ -897,7 +982,7 @@ stylizedSurface:
   # shimmers as blades cross pixels — which is also why the contribution fades out
   # with distance rather than being drawn all the way to the horizon.
   bladeNormal:
-    strength: 0.32
+    strength: 0.2
     fadeStart: 30
     fadeEnd: 60
   translucency:
@@ -912,7 +997,9 @@ stylizedSurface:
     # landed on roots and tips alike: at 2.5 it peaked at linear (1.33, 1.96, 0.19)
     # and turned grass facing the sun yellow-white, and even at 1.0 it washed the
     # field wherever the blade colour underneath it was dark.
-    strength: 1.3
+    # Down from 1.3 with the donor retune: at that strength the taller, wider blades
+    # facing the sun bleached to yellow-white across the whole field.
+    strength: 0.55
     power: 6.4
     tipBias: 1.0
   patch:
@@ -946,6 +1033,15 @@ stylizedSurface:
     edgeWarp: 0.18
     rutStrength: 0.16
     rutScale: 1.6
+    # Straw on the verge, after grass-test's path fringe: the grass that still grows
+    # beside a track is trampled and dry, so its tips go straw rather than green.
+    # `vergeWidth` above is what splits the bare tread from the scuffed verge this
+    # reads, and the fringe is weighted by the blade's height gradient, so it dries
+    # the tips and leaves the roots underfoot green.
+    fringe:
+      enabled: true
+      strength: 0.55
+      color: '#c2ad62'
     # Generated worlds need readable paths before any Road cells are painted.
     # A smooth world-space contour produces long connected game trails; Road
     # tiles are still authoritative and are merged into the same wear profile.
@@ -980,6 +1076,27 @@ stylizedSurface:
     color: '#ffffff'
     colorVariation: 0.08
     burial: 0.06
+    # Weathering for the authored rock pack, after grass-test's rockWeathering.
+    # The pack's albedo is near-white and uniform, so bare stones read as plastic
+    # set on the grass; moss on the up-facing faces, shaded undersides and a toned
+    # albedo are what make them sit in the world. All ALU, no extra texture.
+    #
+    # `waterline` is the wet, glossy band above the sea, ragged by noise, and it
+    # keys on sea level because that is the only water level this world has
+    # globally — a lake's surface belongs to its own body, so a stone on a lake
+    # shore keeps its dry band.
+    weathering:
+      enabled: true
+      toning: 0.72
+      moss: 0.85
+      dust: 0.35
+      waterline: 0.7
+      waterlineHeight: 1.2
+      wetDarkening: 0.5
+      # Green in the upper half of the splash band. The donor darkens the band;
+      # the algae is what makes it read as a tide mark rather than as shadow.
+      algae: 0.45
+      algaeColor: '#4a5a2a'
     # Compact high-density scree pockets with genuinely empty ground between.
     # The higher candidate budget supplies several stones to each small core;
     # it no longer spends that budget across dozens of diffuse singleton patches.
@@ -1236,6 +1353,42 @@ stylizedSurface:
     perChunk: 12
     clearRadius: 3.5
     tileIds: [3, 4, 5, 6, 7, 8, 9, 10, 12]
+    # Contact shade: the soft dark patch where trunks and boulders meet the ground,
+    # after grass-test's writeContactShade. Ambient occlusion rather than shadow —
+    # it does not move with the sun and it holds past the shadow map — which is what
+    # stops a tree looking like it is hovering.
+    #
+    # The radius is canopy-scale, and that is forced by the texture rather than
+    # chosen: the ground texture is 16 texels over a 128 m chunk, so one texel is
+    # eight metres and a trunk-width patch is a fraction of a texel and would paint
+    # nothing at all. A patch the size of the canopy is a texel or two, which is what
+    # a stand of trees actually darkens the ground with.
+    contactShade:
+      enabled: true
+      radiusPerScale: 7
+      treeStrength: 0.8
+      rockStrength: 0.65
+      # How dark the ground goes at the centre of a patch.
+      depth: 0.45
+    # Bark weathering, after grass-test's barkWeathering: moss on a trunk's shaded
+    # side and its root tops, rain running down it in dark streaks, snow caught on
+    # the upward faces up in snow country, and an earthy base where soil splashes.
+    #
+    # All of it is ALU on the trunk material with no extra texture, and it is what
+    # stops a stand of trees reading as the same model repeated. Height up the trunk
+    # comes from the prototype, and the rain is the shared wetness accumulator, so
+    # bark darkens with the ground it stands on. The snow band is the far terrain's
+    # own mirror, so bark and ground whiten at the same altitude; `snowLine` and
+    # `snowFade` here override it, and with no band at all the snow term is off
+    # rather than invented.
+    weathering:
+      enabled: true
+      moss: 0.7
+      wet: 0.8
+      snow: 0.8
+      tint: 0.12
+      base: 0.35
+      baseHeight: 1.2
     habitat:
       enabled: true
       # Closed forest needs real density; the patch field keeps glades open, so
@@ -1341,9 +1494,11 @@ stylizedSurface:
     grainStrength: 0.95
   groundCover:
     enabled: true
-    # Shader impostor overlaps the last real-grass chunk before taking over.
-    startDistance: 110
-    endDistance: 320
+    # Shader impostor under the meadow's far cards: the ground between cards reads
+    # green from where they begin, and it carries the meadow on past their 180 m
+    # edge. (110/320 with the clump slots.)
+    startDistance: 30
+    endDistance: 120
     direction: [0.88, 0.47]
     frequency: 2.8
     noiseScale: 0.08
@@ -1446,6 +1601,48 @@ stylizedSurface:
     cloudShadows:
       enabled: true
       strength: 0.45
+    # Animated time of day: advances the hour by real seconds and pushes the
+    # nearest existing time preset into the sky look each frame, which eases it in.
+    # The cycle only says *when* and *which look*; the sky is still the only
+    # lighting authority, and a paused or disabled cycle is a no-op, so the manual
+    # Time selector and capture tools that set the lights directly keep their look.
+    cycle:
+      enabled: false
+      hour: 6
+      # Real seconds a full 24 h turn takes. Ten minutes by default.
+      dayLengthSeconds: 600
+      latitudeDegrees: 40
+      paused: false
+    # Stars and a moon disc, added inside the dome material. They key on the active
+    # look's night flag, so a moonlit preset shows them and daylight does not, and
+    # both compile to nothing when disabled. The moon's direction and phase come
+    # from the cycle when it runs; otherwise it stands at the angles below.
+    stars:
+      enabled: true
+      density: 160
+      presence: 0.4
+      magnitudePower: 3
+      rotationDegreesPerSecond: 0.5
+      brightness: 1
+      moon:
+        enabled: true
+        elevation: 25
+        azimuth: 20
+        size: 0.012
+        softness: 0.02
+        emission: 0.6
+        color: '#dfe6ff'
+    # Gorge mist: it pools in the valleys below the view, marched per pixel against
+    # a camera-local height patch (the same LocalGroundHeight the ambient particles
+    # use). `quality` is a compile-time share — 0 builds nothing — and the runtime
+    # region weight (snow country) fades it where there are no gorges. `maxDistance`
+    # must stay inside half the patch's 128 m extent, which the config checks.
+    valleyFog:
+      enabled: true
+      quality: 1
+      steps: 6
+      maxDistance: 56
+      nearClear: [3, 10]
     groundLightColor: '#6f784d'
     ambientIntensity: 2.0
     # Share of highColor's saturation the sky light keeps, at the same

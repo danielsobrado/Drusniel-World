@@ -61,9 +61,11 @@ deterministic per-page hashing in the chunk worker.
 6. **Perf-gate every phase.** Run an A/B `qa:perf` against unmodified `main` at the same
    `--warmup` (see `docs/perf-qa.md`). Do not port grass-test's planar reflections or
    cube-probe re-renders. Our SSR/TAA/post graph stays authoritative.
-7. **Three version.** grass-test targets 0.186, and we pin 0.185.1. Check TSL imports while porting
-   (`hash`, `screenCoordinate`, `cameraViewMatrix` exist in both). Don't bump three as part of
-   the merge.
+7. **Three version.** grass-test targets 0.186, and we pinned 0.185.1. Check TSL imports while porting
+   (`hash`, `screenCoordinate`, `cameraViewMatrix` exist in both). **Superseded on 2026-09-28:** the
+   user asked for the donor's occlusion culling, which is written against r186, and the version was
+   therefore bumped to 0.186.1 — see that date's entry in §9 for why the donor's `REVISION` pin turned
+   out not to be an API requirement either way, and for the verification performed and still owed.
 
 ## 3. Inventory and verdicts
 
@@ -911,7 +913,23 @@ reasoned, not measured, because this pass had no GPU machine.
   - Verified by importing Eldara with and without ridges and standing at the same
     1,240 m spot: a crest now cuts the skyline where the smooth import is a
     plateau.
-  - Not done: couloirs and crest notches.
+  - *Couloirs and crest notches (2026-09-28, §11 item 11):* both ported onto the
+    same field, from the donor's `AlpineRegion` landform. A couloir is one finer
+    ridged octave (64 m) on a lattice rotated 37°, so its chutes cut the flanks
+    between the ribs instead of lining up with the crests, gated to the mid-flank.
+    A crest notch is a ridged octave at 128 m gated to the ridge line, so the
+    summit breaks into saddles and pinnacles. Both are centred on their field's
+    measured mean, so neither shifts the range's height, and both inherit the
+    relief gate and the mountainness scale. Config `import.azgaarRidges`
+    gains `couloirMeters` (8) and `notchMeters` (9), validated and stamped at
+    import like the rest. The far backdrop carries them through the same
+    `ridgeRelief` the near terrain uses. A world imported before them has no
+    depths, so both terms stay off and its mountains are unchanged.
+  - Cost of the two new terms: on high ground a height sample goes from ~0.27 to
+    ~0.32 µs (+~0.05 µs, ~+19 % on the benchmark machine), and a world with the
+    terms off matches the old cost exactly (the noise is skipped, not multiplied
+    by zero). Terrain change, so the world is re-imported and a `qa:perf` A/B is
+    outstanding.
 - **2026-09-25, P5 snowfall.** WebGPU snow is now `weather/snowfall/SnowfallField`, in
   three populations: 2,600 fine flakes over a 42 m column, 900 medium flakes over
   14 m, and 48 soft out-of-focus discs near the lens.
@@ -1159,3 +1177,555 @@ reasoned, not measured, because this pass had no GPU machine.
     the layer's existing 24 candidates a chunk. No new texture, no viewport read.
   - *Not yet in this item:* the coastal palms, which need the coastal-jungle kit and
     are §11 item 4.
+- **2026-09-27, §11 item 2 starts: rock weathering.** The donor's `rockWeathering`,
+  ported onto the cloned authored rock material.
+  - *Why it matters:* the stylized rock pack's albedo is near-white and uniform, so
+    bare stones read as plastic set on the grass. Moss on the up-facing faces in
+    broken patches, shaded undersides, dust on the bare tops and a toned albedo are
+    what make them sit in the world — and all of it is ALU, with no extra texture.
+  - *The tonal breakup is the other half:* world-space sine products give stones
+    sharing one template different tones, so a scree field stops reading as copies.
+  - *The waterline is adapted, not copied.* The donor reads its sea and lake levels
+    from the fixed map's config. Here the sea level is the only globally known water
+    level — a lake's surface belongs to its own body — so the wet, glossy splash band
+    keys on sea level, and a stone on a lake shore keeps its dry band. A per-point
+    answer needs the rock material to bind the water field, which is a larger change
+    than the effect is worth; noted rather than silently approximated away.
+  - *The donor's character-occlusion dither is deliberately not ported for rocks.*
+    This project's `CharacterOcclusion` cuts foliage only, because rocks are solid
+    obstacles and cutting them reads as a hole in the world.
+  - *Live from config:* every strength is a setting, resolved and range-checked at
+    config load so a typo is an error naming its path rather than stones that turn
+    green in the world.
+  - *Not yet in this item:* bark weathering (moss on the shaded side, rain streaks,
+    snow on upward faces, an earthy base), the contact shade where trees and rocks
+    meet the ground, and the donor's `heightBlend`/`pebbleField` node helpers for
+    terrain terms.
+- **2026-09-27, §11 item 2: bark weathering.** The donor's `barkWeathering`, on the
+  authored trunk material.
+  - *What it does:* moss on the trunk's shaded side and its root tops in broken
+    patches, thickest near the ground; rain running down it in dark streaks; snow
+    caught on the upward faces up in snow country; an earthy base where soil
+    splashes; and a per-tree colour drift, so a stand stops reading as one model
+    repeated. All ALU on the trunk, no extra texture.
+  - *Three adaptations, each of which this project earns.* Height up the trunk comes
+    from `positionGeometry.y` rather than a terrain heightfield texture — a tree
+    prototype's origin is its trunk base, so that is the height directly, and it
+    scales with the instance, which is what a bigger tree wants anyway. Rain is the
+    shared wetness accumulator the ground itself darkens by, rather than a second
+    rain value that could disagree with the ground the tree stands on. The per-tree
+    seed is `instanceDither.y`, which the lod runtime already writes, so a tree keeps
+    its drift across its LOD levels with no new attribute.
+  - *The snow band is threaded, not restated.* Bark has to whiten at the altitude
+    the ground under it does, and the band lives in `world.farTerrain` — a different
+    top-level config key the surface config cannot see. So the composition root hands
+    it down: `main.js` → surface view → tree view → trunk material. A second copy of
+    the snow line in the surface config would have been the easy move and would have
+    been free to drift; with no band handed down the snow term is simply off, rather
+    than defaulting to zero and whitening every trunk in the world.
+  - *Not yet in this item:* the waterline algae tint (the wet band itself came with
+    the rock weathering), the contact shade where trunks and boulders meet the
+    ground, and the donor's terrain terms — `heightBlend`, `pebbleField`, scree and
+    the straw fringe at path edges, which have to fit the baked terrain material and
+    its texture budget.
+- **2026-09-27, §11 item 2: waterline algae and contact shade.** The two pieces left
+  in the item's shader half.
+  - *Waterline algae,* on the rock's splash band: the donor darkens the band, and the
+    green in its upper half is what makes it read as a tide mark rather than as
+    shadow. It sits above the wet line rather than with it — algae needs the water
+    but does not live under it — and it carries its own strength, because a lake
+    stone wants the wet band without the sea's algae.
+  - *Contact shade,* from the donor's `writeContactShade`: a soft, quadratically
+    falling patch where a trunk or boulder meets the ground, painted into the second
+    channel of the per-chunk ground texture the forest floor already uses, so the
+    ground reads canopy and contact in one fetch. It is ambient occlusion rather than
+    shadow, so it does not move with the sun and it holds past the shadow map.
+  - *The resolution forced the design, and the test found it.* At 16 texels over a
+    128 m chunk one texel is **eight metres**, so a trunk-width patch is a fraction of
+    a texel and paints nothing at all — I had a default of 2.2 m and the test refused
+    to place it. The patch is therefore canopy-scale (`radiusPerScale: 7`), which is
+    what a stand of trees actually darkens the ground with. A finer ground texture
+    would allow trunk-scale patches; that is a memory and per-frame paint decision,
+    not a shader one, and it is not taken here.
+  - *Three things had to move together, or the ground reads garbage.* The texture went
+    from one byte a texel to four; the terrain material now reads the second channel;
+    and `TerrainMaterialBakeCpu.sampleCanopy` had a stride of one, which would have
+    read the canopy out of the alpha bytes and shaded every forest by nothing. Three
+    test fixtures had to follow the layout change.
+  - *The ground texture's cache key now includes what is standing on it,* because a
+    felled tree would otherwise leave its patch behind until the canopy happened to
+    change — the same class of bug as a stale canopy.
+  - *What is left in item 2:* the donor's terrain terms — `heightBlend`,
+    `pebbleField`, scree and the straw fringe at path edges — which have to fit the
+    baked terrain material and its texture budget.
+- **2026-09-27, §11 item 2 closed: the straw fringe, and the terrain terms assessed.**
+  - *Straw fringe, ported.* The donor tints the grass still growing on a path's verge
+    straw at the tips. Our path wear already splits its smoothstep into a bare tread
+    and the verge outside it (`stylizedPathWearMask` returns `tread` and `verge`),
+    which is precisely the band the donor read off its own exclusion channel, so the
+    port is the tint and not the field. It is weighted by the blade's height
+    gradient: a whole blade going straw reads as a different plant rather than as the
+    same grass underfoot, so only the tips dry out. Its own config block, because a
+    world may want the wear that shortens blades without the colour.
+  - *The three terrain terms are assessed and left out, each for a reason rather than
+    for effort.* `pebbleField` is a terrain-shader Voronoi stone field; this project
+    places its beach pebbles as instances already (`coastStones`, 466 of them near the
+    test beach) and an instance draws and lights better than a shader stone. `scree`
+    is likewise already here twice over — as compact high-density instance pockets
+    (`rocks.clusterDensity`) and as the baked material's rock and scree
+    classification (`screeColor`). The donor's shader versions are what it used
+    *instead* of scatter it did not have.
+  - *`heightBlend` is the one genuinely open technique, and it has no counterpart
+    here.* It blends one textured surface layer over another using each layer's
+    luminance as height, so rock breaks through grass along its raised grains instead
+    of cross-fading. This project's terrain does not layer textures that way: it bakes
+    a material weight and a colour per cell (`materialWeights`, `farColor`) and reads
+    the result. Adopting the technique means giving those layers their own height
+    textures and carrying them through the bake's byte budget — a bake-pipeline
+    change, not a shader one, and one worth doing only with a measured reason.
+  - **Item 2 is therefore done**: rock weathering, bark weathering, waterline algae
+    and contact shade ported; the terrain terms assessed above.
+- **2026-09-27, §11 item 3 starts: crest transmission, and the deep-sea assessment.**
+  - *Crest transmission, ported.* A wave seen edge-on with the sun beyond it glows
+    rather than reflecting, and the donor's three factors are all in it: the crest
+    mask, a grazing view (look straight down and you are looking at the water, not
+    through it) and the light behind the wave rather than off it. The grazing term is
+    squared, which concentrates the glow in the last few degrees — where it happens on
+    a real sea — and the whole thing is one uniform-times-node, so it compiles out
+    entirely at zero. It is added after the reflection, because it is light that came
+    through the water rather than off it.
+  - *Deep-sea absorption and an abyss band: assessed, not needed.* P4 already found
+    why: the water domain caps depth at 24 m and the colour saturates by about six, so
+    a depth-driven absorption ramp and a separate abyss band would be shading that
+    nothing can see. This is the same call the merge plan made in P4 and it still
+    holds — it is not deferred effort, it is a term with no visible output.
+  - *Still open in item 3: dropping the expensive layers while submerged.* The donor's
+    `UnderwaterPerformanceController` hides grass and scatter when the camera is under
+    the water, where the water and the fog occlude them anyway. This project's
+    `UnderwaterViewController` does the environment — fog, light, near plane, sky,
+    caustics — and does not touch layer visibility, so the grass and the detail layers
+    still build and draw for a player who cannot see them. P4 deferred this as a
+    performance-only change pending a perf QA pass; it needs a shared submerged state
+    between the player's controller and the surface view, which is a small piece of
+    plumbing across two systems rather than a shader change. **Closed below.**
+- **2026-09-27, §11 item 3 closed: land streaming stands down under water.**
+  - *`underwaterState.js`* is one number the frame shares: the player's
+    `UnderwaterViewController` already computes the submerged blend every frame for
+    the environment, and it now publishes that same value, so the two systems cannot
+    each decide separately what "under water" means. It is a plain number rather than
+    a uniform because what reads it is CPU work.
+  - *Suspended, not hidden — and that difference is deliberate.* The donor hides land
+    layers outright; this project's measured cost is in the *rebuilding* rather than
+    in the drawing (the same finding as the grass ring and the resumable build), so
+    the surface view returns before the layer pass and the build queues. Nothing is
+    hidden, so nothing pops on surfacing: the field catches up over the next few
+    frames instead. Water keeps updating throughout, because it is what you are
+    looking at.
+  - *The threshold sits well inside the transition,* not at its start: a player
+    bobbing at the waterline should not start and stop the world's streaming every
+    wave. The blend is also clamped, and a NaN — a missing camera, a bad frame time —
+    reads as zero, because a NaN blend would suspend the land forever with nothing to
+    notice it.
+  - **Item 3 is therefore done**: crest transmission ported; deep absorption and an
+    abyss band assessed as having no visible output; and land streaming suspends under
+    water.
+- **2026-09-27, §11 item 4 reconnaissance: the tropical kit, and what of it can stream.**
+  Read from the donor's own manifest
+  (`grass-test/public/Assets/terrain/coastal-jungle/objects/tropical-kit/manifest.json`,
+  16 objects, embedded glTF PBR, double-sided, no external textures, pivot at ground
+  centre, units in metres).
+  - *The kit splits by weight, and our own asset policy decides which half streams.*
+    This project already measured and rejected heavy authored extractions from the
+    streamed detail layers (`docs/authored-natural-assets.md`, cited in
+    `editor.config.yaml`): clover at 10,912 triangles and ground patches up to 52,188
+    stay offline. By that yardstick the kit's **light** members stream — jungle grass
+    short/tall/broad (1.4–2.2 k triangles, 98–160 KB), jungle groundcover (648),
+    elephant ear (324), banana understory (360), broad-leaf module (16), fern-frond
+    module (960), palm-frond module (1,536), vine-strand module (640) — and its
+    **heavy** ones do not: jungle canopy tree (44,712 triangles / 3.0 MB), palm tall
+    (26,208 / 1.76 MB), palm young (13,904), fern large (11,520 / 795 KB), fern small
+    (6,048), hanging vine cluster (4,992). The heavy half wants the offline or impostor
+    path, not a streamed variant, and taking it anyway would undo the measurement this
+    project already made.
+  - *The intake exists and is the path to follow:* assets are copied under
+    `public/assets/ground/`, re-encoded by `optimize:runtime-assets`, and gated by
+    `validate:runtime-assets`; the layer is then a `groundDetailVariants`-shaped list
+    (see `stylizedSurface.assets.groundDetailVariants`) with `tileIds`, `weight`,
+    `prototypeGroups` and a `scale`, drawn by a `StylizedGroundDetailView` of its own
+    with a palette layer id — the same shape the ground-detail and aquatic layers
+    already use, so no view changes are needed.
+  - *Biomes:* tropical seasonal forest (5) and tropical rainforest (7), with palms
+    only on the coastal edges of savanna (3) and hot desert (1) oases, as §3 has it.
+  - *Nothing was implemented in this pass.* The piece is an asset intake with a size
+    decision in it, and writing the import before checking it against
+    `validate:runtime-assets` would be guesswork; this records the split so the intake
+    can be written against it.
+- **2026-09-27, §11 item 4 intake: attempted, and the blocker is precise.**
+  - *The toolchain is here.* gltfpack 1.2 is already cached at
+    `tmp/tools/gltfpack/v1.2/win32-x64/gltfpack.exe`, so `optimize:runtime-assets`
+    runs offline; the publish convention is source `assets/runtime-sources/<scene>`
+    → output `public/<scene>`, with the manifest in `assets/runtime-asset-manifest.json`
+    listing every configured scene in order.
+  - *Ten light members are staged* at `assets/runtime-sources/ground/tropical/`
+    (jungle grass short/tall/broad, jungle groundcover, elephant ear, banana
+    understory, and the broad-leaf, fern-frond, palm-frond and vine-strand modules),
+    copied from the donor's `objects/tropical-kit`. Their node names were read out of
+    the GLBs rather than guessed, since `prototypeGroups` has to name a real node and
+    a wrong name throws when the variant is appended.
+  - *The intake stops at the optimizer, for a reason worth knowing:*
+    `/assets/ground/tropical/jungle-grass-short.glb: rendered triangle count changed
+    from 1760 to 1540; simplification is not enabled.` gltfpack is dropping 220
+    triangles of the donor's foliage — degenerate or duplicate geometry, which foliage
+    cards are full of — and this pipeline's contract is that the authored triangle
+    count never changes (`-si` is forbidden, and the validator re-checks the count).
+  - *So the missing piece is a prepare step, not a config entry.* The canonical
+    source has to be cleaned first so that what the pipeline drops is already gone —
+    the same shape as `scripts/prepare-character-assets.mjs` and
+    `scripts/prepare-wildlife-assets.mjs`, which exist for exactly this reason with
+    other vendors' models. That script is the work: weld, drop degenerate triangles,
+    and write `assets/runtime-sources/`, after which the config entries above can be
+    added and the optimizer will accept them.
+  - *The config entries were written and then reverted* rather than left in: a scene
+    in the config without a manifest entry fails `validate:runtime-assets`, which
+    `npm run verify` runs, so leaving them would have broken the tree for the sake of
+    looking further along. The staged sources stay, because the prepare step needs
+    them.
+- **2026-09-27, §11 item 4: the prepare step works, and the kit needs a layer of its
+  own — not a config entry.**
+  - *The prepare script is fixed and runs.* Its accounting was the bug: it asserted
+    that the triangle count fell by exactly what its own degenerate-triangle pass
+    removed, but `weld` merges vertices that were only coincident to float precision,
+    which turns *further* triangles degenerate, so the count falls by more. The
+    invariant that can be proved is that it never *rises* — which is also the
+    contract the runtime optimizer re-checks. Across the ten members: 954 degenerate
+    triangles removed, 9 844 → 8 850, and `jungle-grass-short` goes 1760 → 1540, the
+    exact number gltfpack had complained about.
+  - *Five of the ten publish cleanly* — jungle grass short/tall/broad, jungle
+    groundcover, elephant ear — at 57–73 % smaller (89.1 → 24.7 KiB for the tall
+    grass). The other five (banana understory, and the broad-leaf, fern-frond,
+    palm-frond and vine-strand modules) are rejected with "logical decoded geometry
+    grew during optimization": gltfpack's quantisation pads a tiny mesh's attributes
+    past what the source stored, and the pipeline forbids that. They need a per-asset
+    pass, not a different script.
+  - *The finding that matters: none of the ten can go into `groundDetailVariants`.*
+    `tests/authoredAssetExtraction.test.js` asserts that every entry in that layer is
+    a **published extraction output** and streams **at most 350 triangles** — it is
+    the ambient ground-cover layer, and its budget was measured (clover at 10 912
+    triangles cost ~87 FPS streamed). The jungle grasses are 1 540–1 960. And
+    `bushVariants`, the other scanned key, has no per-variant biome gate, so tropical
+    grass put there would scatter through temperate meadow.
+  - *So item 4's remaining work is a layer, not an entry:* a seventh asset key added
+    to the scanned list in `scripts/lib/runtime-asset-sources.mjs` (with its own
+    scatter tier), a `stylizedSurface.tropicalKit` block carrying `tileIds: [5, 7]`
+    and its own budget, and a `StylizedGroundDetailView` instance beside the
+    ground-detail and aquatic ones. The config file now says exactly this where the
+    entries would have gone, so the next person does not retry the same three dead
+    ends.
+- **2026-09-27, §11 item 6: the alpine prepare script is written but does not run.**
+  - `node scripts/prepare-alpine-tree-assets.mjs` fails immediately, at the read of the
+    first file: `tree10.glb: read failed: document.getDefaultScene is not a function`.
+    `getDefaultScene` is on the **root** in `@gltf-transform` (`io.read` returns a
+    `Document`; the scene accessor is on `document.getRoot()`), so this is the first of
+    what may be several API slips in that script — it has never executed past its
+    first call, so nothing later in it is proven either.
+  - It wrote nothing: the failure is before any output, and `assets/runtime-sources/trees/alpine/`
+    is empty. The five-step plan it encodes (strip `Tree1_Billboard`/`TreeLOD0`, merge
+    the needles and settled-snow primitives into one vertex-coloured leaf part,
+    decimate the leaf geometry to roughly 2k triangles, keep the trunk and the
+    bounds) is right and is recorded above in the item-4 reconnaissance; what it needs
+    is to be run and corrected against the real API, one call at a time.
+  - *The tropical script, by contrast, is now known-good*, which makes the two a fair
+    comparison of what a delegated script needs: the one that had already been run
+    once worked after a single accounting fix, and the one that had never run did
+    not run at all.
+- **2026-09-27, §11 items 9 and 12 wired; 5 and 8 still not; 10 and 11 ported.**
+  Status by grep rather than by report, since agents stop mid-sentence:
+  - **Wired and green.** Blown streaks and frost: `terrainMaterial.js` imports and
+    blends both, and `InfiniteTerrainView` resolves the streak settings. Day/night and
+    stars: `main.js` constructs the `DayNightCycle`, and `StylizedSkyView` adds the
+    star field and a moon disc. Valley fog went further than the agent's last message
+    claimed — it is wired too, through a new `mist/ValleyFogController.js` that
+    `InfiniteTerrainView` owns and `main.js` drives once a frame, with the terrain
+    material blending `createValleyFogNodes` and `validateValleyFog` in the config
+    validator.
+  - **Ported but not wired: snow wake** (`deformation/snowWakeMath.js`,
+    `SnowWakeShading.js`) and **trampling** (`trample/*`). Nothing outside those
+    directories imports either yet.
+  - **Ported but not wired: heat shimmer and jungle mist** — and both took
+    **Outcome A**, the preferred one: neither reads the viewport depth buffer nor the
+    scene colour. The jungle mist is the donor's closed form with
+    `cameraPosition.distance(positionWorld)` standing in for the depth sample it
+    would have taken, and the shimmer became a small angular warp of the sky dome's
+    own view ray, which is the one surface this world paints procedurally. 18 tests.
+    Their one real blocker is recorded: `ambientEffectsConfig.resolveAmbientEffectsConfig`
+    builds an explicit return object and would DROP the new keys, so
+    `config.stylizedSurface.ambientEffects` cannot carry them until it forwards them.
+    **Blocker cleared:** the resolver now forwards `heatShimmer` and `jungleMist`, and
+    `config/ambient-effects.yaml` ships both preset blocks. Verified green (2804
+    tests). What is still owed for these two is the last step only — driving their
+    uniforms in `AmbientEffectsSystem.update` (`heatShimmerUniforms.hot`/`.temperature`
+    from the sand/desert region weight times a time of day, `jungleMistUniforms.weight`/
+    `.ground` from the jungle region weight and an eased ground height) and then the
+    two material calls: `createHeatShimmerNodes` warping the sky dome's ray in
+    `StylizedSkyView.createSkyMaterial`, and `createJungleMistNodes` blended over the
+    ground colour in `terrainMaterial.js`.
+  - **Item 11 done, code-wise:** couloirs and crest notches are ported into
+    `MountainRidges.js` as two centred, gated, config-driven terms (couloir 8 m,
+    notch 9 m) that inherit through the one `ridgeRelief` call, so the far backdrop's
+    column sampler carries them too. 6 new tests (10 in the file). Cost measured on
+    high ground: +0.05 µs per height sample (~19 %), and terms-off matches the old
+    cost exactly. **This is a terrain change: the world must be re-imported and the
+    `qa:perf` A/B is outstanding.** Saved worlds keep their old mountains.
+  - Still open after all of that: the gust sheen, the snow-wake and trampling wiring,
+    the two mist/shimmer wiring steps, item 4's layer, item 6's variant entries, and
+    the browser A/B for everything.
+- **2026-09-27, §11 items 5, 7, 8, 9, 10 and 12: modules staged, each verified alone,
+  none wired yet.** Ported in six parallel workstreams, each owning new files only so
+  nothing collided. Every module is in and its own tests pass; the tree is green
+  (2780 tests). **What none of them is yet is connected** — no config keys were added
+  and no view or material hook was made, deliberately, so the shared files stayed
+  single-owner. The wiring each one still owes:
+
+| Item | New modules | Tests | Wiring still owed |
+|---|---|---|---|
+| 5 trampling | `stylized/trample/{trampleMath,GrassTrampleContacts,GrassTrampleField}.js` | `tests/grassTrample.test.js` (16) | `grass.trample.*` config; construct the field in `StylizedSurfaceViewBase`, update it per frame with the canonical focus, add its texture to `prewarmStreamingResources`, dispose it; pass `trampleFieldTexture`/`trampleFieldUniforms` into `StylizedGrassSlot` → `createStylizedGrassMaterial`, and blend `footInfluence` into `shrink` and `footDirection` into `finalXZ`; feed footfalls from `main.js`'s existing footstep callback |
+| 7 valley fog | `stylized/mist/{ValleyFogShading,valleyFogConfig}.js` | `tests/valleyFog.test.js` (7) | `sky.valleyFog.*` config; blend `mix(color, fog.color, fog.amount)` in `terrainMaterial.js`; needs a `LocalGroundHeight` patch, a time uniform, a region weight and the sky's sun/fog colours |
+| 8 snow wake | `stylized/deformation/{snowWakeMath,SnowWakeShading}.js` | `tests/snowWake.test.js` (7) | create the spine state in `main.js`, record it per frame over snow, thread it into `createTerrainMaterial` and apply `wake.apply(base)` |
+| 9 blown streaks, frost | `stylized/ambient/{BlownStreaks,FrostShading}.js` | `tests/blownStreaks.test.js`, `tests/frostShading.test.js` (15) | the config keys already exist in `config/ambient-effects.yaml`; drive the uniforms from `AmbientEffectsSystem.update`, resolve both in `InfiniteTerrainView.createSharedTerrainMaterialSource`, blend in `terrainMaterial.js` |
+| 10 heat shimmer, jungle mist | — | — | still to port; both read the scene or depth, so each needs its own A/B |
+| 12 day/night, stars, moon | `stylized/sky/{dayNightCycle,starField}.js` | `tests/dayNightCycle.test.js` (11) | `sky.cycle.*` and `sky.stars.*` config; construct the cycle in `main.js` and call `skyLooks.setPreset(cycle.update(delta))` each frame; add the star node and a moon disc inside `StylizedSkyView`'s material |
+
+  - *Two things learned about the fan-out itself.* Agents that own new files and are
+    told exactly which files they may not touch respect it — the protected list held,
+    and the shared files show only this session's own earlier edits. And an agent that
+    hits its turn limit leaves half-finished work that still looks finished: the
+    prepare scripts exist but `prepare-tropical-assets.mjs` fails its own accounting
+    check (`360 - 14 != 340`), so item 4's and item 6's blocker is now "finish that
+    script", not "write it".
+  - *The grass gust sheen was left out of item 9 on purpose* — it lives in the grass
+    material, which was single-owner during the fan-out, and is the one piece of the
+    ambient tail still to do.
+
+- **2026-09-27 — first rendered frames after the handover; mist and shimmer wired.**
+  The handover's work had not been rendered; the app did not start. Four breaks, each
+  found by a headed capture rather than by the test suite (2817 tests were green
+  throughout):
+  - `editor.config.yaml` had no `grass.lod.enabled`, which the validator requires —
+    startup threw. Added `enabled: true`.
+  - `StylizedWaterMaterial.js` used `normalize` in the crest-transmission branch
+    without importing it — startup threw once that branch was reached. A file-scope
+    scan of every changed/new `src` file for undeclared identifiers found no other.
+  - The terrain material's fragment stage now samples **17 textures**, one past
+    WebGPU's default `maxSampledTexturesPerShaderStage` of 16: the pipeline failed
+    validation and the terrain did not draw. `src/render/deviceLimits.js` asks the
+    adapter for up to 32 before `renderer.init()` (this adapter offers 48). The
+    terrain is now at the edge of the *default* — the next texture it gains needs
+    this raise on every machine, so count before adding one.
+  - Grass never finished building in a chunk whose biome maps to its own blade set:
+    `StylizedGrassSlot.ensureResources` built with the set the slot *already had*, so
+    `update` saw a changed shape on the next frame and released and reallocated the
+    slot (geometry and material) every frame. Fixed by building with the chunk's own
+    set; regression test in `tests/grassSlotLod.test.js`.
+  - **Jungle mist and heat shimmer wired** (handover item 1). The mist blends over the
+    lit output of the terrain, grass and tree materials (`jungleMistOutput.js`) so
+    nothing standing in it stays crisp; the shimmer warps the sky dome's low band. Both
+    are driven from `AmbientEffectsSystem` (jungle / inland-desert weight × preset ×
+    strength; the mist's ground eases under the view). Eldara has neither jungle (5,
+    7) nor hot desert (1), so neither switches on there by itself; forced on in a
+    temperate rainforest they render as intended, 63.6 → 62.2 fps with mist on and no
+    change for the shimmer (vsync-bound, so an upper bound on the cost, not a figure).
+  - *Grass look vs the donor.* Measured side by side, the donor's meadow is a dense
+    knee-high field (1.5 × 0.2 units ≈ 0.54 × 0.07 m blades, `#354d12` → `#6da300`),
+    while ours draws 0.10–0.32 m blades skewed short (`lengthSkew: 5`, mean 0.14 m) and
+    0.014–0.032 m wide over dark ground. The handover's grass work (LOD bands,
+    silhouettes, coverage) changes cost and outline, not this scale; matching the donor
+    is a retune of length, width, colour and ground tint that needs its own perf A/B.
+
+- **2026-09-28 — grass retuned to the donor's meadow.** Blades 0.32–0.62 m (skew 1.2,
+  mean ~0.46 m) × 2.7–6.1 cm, donor pigment `#354d12` → `#6da300` at gradient power
+  2.2, translucency 1.3 → 0.55 (taller sun-facing blades bleached white at 1.3), wind
+  lean 0.05 → 0.22 and strength 0.1 → 0.2, blade-normal share 0.32 → 0.2. Config only;
+  `bladesPerCell` is unchanged, so streaming, instance counts and the perf-profile
+  gates are as before. Tuned live through `GrassTuning` at the taiga orbit focus,
+  vsync off: 168.5/169.8 fps (into/away from the sun) before, 166.8/168.0 after.
+  Still short of the donor: distant tips facing the sun sparkle near-white (thin tips
+  aliasing — the donor uses alpha-to-coverage and a distance fade), and the player is
+  a black silhouette into the sun (no fill on the character; not a grass issue).
+
+- **2026-09-28 — grass-test's meadow grass system ported (`stylized/meadow/`).**
+  Measured first: at its own "high" quality the donor draws **0.41 M grass
+  triangles** (0.29 M blades + 61 k far cards) in 41 draws, 6.3 ms a frame on this
+  machine; our clump slots drew **~20 M** (9 chunks × ~6 000 clumps × 96 blades).
+  Ported, adapted to the streaming world:
+  - `meadowGrassGeometry` / `meadowGrassLayout` — the donor's stable R2 stem
+    sequence (every prefix covers a tile, so lower bands keep the same stems) and
+    its four LOD bands (detail = segments, density = stems/m), in metres at 2.8
+    donor units per metre: 8 m tiles, bands to 6 / 14 / 30 / 50 m.
+  - `MeadowGroundSampler` + `meadowGrassCompaction` — the donor's per-tile
+    compaction, reading height, biome, grass/water/path mask and canopy suppression
+    from the *resident terrain pages* (never the generator), resumable, nearest
+    tile first, 2 ms a frame, outputs pooled per band.
+  - `MeadowGrassBatches` — one draw per band, a fixed slot per tile.
+  - `meadowBladeShape` / `meadowBladeMaterial` / `meadowPigment` — the donor's blade
+    path (silhouette per stem: slender / reed / broadleaf by biome, taper, forward
+    arc, rest bend, rank-based band retirement with survivor widening) and its
+    cinematic meadow pigment (dark root to lit tip at power 2.6, cool/warm patches,
+    contact shade and soil at the base, per-blade value jitter, straw path verge,
+    sun transmission at the tip). Wind is our world wind field, applied as the
+    donor's bend angle; footprints press blades via `groundDeformationNode`; the
+    gust sheen (handover item 5) is driven by the ambient layer's meadow weight.
+  - `meadowCardMaterial` + `MeadowTileLayer` — the donor's far billboards: 64 m
+    tiles of camera-facing cards (its three baked clump atlases merged into
+    `public/assets/ground/meadow/meadow-grass-cards.webp`) from 40 to 180 m, with a
+    screen-door handoff (`meadowFade`) so neither layer blends. The terrain's
+    ground cover now starts at 30 m and carries the green past the cards.
+  - Result at the taiga orbit focus: **1.98 M grass triangles** (1.56 M blades +
+    0.42 M cards), 95 draws in the scene, 170/172 fps into/away from the sun
+    (vsync off). `qa:perf chunk-cross --warmup 8 --duration 10` A/B against the
+    clump slots on the same server: 94.5 vs 94.3 fps, p99 45 vs 59 ms, GPU p95 3.3
+    vs 4.35 ms, 26 vs 25 hitches. On this GPU grass was not the bottleneck while
+    running — the scatter manifests and world generation are (CPU profile) — so the
+    win is GPU headroom and a 10× smaller triangle budget, not frame rate here.
+    (A first, 2-second-warmup A/B read 76 vs 48 fps and 34 vs 5 hitches; that gap
+    was streaming still in flight, and vanished at warmup 8.)
+  - `grass.system: clumps` keeps the old slots for A/B. Not ported at this date (both
+    revisited on 2026-09-28, see the entry below): the donor's Hi-Z occlusion pass (a
+    depth pyramid — a viewport-texture cost this project
+    avoids), its camera interaction map (our footprints stand in), alpha-to-coverage
+    (needs MSAA), and rock trample (the clump slots flattened grass around rocks;
+    the meadow does not yet). Footprints are wired and compile; a visual check of a
+    trail is still owed.
+
+## 2026-09-28 (second pass) — best of both sides: three 0.186.1, Hi-Z occlusion, the interaction fold
+
+The instruction for this pass: the Azgaar world, the construction/workshop modules and streaming
+stay this project's; all look and feel comes from grass-test; where the donor assumes a static
+world, keep this host's streaming form. Three decisions were taken up front: bump three to
+**0.186.1**, port the **full Hi-Z stack**, and use the donor's **live** blade fold (a per-blade
+hashed direction) rather than the radial push in its dead, unimported `grass.vert.glsl`.
+
+### three 0.185.1 → 0.186.1
+
+`package.json` + lock only. **No TSL symbol or `three/webgpu` class used here is missing from
+r186** — the risk is behavioural, so the checklist is: the `FramebufferTexture`/`DepthTexture`
+`copy` patch in `src/render/patchViewportFramebufferSources.js` (highest risk: it compensates for
+an r185 `ViewportTextureNode` caching quirk), the post-processing graph and its MRT, water
+viewport refraction, `lod/preInstancePosition.js`'s `NodeMaterial.setupPosition` patch, partial
+attribute uploads, the two indirect-draw paths, the backend-capability flags, and the
+`tsl/display` addons.
+
+Measured: `node --test` **2831 pass / 0 fail** (2836 after this pass's tests), `npm run build` ✓
+with only the two pre-existing warnings — `WebGLRenderer` is not exported by `three/webgpu`, which
+`vite.config.js:12`'s `^three$` → `three/webgpu` alias makes an unresolved import in
+`ui/NaturalObjectThumbnails.js:20`, and that file is **pre-existing and untouched**: r186.0 lacks
+the export too, so it is not a bump regression (worth fixing separately — that thumbnail path
+would throw if it ever runs), and the >500 kB chunk notice. Browser QA
+(`qa:postprocessing:browser`, `qa:water:acceptance`, `qa:perf`) is **outstanding**: this pass had
+no GPU either.
+
+Environment trap worth recording: `NODE_ENV=production` plus npm's `omit=dev` **strips
+devDependencies on any `npm install` here** ("removed 43 packages, audited 9"). After a bump use
+`set "NODE_ENV=" && npm install --include=dev`, or vite, playwright and sharp vanish.
+
+### The donor's r186 pin was dropped
+
+`GpuOcclusion` gated on `REVISION === '186'`. That is a coverage pin, not an API gate: every symbol
+the module touches — `backend.createIndirectStorageAttribute`, `backend.draw`, `geometry.indirect`,
+the depth target, `BufferAttribute.addUpdateRange` — exists in r185 as well, and this project
+already drives the same indirect path in `impostor/GpuTreeImpostorBatch.js` and
+`voxel/GpuVoxelChunk.js`. The port keeps only the real capability test (`isWebGPUBackend &&
+backend.device && !reversedDepthBuffer && !logarithmicDepthBuffer && createIndirectStorageAttribute`).
+
+### Hi-Z occlusion culling — `src/render/occlusion/`
+
+Near-verbatim from the donor's `src/rendering/`: `occlusionShaders.js` (WGSL unchanged,
+max-not-min mip reduction, the 5-uint indirect record), `occlusionBounds.js`, `GpuOcclusion.js`.
+Three host adaptations, each deliberate:
+
+- **Placement and the readback.** `src/render/`, beside `deviceLimits.js`, because the *editor*
+  runtime is contractually free of GPU-to-CPU readback (`tests/webGpuRuntimeContract.test.js`
+  scans `src/editor`). The donor's statistics readback is now opt-in
+  (`renderer.gpuOcclusion.diagnostics`, shipped `false`); the visibility decision never needs it,
+  and the CPU-side `backoffIfEmpty` — the thing that actually handles an open view — is
+  unaffected. `tests/gpuOcclusion.test.js` pins the shipped default to `false`.
+- **No clobbering of compute-compacted draws.** `occlusionDrawRange` returns null when a geometry
+  already owns an indirect record, so the tree impostors' and voxel chunks' own GPU frustum culls
+  are never replaced. That property is asserted directly in the new tests.
+- **An explicit occluder opt-in.** The donor classifies occluders by reading a material, which
+  cannot see a vertex the shader has not displaced yet — and this host's terrain is exactly that:
+  one shared material whose `positionNode` raises the ground from a per-slot heightfield
+  (`terrainMaterial.js:367`, `TerrainSlotBindings`). So `userData.occlusionOccluder === true`
+  declares it, with `userData.occlusionProxyMaterial` supplying a depth-only proxy that displaces
+  identically (built from the same material factory) and `userData.occlusionBounds` giving the
+  extent the flat geometry cannot. Terrain chunks are the occluder that matters here — mountains
+  hiding meadow and trees — so without this the port would find almost nothing. **The terrain
+  side of that contract is designed but not yet written** (see open items).
+
+Wired at the only site that can see the whole frame: `InfiniteTerrainView.render()` (`:455`),
+constructed after `renderer.init()`, camera refreshed per frame, wrapping the existing draw. This
+is sound because the bridge is geometry-keyed, so the post passes inside the same
+`pipeline.render()` call are untouched; the depth prepass renders its own proxy scene into its own
+target and never reads the main pass depth, so `PostProcessingGraph`'s single-MRT `scenePass` needs
+no splitting. Counters: `gpuOcclusionCandidates`, `gpuOcclusionOccluders`, `gpuOcclusionCulledDraws`,
+`gpuOcclusionPrepareMs`.
+
+### The interaction fold is wired
+
+`MeadowInteractionMap` — dead until now — is constructed by `MeadowGrassField` from a new
+`settings.interaction` block (`meadowGrassConfig.js`; resolution, worldSize 27 m, recoverySpeed,
+strength, bodyRadius 0.26 m, `enabled`), its texture and render-space window exposed through
+`meadowUniforms`, and sampled by `foldUnderBody` in `meadowBladeShape.js` — the donor's
+`#sampleInteractionBlade` with its own hash, constants and arc structure, translated from the
+donor's unit-local blade into this host's metre local: the donor adds the arc in blade-width units
+and scales by width afterwards, which in metres is exactly `bladeHeight × width` with the height
+read in donor units (2.8 per metre). Folded last, so it folds whatever the wind has done, and gated
+on the stem's own strength.
+
+The body point is plumbed as one render-space record per frame: `main.js` builds the player's feet
+from `playerController.getStatus()` in walk mode (null when paused or in edit mode, which lets the
+grass stand back up rather than freezing), through `StylizedSurfaceView.update` → the base view →
+`MeadowGrassField.update(timestamp, camera, body)`. The floating-origin rebase calls the new
+`stylizedSurface.shiftOrigin(shiftX, shiftZ)` beside the other `shiftWorld` calls, so a re-centre
+re-bases the window instead of scrolling the ink and smearing a trail the player never walked.
+The far cards are deliberately not folded: the window is 27 m across and the cards start at 40 m,
+so they can never see a stamp.
+
+`tests/meadowGrass.test.js` now carries 10 tests, including that a rebase scrolls nothing and that
+a recovered map uploads nothing. What is **not** yet verified is the look itself: no GPU, so the
+fold's visual weight (and the `bladeHeight × width` transfer factor) is reasoned, not measured.
+
+- **2026-09-28 — the donor's UI look, loading screen, and the rest of the grass list.**
+  - *HUD* (player/hud): grass-test's cinematic layout in Inter (OFL, now in
+    public/assets/fonts). Lower left, the scene (the time-of-day preset) with its
+    tagline over a text legend of the controls, no panel; lower right, the
+    heading-up minimap restyled as the donor's dark dial (vignette, gold N on the
+    rim, biome pill on the lower rim) with `FPS · TRIS · DRAWS` beside it
+    (`HudMetrics`). The renderer resets `info` before the frame callback, so the
+    readout snapshots the finished frame's totals as `reset` clears them.
+  - *Loading screen* (ui/LoadingOverlay + loadingTicker + loadingIris): the donor's
+    key art, the stroked wordmark filling from its baseline, the lime progress line,
+    and a translucent glass card with the traveller and a percentage ring that
+    breathes while working and flares at 100%. Stages run as a ticker — the active
+    one holds the bottom row, finished ones rise and fade. Boot and import open onto
+    the world with the donor's iris; walk-mode streaming shows the card alone over
+    the live world (`presentation: 'compact'`). No backdrop-filter (the existing
+    guard test holds).
+  - *FXAA* on the god-rays output (stylized/pipelineOutput.js). The walking view
+    returns from the god-rays pipeline before the post graph, so its TRAA never ran
+    while walking and MSAA stays off; FXAA removed the far-meadow sparkle at no
+    measurable cost (150.8/159 vs 152.3/152.3 fps).
+  - *Rocks* flatten the meadow: nothing grows under a rock and the stand is pressed
+    flatter in its falloff; the chunk's rock signature joins the tile revision, so
+    only tiles whose rocks changed rebuild. (A mismatch between the tile's and the
+    job's revision briefly left every build restarting each frame — pinned by test.)
+  - *Player interaction map* (meadow/MeadowInteractionMap): the donor's body stamp —
+    blades the player wades through fold over and stand back up.
+  - *Hi-Z occlusion* (render/occlusion, three 0.186.1 — already in the tree): the
+    donor's GpuOcclusion, with the terrain occluding through per-chunk proxies of
+    its hills. It works — 5–7 draws / ~57k triangles hidden in an Eldara valley —
+    but costs 1–9% frame rate there and ~5% on open ground, because the costly draws
+    (meadow batches, wind-displaced instanced trees and rocks) are not candidates.
+    Shipped `enabled: false` with those numbers in the config comment.
+    Note: this session overwrote an earlier, untracked port of these three files by
+    another session (not recoverable); the rewrite was fitted to that session's
+    tests (tests/gpuOcclusion.test.js), which pass.

@@ -78,7 +78,13 @@ function options(source, worldSeed = 918273) {
 test('CPU terrain bake emits the seven packed channels at the configured byte budget', async () => {
   const source = captureTerrainMaterialBakeSource({
     page: page(),
-    canopyPixels: new Uint8Array([64, 128, 192, 255]),
+    // RGBA: the canopy lives in R of each texel, with the contact shade in G.
+    canopyPixels: new Uint8Array([
+      64, 0, 0, 255,
+      128, 0, 0, 255,
+      192, 0, 0, 255,
+      255, 0, 0, 255,
+    ]),
     canopySize: 2,
   });
   const result = await bakeTerrainMaterialPage(options(source));

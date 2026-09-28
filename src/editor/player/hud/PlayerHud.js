@@ -1,4 +1,5 @@
 import { HudKeyHints } from './HudKeyHints.js';
+import { HudMetrics } from './HudMetrics.js';
 import { HudMinimap } from './HudMinimap.js';
 import { HudStatus } from './HudStatus.js';
 import { HUD_PHASE, isPlayerEngaged, resolveHudPhase } from './hudState.js';
@@ -11,8 +12,9 @@ function createReticle() {
 }
 
 /**
- * The walking HUD: a status line, the reticle, the heading-up minimap and the
- * control hints. Spells keep their own dock (`spell_menu.js`).
+ * The walking HUD: a status line, the reticle, the heading-up minimap with the
+ * frame-rate readout beside it, and the scene legend with the controls — laid out
+ * as grass-test's cinematic HUD. Spells keep their own dock (`spell_menu.js`).
  *
  * `render` follows view-mode state changes; `update` runs every frame and only
  * moves the minimap, so it stays cheap while walking and free otherwise.
@@ -23,8 +25,12 @@ export class PlayerHud {
    * @param {HTMLElement} options.viewport
    * @param {boolean} [options.canToggleCamera] whether V switches to third person
    * @param {ConstructorParameters<typeof HudMinimap>[0] | null} [options.minimap]
+   * @param {() => object | null} [options.getRenderer] for the FPS / TRIS / DRAWS readout
+   * @param {() => string} [options.getSceneLabel] the legend's title (time of day)
    */
-  constructor({ viewport, canToggleCamera = false, minimap = null }) {
+  constructor({
+    viewport, canToggleCamera = false, minimap = null, getRenderer = () => null, getSceneLabel = () => '',
+  }) {
     this.element = document.createElement('div');
     this.element.className = 'player-hud';
     this.element.hidden = true;
@@ -33,11 +39,13 @@ export class PlayerHud {
     this.status = new HudStatus();
     this.reticle = createReticle();
     this.minimap = minimap ? new HudMinimap(minimap) : null;
-    this.hints = new HudKeyHints({ canToggleCamera });
+    this.hints = new HudKeyHints({ canToggleCamera, getSceneLabel });
+    this.metrics = new HudMetrics({ getRenderer });
     this.element.append(
       this.status.element,
       this.reticle,
       ...(this.minimap ? [this.minimap.element] : []),
+      this.metrics.element,
       this.hints.element,
     );
     viewport.append(this.element);
@@ -52,16 +60,20 @@ export class PlayerHud {
     this.status.render(state);
     this.minimap?.render(phase);
     this.hints.render(phase, { engaged: isPlayerEngaged(state) });
+    this.metrics.setVisible(phase === HUD_PHASE.walking);
   }
 
   update(heading, nowMs = performance.now()) {
     if (this.phase !== HUD_PHASE.walking) return;
     this.minimap?.update(heading, nowMs);
+    this.metrics.update(nowMs);
+    this.hints.refreshScene();
   }
 
   dispose() {
     this.minimap?.dispose();
     this.hints.dispose();
+    this.metrics.dispose();
     this.status.dispose();
     this.element.remove();
   }

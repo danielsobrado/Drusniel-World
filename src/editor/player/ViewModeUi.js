@@ -15,7 +15,7 @@ export class ViewModeUi {
    * @param {object} options
    * @param {HTMLElement} options.root editor root holding the viewport
    * @param {import('./ViewModeController.js').ViewModeController} options.controller
-   * @param {{ minimap?: ConstructorParameters<typeof PlayerHud>[0]['minimap'] }} [options.hud]
+   * @param {{ minimap?: object, getRenderer?: Function, getSceneLabel?: Function }} [options.hud]
    */
   constructor({ root, controller, hud = {} }) {
     this.root = root;
@@ -44,6 +44,8 @@ export class ViewModeUi {
       viewport,
       canToggleCamera: Boolean(controller.thirdPersonCamera),
       minimap: hud.minimap ?? null,
+      getRenderer: hud.getRenderer,
+      getSceneLabel: hud.getSceneLabel,
     });
 
     this.onClick = (event) => {

@@ -23,8 +23,10 @@ import {
   GRID_SIZE,
   flattenHandlesAround,
   resolveAnchorSnap,
+  snapRadiiFor,
   snappingEnabled,
 } from './construction/curve/CurveSnapping.js';
+import { projectedPixelHeight } from './stylized/lod/projectedLod.js';
 import {
   TOP_RADIUS_DEFAULT,
   TOP_RADIUS_RANGE,
@@ -917,10 +919,27 @@ export class EditorController {
       this.activeCamera,
     );
     if (!render) return null;
+    // Kept for the snap radius: a screen distance is converted at the depth of
+    // the ground under the pointer.
+    this.lastConstructionPick = render;
     const canonical = this.terrainView.floatingOrigin
       ? this.terrainView.floatingOrigin.toCanonical(render.x, render.z)
       : render;
     return { x: canonical.x, z: canonical.z };
+  }
+
+  /** Metres one CSS pixel covers at the last picked ground point, or 0. */
+  constructionMetresPerPixel() {
+    const pick = this.lastConstructionPick;
+    const viewportHeight = this.canvas?.clientHeight ?? 0;
+    if (!pick || !(viewportHeight > 0)) return 0;
+    const pixels = projectedPixelHeight({
+      camera: this.activeCamera,
+      worldPosition: pick,
+      worldHeight: 1,
+      viewportHeight,
+    });
+    return pixels > 0 ? 1 / pixels : 0;
   }
 
   /**
@@ -1221,12 +1240,16 @@ export class EditorController {
       // descriptions of the reference game reduce to this one rule, and the
       // handles read the same predicate. The grid joins in only when the
       // precision toggle asked for it, because free placement is the default.
+      // Radii are screen distances converted at the pointer, and the last
+      // target is held until the pointer leaves the wider release radius.
       const snap = resolveAnchorSnap({
         candidate: point,
         path: drag.before.path,
         anchorId: drag.anchorId,
         others: this.otherConstructionPaths(drag.constructionId),
         ...anchorSnapOptions(this.constructionStepSnap, event),
+        ...snapRadiiFor(this.constructionMetresPerPixel()),
+        held: drag.snap ?? null,
       });
       drag.snap = snap;
       let path = moveCubicBezierAnchor(

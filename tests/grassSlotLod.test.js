@@ -315,3 +315,33 @@ test('the scatter the worker actually ships builds a chunk through the composer'
     }
   }
 });
+
+test('a chunk whose biome wants another blade set builds it once, not every frame', () => {
+  // The pool maps this chunk's biome to 'reed' while the default is 'generated'.
+  // Building with the set the slot last had would leave `update` seeing a changed
+  // shape on every frame, tearing the chunk down before its scatter could finish.
+  const slot = makeSlot();
+  const pool = {
+    revision: 1,
+    setForTile: (tile) => (tile === 3 ? 'reed' : 'generated'),
+    forSet: (setId = 'generated') => ({ setId, near: [], far: [] }),
+  };
+  slot.bladeProfileProvider = () => pool;
+  slot.builtProfileRevision = 1;
+  slot.builtProfileSetId = 'generated';
+  const built = [];
+  let releases = 0;
+  slot.releaseResources = () => { releases += 1; slot.geometry = null; };
+  slot.ensureResources = (setId) => {
+    if (slot.geometry) return;
+    built.push(setId);
+    slot.builtProfileSetId = pool.forSet(setId ?? undefined).setId;
+    slot.geometry = {};
+  };
+
+  for (let frame = 0; frame < 5; frame += 1) {
+    slot.update(frame * 16, { chunkX: 2, chunkZ: 3 }, '', [], { x: 100, z: -50 });
+  }
+  assert.deepEqual(built, ['reed'], 'built once, with the biome\'s own set');
+  assert.equal(releases, 1, 'only the switch away from the old set');
+});

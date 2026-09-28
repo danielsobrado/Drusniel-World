@@ -37,9 +37,19 @@ function normalizeSteps(steps) {
 }
 
 export class LoadingSession {
-  constructor(tracker, { title, steps = [], detail = '' }) {
+  /**
+   * @param {LoadingTracker} tracker
+   * @param {object} options
+   * @param {string} options.title
+   * @param {Array} [options.steps]
+   * @param {string} [options.detail]
+   * @param {'cinematic' | 'compact'} [options.presentation] full-screen key art (boot,
+   *   import) or a card alone over the live world (walk-mode streaming)
+   */
+  constructor(tracker, { title, steps = [], detail = '', presentation = 'cinematic' }) {
     this.tracker = tracker;
     this.title = title;
+    this.presentation = presentation;
     this.steps = normalizeSteps(steps);
     this.detailText = detail;
     this.error = null;
@@ -140,6 +150,7 @@ export class LoadingSession {
     const active = this.steps.find((step) => step.state === ACTIVE) ?? null;
     return {
       title: this.title,
+      presentation: this.presentation,
       steps: this.steps.map((step) => ({ ...step, units: step.units ? { ...step.units } : null })),
       activeLabel: active?.label ?? '',
       detail: this.detailText,

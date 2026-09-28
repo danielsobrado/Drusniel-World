@@ -121,20 +121,8 @@ function outranksClosest(closest, other, held) {
   return String(closest.segmentId ?? '') < String(held.closest.segmentId ?? '');
 }
 
-/**
- * @param options.others `[{ constructionId, path }]` — every other construction.
- * @param options.enabled `false` while Left Ctrl is held.
- * @param options.worldRadius acquisition radius, in metres. It stays
- *   world-space: the zoom-aware version the plan asks for has to convert a
- *   screen threshold through the camera, and its 10–22 px hysteresis band is
- *   still an untested hypothesis.
- * @param options.gridSize world grid step to snap to, or `null` for free
- *   placement. The default is the module grid a caller used to get without
- *   asking; the wall tool now names it explicitly, and names `null` unless its
- *   precision toggle asked for a grid.
- * @returns `{ position, kind, targetId, flattenHandles }` or `null`.
- */
-export function resolveAnchorSnap({
+/** The priority cascade at one acquisition radius. */
+function resolveSnapCascade({
   candidate,
   path,
   anchorId,
@@ -296,4 +284,81 @@ export function flattenHandlesAround(path, anchorId) {
       : segment
   ));
   return { ...path, segments };
+}
+
+/** Snap kinds from strongest to weakest; a held target yields only to a stronger one. */
+const SNAP_PRIORITY = Object.freeze(['anchor', 'curve', 'straight', 'grid', 'angle']);
+
+/** Screen distances that acquire and release a snap target, in CSS pixels. */
+export const SNAP_ACQUIRE_PIXELS = 12;
+export const SNAP_RELEASE_PIXELS = 20;
+const MIN_SNAP_RADIUS = 0.05;
+const MAX_SNAP_RADIUS = 8;
+
+/**
+ * Acquire and release radii, in metres, for the current zoom: the same screen
+ * distance snaps at a close-up and from the overview camera (phase 11 §5.3).
+ *
+ * @param metresPerPixel world size of one CSS pixel at the pointer
+ */
+export function snapRadiiFor(metresPerPixel) {
+  if (!(metresPerPixel > 0)) return { worldRadius: 0.75, releaseRadius: 0.75 };
+  const clamp = (value) => Math.min(MAX_SNAP_RADIUS, Math.max(MIN_SNAP_RADIUS, value));
+  return {
+    worldRadius: clamp(SNAP_ACQUIRE_PIXELS * metresPerPixel),
+    releaseRadius: clamp(SNAP_RELEASE_PIXELS * metresPerPixel),
+  };
+}
+
+function sameTarget(a, b) {
+  return a.kind === b.kind
+    && a.targetId === b.targetId
+    && (a.constructionId ?? null) === (b.constructionId ?? null);
+}
+
+/**
+ * The held target re-resolved at the release radius, or null once the pointer
+ * has left it. Only the held candidate is considered, so nothing else can
+ * steal the snap inside the hysteresis band.
+ */
+function retainHeld(held, options, releaseRadius) {
+  const heldOthers = held.constructionId
+    ? (options.others ?? []).filter((other) => other.constructionId === held.constructionId)
+    : [];
+  const kept = resolveSnapCascade({
+    ...options,
+    others: held.kind === 'anchor' && !held.constructionId ? [] : heldOthers,
+    worldRadius: releaseRadius,
+    gridSize: held.kind === 'grid' ? options.gridSize : null,
+  });
+  return kept && sameTarget(kept, held) ? kept : null;
+}
+
+/**
+ * Resolve where a dragged anchor snaps.
+ *
+ * Priority: explicit joins and loop closure, then the nearest centreline, then
+ * straightening, the optional grid, and bearings. With `held` — last move's
+ * snap — a target stays acquired until the pointer passes `releaseRadius`, and
+ * only a stronger kind can take over inside it, so two nearby candidates do not
+ * flicker (phase 11 §5.3 hysteresis).
+ *
+ * @param options.others `[{ constructionId, path }]` — every other construction.
+ * @param options.enabled `false` while Left Ctrl is held.
+ * @param options.worldRadius acquisition radius in metres (`snapRadiiFor`).
+ * @param options.releaseRadius radius a held target survives to; defaults to
+ *   `worldRadius`, which disables hysteresis.
+ * @param options.held the previous snap result, or null.
+ * @param options.gridSize world grid step, or `null` for free placement.
+ * @returns `{ position, kind, targetId, constructionId, closesLoop, flattenHandles }` or `null`.
+ */
+export function resolveAnchorSnap({ held = null, releaseRadius = null, ...options }) {
+  const fresh = resolveSnapCascade(options);
+  if (!held || options.enabled === false) return fresh;
+  if (fresh && sameTarget(fresh, held)) return fresh;
+  const stronger = fresh
+    && SNAP_PRIORITY.indexOf(fresh.kind) < SNAP_PRIORITY.indexOf(held.kind);
+  if (stronger) return fresh;
+  const radius = Math.max(releaseRadius ?? options.worldRadius ?? 0.75, options.worldRadius ?? 0);
+  return retainHeld(held, options, radius) ?? fresh;
 }

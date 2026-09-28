@@ -132,6 +132,10 @@ function resolveWeighted(source, name, defaults) {
   const path = `${PREFIX}.${name}`;
   const value = isRecord(source) ? source : {};
   return {
+    // Shape keys the effect's own resolver reads (length, width, hardness, colour,
+    // facing…) ride through untouched: this layer resolves the weight, and the
+    // module that blends the term validates its own shape against the same block.
+    ...value,
     enabled: value.enabled !== false,
     strength: finiteNumber(value.strength ?? defaults.strength, `${path}.strength`, { min: 0, max: 8 }),
     presets: presetWeights(value.presets, `${path}.presets`),
@@ -198,6 +202,12 @@ export function resolveAmbientEffectsConfig(config) {
     sandStreaks: resolveWeighted(config.sandStreaks, 'sandStreaks', { strength: 1, windResponse: 1 }),
     grassGustSheen: resolveWeighted(config.grassGustSheen, 'grassGustSheen', { strength: 0.3 }),
     frost: resolveWeighted(config.frost, 'frost', { strength: 0.5 }),
+    // Heat shimmer and jungle mist are blended inside materials rather than drawn by
+    // the particle layer, so they resolve through the same weighted shape: this is
+    // the only path by which their keys reach `config.stylizedSurface.ambientEffects`,
+    // and an effect missing from this return object is silently dropped.
+    heatShimmer: resolveWeighted(config.heatShimmer, 'heatShimmer', { strength: 1 }),
+    jungleMist: resolveWeighted(config.jungleMist, 'jungleMist', { strength: 1 }),
   };
 }
 

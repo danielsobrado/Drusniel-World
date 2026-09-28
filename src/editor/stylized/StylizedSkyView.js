@@ -18,6 +18,8 @@ import { directionFromAngles } from './StylizedGodRaysPostProcess.js';
 import { stylizedFbm } from './StylizedNoiseNodes.js';
 import { updateCloudShadows, wrapCloudCoordinate } from './CloudShadow.js';
 import { createSkyLookUniforms, resolveSkyLook, writeSkyLookUniforms } from './sky/SkyLook.js';
+import { createHeatShimmerNodes, resolveHeatShimmerConfig } from './ambient/HeatShimmer.js';
+import { createMoonDiscNode, createStarFieldNode, STAR_FIELD_DEFAULTS } from './sky/starField.js';
 import { skyAmbientColor } from './sky/skyAmbient.js';
 import { updateSkyLight } from './sky/skyLight.js';
 
@@ -59,14 +61,28 @@ function cloudCoverageNode({
   };
 }
 
+/**
+ * The dome's view ray, wavering in its low band over hot ground (the ambient
+ * layer drives the heat). With no ambient block or the shimmer off, the plain ray.
+ */
+function shimmeredRay(ambientEffects) {
+  const ray = normalize(positionLocal);
+  if (!ambientEffects || ambientEffects.enabled === false) return ray;
+  const shimmer = createHeatShimmerNodes({ direction: ray, settings: resolveHeatShimmerConfig(ambientEffects) });
+  return shimmer?.direction ?? ray;
+}
+
 function createSkyMaterial({
   config,
   look,
   time,
   sunDirection,
   cameraWorldPosition,
+  night,
+  moonDirection,
+  moonIllumination,
 }) {
-  const direction = normalize(positionLocal);
+  const direction = shimmeredRay(config.ambientEffects);
   const horizon = smoothstep(
     config.sky.horizonLine - config.sky.horizonSpread,
     config.sky.horizonLine + config.sky.horizonSpread,
@@ -101,6 +117,42 @@ function createSkyMaterial({
     .mul(cloudEdge);
   const litCloud = cloudColor.add(look.cloudRim.mul(cloudRim));
   color = mix(color, litCloud, cloudMask);
+
+  // Night bodies: a star field and a moon disc, added over the gradient and hidden
+  // by cloud. `night` is the active look's own flag (matchSkyLooks owns it), so a
+  // moonlit preset shows them and a daylight one does not, whether the look came
+  // from the Time selector or the day/night cycle. Both compile to nothing when
+  // disabled, leaving the material byte-for-byte the plain sky.
+  const stars = config.sky?.stars;
+  const moon = config.sky?.stars?.moon;
+  if (night && (stars?.enabled !== false || moon?.enabled !== false)) {
+    const clear = oneMinus(cloudMask).mul(night.clamp(0, 1));
+    if (stars?.enabled !== false) {
+      const starRadiance = createStarFieldNode({
+        direction,
+        time,
+        density: stars?.density ?? STAR_FIELD_DEFAULTS.density,
+        presence: stars?.presence ?? STAR_FIELD_DEFAULTS.presence,
+        magnitudePower: stars?.magnitudePower ?? STAR_FIELD_DEFAULTS.magnitudePower,
+        rotationDegreesPerSecond:
+          stars?.rotationDegreesPerSecond ?? STAR_FIELD_DEFAULTS.rotationDegreesPerSecond,
+        brightness: stars?.brightness ?? STAR_FIELD_DEFAULTS.brightness,
+      });
+      color = color.add(starRadiance.mul(clear));
+    }
+    if (moon?.enabled !== false) {
+      color = color.add(createMoonDiscNode({
+        direction,
+        moonDirection,
+        illumination: moonIllumination,
+        mask: clear,
+        size: moon?.size,
+        softness: moon?.softness,
+        emission: moon?.emission,
+        color: moon?.color,
+      }));
+    }
+  }
 
   const material = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide });
   material.colorNode = max(color, vec3(0));
@@ -155,6 +207,19 @@ export class StylizedSkyView {
     this.look = resolveSkyLook(config.sky);
     this.configuredLook = this.look;
     this.lookUniforms = createSkyLookUniforms(this.look);
+    // Night bodies. `night` follows the active look, so choosing a moonlit preset
+    // (or the cycle reaching one) is what lights the stars; the moon's direction
+    // and phase are driven by the day/night cycle when it runs, and otherwise
+    // stand at the fixed angles in the config so a manually chosen night still has
+    // a moon.
+    this.night = uniform(this.look.night ? 1 : 0);
+    const moonConfig = config.sky?.stars?.moon ?? {};
+    this.moonDirectionValue = directionFromAngles(
+      moonConfig.elevation ?? 25,
+      moonConfig.azimuth ?? 20,
+    );
+    this.moonDirection = uniform(this.moonDirectionValue);
+    this.moonIllumination = uniform(moonConfig.illumination ?? 1);
     this.fogDensityScale = 1;
     this.baseFogDensity = config.sky.fogDensity;
     this.geometry = new THREE.SphereGeometry(1, 64, 32);
@@ -164,6 +229,9 @@ export class StylizedSkyView {
       time: this.time,
       sunDirection: this.sunDirection,
       cameraWorldPosition: this.cameraWorldPosition,
+      night: this.night,
+      moonDirection: this.moonDirection,
+      moonIllumination: this.moonIllumination,
     });
     this.mesh = new THREE.Mesh(this.geometry, this.material);
     this.mesh.scale.setScalar(config.sky.radius);
@@ -226,6 +294,23 @@ export class StylizedSkyView {
     if (Number.isFinite(strength)) this.cloudShadowStrength = Math.max(0, Math.min(1, strength));
   }
 
+  /**
+   * Place the moon and its phase, from the day/night cycle: the cycle owns *when*
+   * and *which body*; the sky still owns the light. A caller with no cycle leaves
+   * these at the configured angles. The direction is in the dome's own convention
+   * (`directionFromAngles`), the same one the presets and the cycle use.
+   *
+   * @param {{ moon: { elevation: number, azimuth: number }, moonIllumination?: number }} state
+   */
+  setCelestial(state) {
+    if (!state?.moon) return;
+    this.moonDirectionValue.copy(directionFromAngles(state.moon.elevation, state.moon.azimuth));
+    this.moonDirection.value.copy(this.moonDirectionValue);
+    if (Number.isFinite(state.moonIllumination)) {
+      this.moonIllumination.value = Math.max(0, Math.min(1, state.moonIllumination));
+    }
+  }
+
   setRadius(radius) {
     if (Number.isFinite(radius) && radius > 0) {
       this.mesh.scale.setScalar(radius);
@@ -246,6 +331,7 @@ export class StylizedSkyView {
    */
   applyLook(look) {
     this.look = look;
+    this.night.value = look.night ? 1 : 0;
     writeSkyLookUniforms(this.lookUniforms, look);
     this.sunDirectionValue.copy(directionFromAngles(look.sunElevation, look.sunAzimuth));
     this.terrainView.godRays.sunDirection?.copy(this.sunDirectionValue);

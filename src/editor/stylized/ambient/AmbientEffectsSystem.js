@@ -5,12 +5,19 @@ import { createSprayPuffTexture } from '../mist/sprayPuffTexture.js';
 import { presetWeight, windFactor } from './ambientEffectsConfig.js';
 import { AmbientParticleField, FIELD_VISIBILITY_THRESHOLD } from './AmbientParticleField.js';
 import { ambientRegionWeights, regionWeight, sampleAmbientSurroundings } from './ambientRegions.js';
+import { advanceBlownStreaks, blownStreakUniforms } from './BlownStreaks.js';
+import { frostUniforms } from './FrostShading.js';
+import { grassGustSheenUniforms } from './GrassGustSheen.js';
+import { heatShimmerUniforms } from './HeatShimmer.js';
+import { jungleMistUniforms } from './JungleMist.js';
 import { LocalGroundHeight } from './LocalGroundHeight.js';
 
 const TWO_PI = Math.PI * 2;
 const MAX_STEP_SECONDS = 0.1;
 /** A focus jump longer than this is a teleport: weights snap instead of easing. */
 const SNAP_DISTANCE = 60;
+/** 1/s: how fast the jungle mist's ground level follows the ground under the view. */
+const MIST_GROUND_RATE = 1.5;
 
 function ease(current, target, rate, delta) {
   const eased = target + (current - target) * Math.exp(-rate * delta);
@@ -62,6 +69,7 @@ export class AmbientEffectsSystem {
     this.lastFocus = null;
     this.elapsed = 0;
     this.wind = { x: 0, z: 0 };
+    this.focusGround = Number.NaN;
     this.root = new THREE.Group();
     this.root.name = 'ambient-effects';
     this.root.renderOrder = 3;
@@ -100,6 +108,8 @@ export class AmbientEffectsSystem {
     if (!this.enabled) return;
     this.light.sun.value.copy(sunColor).multiplyScalar(sunIntensity / Math.PI);
     this.light.sky.value.copy(skyColor).multiplyScalar(skyIntensity / Math.PI);
+    jungleMistUniforms.sun.value.copy(this.light.sun.value);
+    jungleMistUniforms.fill.value.copy(this.light.sky.value);
   }
 
   sampleRegions(focus, origin, snowCountry, seaLevel) {
@@ -113,6 +123,7 @@ export class AmbientEffectsSystem {
       getWater: this.getWater,
     });
     const ground = this.getGroundHeight(x, z);
+    if (Number.isFinite(ground)) this.focusGround = ground;
     this.weights = ambientRegionWeights({
       ...surroundings,
       heightAboveSea: Number.isFinite(ground) ? ground - seaLevel : 0,
@@ -120,6 +131,25 @@ export class AmbientEffectsSystem {
     });
     this.levels.lake.value = Number.isFinite(surroundings.lakeLevel) ? surroundings.lakeLevel : -1e5;
     this.levels.desert.value = this.weights.desert ?? 0;
+  }
+
+  /**
+   * One surface term's weight: its region's weight at the focus × its preset ×
+   * the wind's response, the same three factors the particle fields read, clamped
+   * to the 0..1 the materials consume. Zero whenever the layer or the term is off,
+   * which is what lets a term compile towards nothing at runtime.
+   */
+  surfaceEffectWeight(effect, region, presetName) {
+    if (!this.enabled || !effect || effect.enabled === false) return 0;
+    const value = regionWeight(this.weights, [region])
+      * presetWeight(effect, presetName)
+      * windFactor(this.windiness, effect.windResponse);
+    return Math.max(0, Math.min(1, value));
+  }
+
+  /** `surfaceEffectWeight` × the effect's own strength, for nodes that do not apply it. */
+  strengthWeight(effect, region, presetName) {
+    return Math.min(1, this.surfaceEffectWeight(effect, region, presetName) * (effect?.strength ?? 1));
   }
 
   /**
@@ -170,6 +200,46 @@ export class AmbientEffectsSystem {
       this.wind.z = axis.z * Math.max(speed, 0);
       field.update(delta, focus, this.wind);
     }
+    // The surface terms live inside other materials and read module uniforms, so
+    // they are driven from the same three factors as the particles — region, preset
+    // and wind — through the same `step`, and only when the effect's strength is
+    // steady does the uniform stop changing. The streaks also slide downwind by the
+    // wind that blew this frame, integrated on the CPU so a change of wind speed
+    // cannot make them jump.
+    blownStreakUniforms.snow.value = this.step(
+      blownStreakUniforms.snow.value,
+      this.surfaceEffectWeight(this.settings.snowStreaks, 'snow', presetName),
+    );
+    blownStreakUniforms.sand.value = this.step(
+      blownStreakUniforms.sand.value,
+      this.surfaceEffectWeight(this.settings.sandStreaks, 'sand', presetName),
+    );
+    frostUniforms.cold.value = this.step(
+      frostUniforms.cold.value,
+      this.surfaceEffectWeight(this.settings.frost, 'snow', presetName),
+    );
+    // Heat shimmer rides the hot, open ground (inland desert, not a cool beach);
+    // the jungle mist lies on the ground under the view, eased so a step up or
+    // down a bank does not lift the whole sheet at once.
+    // Their nodes take the weight as given, so the configured strength folds in here.
+    heatShimmerUniforms.hot.value = this.step(
+      heatShimmerUniforms.hot.value,
+      this.strengthWeight(this.settings.heatShimmer, 'desert', presetName),
+    );
+    grassGustSheenUniforms.weight.value = this.step(
+      grassGustSheenUniforms.weight.value,
+      this.strengthWeight(this.settings.grassGustSheen, 'meadow', presetName),
+    );
+    jungleMistUniforms.weight.value = this.step(
+      jungleMistUniforms.weight.value,
+      this.strengthWeight(this.settings.jungleMist, 'jungle', presetName),
+    );
+    if (Number.isFinite(this.focusGround)) {
+      jungleMistUniforms.ground.value = jumped
+        ? this.focusGround
+        : ease(jungleMistUniforms.ground.value, this.focusGround, MIST_GROUND_RATE, delta);
+    }
+    advanceBlownStreaks({ delta, envelope: this.windiness, gust });
     const shared = {
       weights: this.weights, presetName, windiness: this.windiness, gust, axis, focus, origin, step: this.step,
     };
@@ -194,6 +264,15 @@ export class AmbientEffectsSystem {
         count: field.mesh.count,
       }])),
       extras: Object.fromEntries(this.extras.map((extra) => [extra.name, extra.getState?.() ?? null])),
+      surface: {
+        snowStreaks: Number(blownStreakUniforms.snow.value.toFixed(3)),
+        sandStreaks: Number(blownStreakUniforms.sand.value.toFixed(3)),
+        frost: Number(frostUniforms.cold.value.toFixed(3)),
+        heatShimmer: Number(heatShimmerUniforms.hot.value.toFixed(3)),
+        jungleMist: Number(jungleMistUniforms.weight.value.toFixed(3)),
+        grassGustSheen: Number(grassGustSheenUniforms.weight.value.toFixed(3)),
+        mistGround: Number(jungleMistUniforms.ground.value.toFixed(1)),
+      },
     };
   }
 
@@ -203,5 +282,13 @@ export class AmbientEffectsSystem {
     this.ground?.dispose();
     this.puffTexture?.dispose();
     this.root?.removeFromParent();
+    // The surface uniforms are module state the materials keep reading, so a
+    // disposed world leaves them at zero rather than frozen on its last frame.
+    blownStreakUniforms.snow.value = 0;
+    blownStreakUniforms.sand.value = 0;
+    frostUniforms.cold.value = 0;
+    heatShimmerUniforms.hot.value = 0;
+    jungleMistUniforms.weight.value = 0;
+    grassGustSheenUniforms.weight.value = 0;
   }
 }

@@ -75,3 +75,31 @@ test('the coverage uniform carries the corners the CPU resolved', () => {
   assert.equal(coverage.value.z, 0.7);
   material.dispose();
 });
+
+test('the straw fringe is configured, and can be switched off', () => {
+  // The fringe tints the tips of the grass still growing on a path's verge, so it
+  // has to be both present in the shipped config and possible to disable without
+  // touching the path wear that shortens the blades.
+  const surface = shippedSurface();
+  const fringe = surface.path.fringe;
+  assert.equal(fringe.enabled, true);
+  assert.ok(fringe.strength > 0 && fringe.strength <= 1);
+  assert.match(fringe.color, /^#[0-9a-f]{6}$/i);
+  const { path: _path, ...withoutFringe } = surface;
+  // With no fringe configured the material still assembles: the fringe is additive
+  // and a world that never mentions it keeps plain path wear.
+  for (const config of [surface, withoutFringe, { ...surface, path: { ...surface.path, fringe: { enabled: false } } }]) {
+    const material = createStylizedGrassMaterial({
+      surfaceMaskTexture: surfaceMask(),
+      trampleTexture: surfaceMask(),
+      chunkCenter: uniform(new THREE.Vector2(1, 2)),
+      chunkWorldSize: 128,
+      time: uniform(0),
+      sunDirection: new THREE.Vector3(0.4, 0.8, 0.2),
+      config,
+      tuning: new GrassTuning(config),
+    });
+    assert.ok(material.colorNode, 'the fringe variants should all shade');
+    material.dispose();
+  }
+});

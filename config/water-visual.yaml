@@ -84,6 +84,11 @@ water:
     # Normalised crest height where whitecaps start, calm and in a storm.
     whitecapThreshold: 0.8
     stormWhitecapThreshold: 0.45
+    # Light through a backlit crest (after grass-test's crest transmission): a wave
+    # seen edge-on with the sun beyond it glows rather than reflecting. Zero turns
+    # the term off and compiles nothing for it.
+    crestTransmission: 0.5
+    crestColor: '#8fd0a8'
   # Where the ground meets the sea: a swash film that runs up the sand and back
   # each wave, a foam line on its front, and wet sand behind it. Keyed on height
   # above sea level, so it follows any coast; lakes and rivers get none.

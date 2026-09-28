@@ -37,7 +37,7 @@ npm run verify
 npm run dev
 ```
 
-Three.js is pinned to r185.1. World generation, streaming, player movement, rendering, terrain limits, and editor settings are in `editor.config.yaml`. Object definitions are in `config/objects.yaml`.
+Three.js is pinned to r186.1. World generation, streaming, player movement, rendering, terrain limits, and editor settings are in `editor.config.yaml`. Object definitions are in `config/objects.yaml`.
 
 ## Infinite terrain streaming
 

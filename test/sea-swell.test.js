@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import * as THREE from 'three/webgpu';
+import { float, uniform, vec2 } from 'three/tsl';
 import {
   SEA_SWELL_COMPONENTS,
   SEA_SWELL_WEIGHT_SUM,
@@ -14,6 +16,7 @@ import {
   updateSeaState,
 } from '../src/editor/water/seaState.js';
 import { validateSeaConfig } from '../src/editor/water/SeaConfig.js';
+import { createSeaSurfaceNodes } from '../src/editor/stylized/SeaSurfaceShading.js';
 
 const SEA = Object.freeze({
   enabled: true,
@@ -26,6 +29,8 @@ const SEA = Object.freeze({
   crestLift: 0.12,
   whitecapThreshold: 0.8,
   stormWhitecapThreshold: 0.45,
+  crestTransmission: 0.5,
+  crestColor: '#8fd0a8',
 });
 
 /** What the shader computes: the chunk-centre phase plus the phase across the chunk. */
@@ -88,4 +93,50 @@ test('sea config is validated', () => {
   assert.equal(validateSeaConfig({ ...SEA }).amplitude, 0.9);
   assert.throws(() => validateSeaConfig({ ...SEA, depthRatio: 0 }), /depthRatio/);
   assert.throws(() => validateSeaConfig({ ...SEA, enabled: 'yes' }), /enabled/);
+  // The crest transmission and its colour are validated with the rest: a colour
+  // typo would otherwise reach the shader as a parse failure in the browser.
+  assert.throws(() => validateSeaConfig({ ...SEA, crestTransmission: 2 }), /crestTransmission/);
+  assert.throws(() => validateSeaConfig({ ...SEA, crestColor: 'green' }), /crestColor/);
+});
+
+test('crest transmission is a term the sea nodes expose and the graph builds', () => {
+  // The three factors the donor multiplies cannot be evaluated here — they are shader
+  // nodes — so what this holds is that the term exists, that it is built from the
+  // crest and the view direction, and that assembling it does not throw. The failure
+  // mode it guards is a term that is refactored away, or an input the graph cannot
+  // take, which would otherwise only show as a sea that never glows.
+  const sea = createSeaSurfaceNodes({
+    terrainUv: vec2(0.5, 0.5),
+    chunkWorldSize: 8,
+    surfaceWorldHeight: float(0),
+    waterDepth: float(20),
+    waterCoverage: float(1),
+    currentStrength: float(0),
+    time: uniform(0),
+    phaseOrigin: [uniform(0), uniform(0), uniform(0), uniform(0), uniform(0)],
+    sunDirection: uniform(new THREE.Vector3(0, 0.2, -1)),
+    config: SEA,
+  });
+  assert.equal(typeof sea.transmissionAmount, 'function');
+  const amount = sea.transmissionAmount(uniform(new THREE.Vector3(0, 0, -1)));
+  assert.ok(amount, 'the term should be a node');
+  assert.equal(typeof amount.mul, 'function', 'a node, not a number');
+  // Zero compiles the term out of the material entirely, so a world that does not
+  // want it pays nothing.
+  sea.transmissionAmount(uniform(new THREE.Vector3(0, 0, -1)));
+  assert.equal(
+    createSeaSurfaceNodes({
+      terrainUv: vec2(0.5, 0.5),
+      chunkWorldSize: 8,
+      surfaceWorldHeight: float(0),
+      waterDepth: float(20),
+      waterCoverage: float(1),
+      currentStrength: float(0),
+      time: uniform(0),
+      phaseOrigin: [uniform(0), uniform(0), uniform(0), uniform(0), uniform(0)],
+      sunDirection: uniform(new THREE.Vector3(0, 0.2, -1)),
+      config: { ...SEA, crestTransmission: 0 },
+    }).transmissionAmount(uniform(new THREE.Vector3(0, 0, -1))) !== undefined,
+    true,
+  );
 });

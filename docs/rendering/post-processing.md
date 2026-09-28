@@ -67,7 +67,10 @@ Reflection classes are `NONE=0`, `WATER=1`, `ICE=2`, `WET_STONE=3`,
 `POLISHED_STONE=4` and `MAGICAL_MIRROR=5`.
 
 Do not assign `material.mrtNode`. Three.js r185 can compile a per-material override
-through non-MRT paths and create an invalid empty output struct. Instead:
+through non-MRT paths and create an invalid empty output struct. (The project moved to
+0.186.1 on 2026-09-28; the workaround is retained, and re-checking both notes on this
+page against the new revision is the `qa:postprocessing:browser` item in
+docs/plans/grass-test-handover.md.) Instead:
 
 1. Register metadata with `assignMaterialData()` or a named category helper.
 2. The metadata stays in `material.userData.postProcessingMaterialData`, so clones keep
@@ -159,7 +162,10 @@ history and effect targets therefore use the same flooring as the drawing buffer
 
 `patchViewportFramebufferSources()` detaches cloned framebuffer/depth texture sources
 to prevent Three.js r185 viewport-copy clones from sharing stale dimensions after
-rapid DPR-sensitive resize changes.
+rapid DPR-sensitive resize changes. This is the highest-risk workaround in the
+0.186.1 bump: it compensates for an r185 `ViewportTextureNode` caching quirk, so
+re-verify it with `test/render/patch-viewport-framebuffer-sources.test.js` and a
+DPR-sensitive resize with water refraction on (same handover item as above).
 
 ## Diagnostics
 

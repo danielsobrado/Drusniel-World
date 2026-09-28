@@ -13,6 +13,7 @@ import { normalizeSceneSettings } from './settings/SceneSettings.js';
 import { createPostProcessingSettingsPanel } from './settings/PostProcessingSettingsPanel.js';
 import { assetFileName, formatBytes, trackStreamingSettle } from './ui/loadingSources.js';
 import { hexToRgbBytes } from './tileCatalog.js';
+import { shadeMinimapPixel } from './map/minimapRelief.js';
 
 const TERRAIN_MODE_LABELS = Object.freeze({
   paint: 'Paint',
@@ -20,9 +21,6 @@ const TERRAIN_MODE_LABELS = Object.freeze({
   lower: 'Lower',
   smooth: 'Smooth',
 });
-const MINIMAP_HEIGHT_SHADE = 0.025;
-const MINIMAP_MINIMUM_SHADE = 0.55;
-const MINIMAP_MAXIMUM_SHADE = 1.25;
 // About a quarter degree — below this a re-styled transform is wasted work.
 const MINIMAP_HEADING_EPSILON = 0.004;
 const ALL_CATEGORIES = 'all';
@@ -43,10 +41,6 @@ function formatDistance(meters) {
 
 function categoryLabel(category) {
   return CATEGORY_LABELS[category] ?? category.replace(/^\w/, (first) => first.toUpperCase());
-}
-
-function clamp(value, minimum, maximum) {
-  return Math.max(minimum, Math.min(maximum, value));
 }
 
 /**
@@ -1822,23 +1816,39 @@ export class EditorUi {
     const image = context.createImageData(MINIMAP_SIZE, MINIMAP_SIZE);
     const minimumX = this.minimapCenter.x - Math.floor(this.minimapCells / 2);
     const minimumZ = this.minimapCenter.z - Math.floor(this.minimapCells / 2);
+    const cellAt = (pixel, minimum) => minimum + Math.floor(pixel * this.minimapCells / MINIMAP_SIZE);
+
+    // One height per pixel plus a one-pixel ring, so every pixel has four
+    // neighbours for its relief without sampling any column twice.
+    const span = MINIMAP_SIZE + 2;
+    const heights = new Float32Array(span * span);
+    for (let row = 0; row < span; row += 1) {
+      const z = cellAt(row - 1, minimumZ);
+      for (let column = 0; column < span; column += 1) {
+        heights[row * span + column] = this.heightField.getCellHeight(cellAt(column - 1, minimumX), z) ?? 0;
+      }
+    }
+    const spacing = (this.minimapCells / MINIMAP_SIZE) * (this.tileMap?.tileSize ?? 1);
+    const neighbours = { left: 0, right: 0, up: 0, down: 0 };
 
     for (let pixelZ = 0; pixelZ < MINIMAP_SIZE; pixelZ += 1) {
       for (let pixelX = 0; pixelX < MINIMAP_SIZE; pixelX += 1) {
-        const x = minimumX + Math.floor(pixelX * this.minimapCells / MINIMAP_SIZE);
-        const z = minimumZ + Math.floor(pixelZ * this.minimapCells / MINIMAP_SIZE);
-        const tile = this.tileMap.getTileDefinition(this.tileMap.get(x, z));
-        const [red, green, blue] = hexToRgbBytes(tile.color);
-        const height = this.heightField.getCellHeight(x, z) ?? 0;
-        const shade = clamp(
-          1 + height * MINIMAP_HEIGHT_SHADE,
-          MINIMAP_MINIMUM_SHADE,
-          MINIMAP_MAXIMUM_SHADE,
-        );
+        const tile = this.tileMap.getTileDefinition(this.tileMap.get(cellAt(pixelX, minimumX), cellAt(pixelZ, minimumZ)));
+        const at = (pixelZ + 1) * span + pixelX + 1;
+        neighbours.left = heights[at - 1];
+        neighbours.right = heights[at + 1];
+        neighbours.up = heights[at - span];
+        neighbours.down = heights[at + span];
+        const [red, green, blue] = shadeMinimapPixel(hexToRgbBytes(tile.color), {
+          water: tile.terrainClass === 'water',
+          height: heights[at],
+          neighbours,
+          spacing,
+        });
         const offset = (pixelZ * MINIMAP_SIZE + pixelX) * 4;
-        image.data[offset] = clamp(Math.round(red * shade), 0, 255);
-        image.data[offset + 1] = clamp(Math.round(green * shade), 0, 255);
-        image.data[offset + 2] = clamp(Math.round(blue * shade), 0, 255);
+        image.data[offset] = red;
+        image.data[offset + 1] = green;
+        image.data[offset + 2] = blue;
         image.data[offset + 3] = 255;
       }
     }

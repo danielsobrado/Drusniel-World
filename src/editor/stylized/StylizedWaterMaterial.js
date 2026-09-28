@@ -16,6 +16,7 @@ import {
   max,
   min,
   mix,
+  normalize,
   oneMinus,
   positionLocal,
   positionWorld,
@@ -513,6 +514,19 @@ export function createStylizedWaterMaterial({
       color,
       colorNode(water.foam.color),
       clamp(foamAmount, 0, 1),
+    );
+  }
+
+  // Light through a backlit crest, after grass-test's crest transmission: the glow
+  // through a wave seen edge-on with the sun beyond it. Added after the reflection,
+  // because it is light that came through the water rather than off it.
+  if (sea && (water.sea.crestTransmission ?? 0) > 0) {
+    const viewDirection = normalize(cameraPosition.sub(positionWorld));
+    const transmission = sea.transmissionAmount(viewDirection);
+    color = mix(
+      color,
+      colorNode(water.sea.crestColor ?? '#8fd0a8'),
+      clamp(transmission, 0, 1),
     );
   }
   if (whitewater) alpha = max(alpha, clamp(whitewater, 0, 1).mul(waterlineFade));

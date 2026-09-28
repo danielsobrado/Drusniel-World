@@ -29,6 +29,7 @@ import { stylizedFbm } from './StylizedNoiseNodes.js';
 import { registerTreeWindTime } from './forest/TreeWindTime.js';
 import { sampleWorldWind } from '../weather/wind/worldWindState.js';
 import { assignTreeFoliageMaterialData } from '../../render/postprocessing/PostProcessingMaterialData.js';
+import { applyBarkWeathering } from './barkWeathering.js';
 
 const TWO_PI = Math.PI * 2;
 function colorNode(value) {
@@ -156,6 +157,7 @@ export function createAuthoredTrunkMaterial({
   sourceMap = null,
   barkTextures = null,
   barkScale = 0.8,
+  barkWeathering = null,
 }) {
   if (!barkTextures) {
     const material = new THREE.MeshLambertNodeMaterial({
@@ -165,7 +167,7 @@ export function createAuthoredTrunkMaterial({
     material.colorNode = sourceMap
       ? authoredTexture(sourceMap).rgb.mul(baseColor)
       : baseColor;
-    return material;
+    return applyBarkWeathering(material, { settings: barkWeathering });
   }
 
   const albedoHeight = triplanarTexture(
@@ -192,7 +194,7 @@ export function createAuthoredTrunkMaterial({
   material.normalNode = bumpNormal(albedoHeight.a.mul(0.045));
   material.roughnessNode = normalRoughness.b;
   material.metalness = 0;
-  return material;
+  return applyBarkWeathering(material, { settings: barkWeathering });
 }
 
 export function createStylizedTrunkMaterial({ textures, config, palette = null }) {

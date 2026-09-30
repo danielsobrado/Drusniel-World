@@ -38,8 +38,8 @@ test('captured scene colour uses RGB absorption and manual coverage compositing'
 
 test('refraction uses only two bounded FBM samples', () => {
   const helper = source.match(/function refractionWarp\([\s\S]*?\n\}/)?.[0] ?? '';
-  assert.equal((helper.match(/stylizedFbm2\(/g) ?? []).length, 2);
-  assert.equal((helper.match(/stylizedFbm\(/g) ?? []).length, 0);
+  assert.equal((helper.match(/periodicFbm2\(/g) ?? []).length, 2);
+  assert.equal((helper.match(/(?:stylized|periodic)Fbm\(/g) ?? []).length, 0);
 });
 
 test('shipped renderer keeps MSAA off while refraction samples viewport depth', async () => {

@@ -8,8 +8,6 @@ import {
   dot,
   exp,
   float,
-  floor,
-  fract,
   fwidth,
   length,
   linearDepth,
@@ -35,7 +33,16 @@ import {
 } from 'three/tsl';
 import { resolveWaterQualityFeatures } from '../water/WaterQuality.js';
 import { assignWaterMaterialData } from '../../render/postprocessing/PostProcessingMaterialData.js';
-import { stylizedFbm2 } from './StylizedNoiseNodes.js';
+import {
+  periodicFbm2,
+  periodicVoronoiF1,
+  periodicVoronoiMetrics,
+} from './PeriodicNoiseNodes.js';
+import { referenceBlendTaps } from './PatternOrigins.js';
+import {
+  WATER_FLOW_REFERENCE_BLEND,
+  WATER_FLOW_REFERENCE_METERS,
+} from './WaterPatternOrigins.js';
 import { createSurfaceClassNodes } from './SurfaceMaskNodes.js';
 import { createWaterfallFoamNode } from './WaterfallShading.js';
 import { createSeaSurfaceNodes } from './SeaSurfaceShading.js';
@@ -56,68 +63,9 @@ function colorNode(value) {
   return vec3(color.r, color.g, color.b);
 }
 
-function hash2(position) {
-  const mixed = vec2(
-    dot(position, vec2(127.1, 311.7)),
-    dot(position, vec2(269.5, 183.3)),
-  );
-  return fract(sin(mixed).mul(43758.5453));
-}
-
-function cellPoint(seed, time, cellSpeed) {
-  return float(0.5).add(float(0.5).mul(sin(time.mul(cellSpeed).add(seed.mul(6.2831)))));
-}
-
-function neighborDistance(integer, fraction, time, cellSpeed, offsetX, offsetZ) {
-  const neighbor = vec2(offsetX, offsetZ);
-  const point = cellPoint(hash2(integer.add(neighbor)), time, cellSpeed);
-  return length(neighbor.add(point).sub(fraction));
-}
-
-function voronoiDistances(position, time, cellSpeed) {
-  const integer = floor(position);
-  const fraction = fract(position);
-  return [
-    neighborDistance(integer, fraction, time, cellSpeed, -1, -1),
-    neighborDistance(integer, fraction, time, cellSpeed, 0, -1),
-    neighborDistance(integer, fraction, time, cellSpeed, 1, -1),
-    neighborDistance(integer, fraction, time, cellSpeed, -1, 0),
-    neighborDistance(integer, fraction, time, cellSpeed, 0, 0),
-    neighborDistance(integer, fraction, time, cellSpeed, 1, 0),
-    neighborDistance(integer, fraction, time, cellSpeed, -1, 1),
-    neighborDistance(integer, fraction, time, cellSpeed, 0, 1),
-    neighborDistance(integer, fraction, time, cellSpeed, 1, 1),
-  ];
-}
-
-function smoothMin(a, b, k) {
-  const h = max(k.sub(abs(a.sub(b))), 0).div(k);
-  return min(a, b).sub(h.mul(h).mul(h).mul(k).div(6));
-}
-
-function voronoiF1(position, time, cellSpeed) {
-  const distances = voronoiDistances(position, time, cellSpeed);
-  let nearest = distances[0];
-  for (let index = 1; index < distances.length; index += 1) {
-    nearest = min(nearest, distances[index]);
-  }
-  return nearest;
-}
-
-function voronoiMetrics(position, time, cellSpeed, smoothness) {
-  const distances = voronoiDistances(position, time, cellSpeed);
-  let nearest = distances[0];
-  let smoothNearest = distances[0];
-  for (let index = 1; index < distances.length; index += 1) {
-    nearest = min(nearest, distances[index]);
-    smoothNearest = smoothMin(smoothNearest, distances[index], smoothness);
-  }
-  return { nearest, smoothNearest };
-}
-
 function refractionWarp(coarsePoint, finePoint) {
-  const coarse = stylizedFbm2(coarsePoint).sub(0.5).mul(2);
-  const fine = stylizedFbm2(finePoint).sub(0.5).mul(2);
+  const coarse = periodicFbm2(coarsePoint).sub(0.5).mul(2);
+  const fine = periodicFbm2(finePoint).sub(0.5).mul(2);
   return vec2(
     coarse.mul(0.7).add(fine.mul(0.3)),
     coarse.mul(-0.35).add(fine.mul(0.65)),
@@ -145,6 +93,11 @@ export function createStylizedWaterMaterial({
   // `waterfallPatternOrigin`), so fall strands stay sharp at planet scale.
   // Without it the strands read canonical metres.
   patternOrigin = null,
+  // Per-chunk origins of the surface's procedural patterns
+  // (WaterPatternOrigins). None of them reads a canonical position: at planet
+  // scale float32 has no fraction left there, and noise and voronoi collapse
+  // into a regular lattice of light lines.
+  surfacePatterns,
   // Build-time opt-out. Sampling the viewport colour and depth textures makes
   // the renderer copy both buffers for the whole frame, and it does so as soon
   // as a material carrying those nodes is used at all — hiding the mesh does
@@ -206,10 +159,10 @@ export function createStylizedWaterMaterial({
   const noiseOffset = quality.flow ? currentOffset : legacyNoiseOffset;
   const surfaceOffset = quality.flow ? currentOffset : legacySurfaceOffset;
 
-  const noisePoint = worldXZ.mul(water.noiseScale).add(noiseOffset);
+  const noisePoint = surfacePatterns.latticePoint('surfaceNoise', localXZ).add(noiseOffset);
   const surfaceNoise = vec2(
-    stylizedFbm2(noisePoint),
-    stylizedFbm2(noisePoint.add(vec2(
+    periodicFbm2(noisePoint),
+    periodicFbm2(noisePoint.add(vec2(
       SURFACE_NOISE_OFFSET[0],
       SURFACE_NOISE_OFFSET[1],
     ))),
@@ -230,13 +183,13 @@ export function createStylizedWaterMaterial({
     })
     : null;
   const distort = surfaceNoise.sub(0.5).mul(water.distortAmount);
-  const sampleUv = worldXZ.mul(water.scale)
+  const sampleUv = surfacePatterns.latticePoint('cells', localXZ)
     .add(surfaceOffset)
     .add(distort);
 
   let ramp = smoothstep(LOW_SURFACE_RAMP_MIN, LOW_SURFACE_RAMP_MAX, noiseFac);
   if (quality.cellularSurface) {
-    const metrics = voronoiMetrics(
+    const metrics = periodicVoronoiMetrics(
       sampleUv,
       time,
       water.cellSpeed,
@@ -338,13 +291,22 @@ export function createStylizedWaterMaterial({
   if (quality.foam && water.foam.enabled) {
     const foam = water.foam;
     const shoreBand = oneMinus(smoothstep(0, foam.shoreWidth, shoreDistance));
-    const flowPhase = dot(worldXZ, currentFlow)
-      .mul(foam.flowBandScale)
-      .sub(time.mul(foam.flowBandSpeed));
-    const flowBand = pow(
-      sin(flowPhase).mul(0.5).add(0.5),
+    // Bands along the current are measured from nearby reference points, not
+    // from the world origin (see referenceBlendTaps).
+    const bandAt = (tap) => pow(
+      sin(dot(tap.offset, currentFlow)
+        .mul(foam.flowBandScale)
+        .sub(time.mul(foam.flowBandSpeed))).mul(0.5).add(0.5),
       foam.flowBandContrast,
-    ).mul(currentStrength).mul(foam.flowStrength);
+    ).mul(tap.weight);
+    const flowTaps = referenceBlendTaps(
+      surfacePatterns.latticePoint('flowReference', localXZ),
+      WATER_FLOW_REFERENCE_METERS,
+      WATER_FLOW_REFERENCE_BLEND,
+    );
+    const flowBand = flowTaps.slice(1)
+      .reduce((sum, tap) => sum.add(bandAt(tap)), bandAt(flowTaps[0]))
+      .mul(currentStrength).mul(foam.flowStrength);
     const noiseBreakup = mix(
       float(1),
       smoothstep(0.18, 0.82, noiseFac),
@@ -374,11 +336,9 @@ export function createStylizedWaterMaterial({
 
   if (enableRefraction && quality.refraction && water.refraction.enabled) {
     const refraction = water.refraction;
-    const coarsePoint = worldXZ
-      .mul(refraction.coarseScale)
+    const coarsePoint = surfacePatterns.latticePoint('refractionCoarse', localXZ)
       .add(currentFlow.mul(time.mul(refraction.coarseSpeed)));
-    const finePoint = worldXZ
-      .mul(refraction.fineScale)
+    const finePoint = surfacePatterns.latticePoint('refractionFine', localXZ)
       .sub(currentFlow.mul(time.mul(refraction.fineSpeed)))
       .add(vec2(REFRACTION_FINE_OFFSET[0], REFRACTION_FINE_OFFSET[1]));
     const depthFactor = smoothstep(
@@ -450,7 +410,7 @@ export function createStylizedWaterMaterial({
 
   if (quality.caustics) {
     const caustics = water.caustics;
-    const causticUv = worldXZ.mul(caustics.scale)
+    const causticUv = surfacePatterns.latticePoint('caustics', localXZ)
       .add(currentFlow.mul(time.mul(caustics.speed)));
     // A ring band around each voronoi point, not FBM. Light focused by a rippled
     // surface lands on the bed as a web of thin filaments; FBM can only make
@@ -460,7 +420,7 @@ export function createStylizedWaterMaterial({
     // — for one voronoi rather than the two a border metric would need. The
     // cell points drift on their own clock, so the web crawls.
     const causticRing = abs(
-      voronoiF1(causticUv, time, caustics.speed).sub(CAUSTIC_RING_RADIUS),
+      periodicVoronoiF1(causticUv, time, caustics.speed).sub(CAUSTIC_RING_RADIUS),
     );
     const configuredWidth = float(1).div(max(float(caustics.contrast), 1e-4));
     const causticWidth = max(

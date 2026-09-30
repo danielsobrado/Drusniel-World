@@ -8,6 +8,7 @@ import {
   PerfCounters,
 } from './performance/qa/PerfCounters.js';
 import { createTerrainMaterial } from './terrainMaterial.js';
+import { createCoastPatternOrigins } from './stylized/CoastSwashShading.js';
 import { resolveBlownStreaks } from './stylized/ambient/BlownStreaks.js';
 import { resolveFrost } from './stylized/ambient/FrostShading.js';
 import { ValleyFogController } from './stylized/mist/ValleyFogController.js';
@@ -190,7 +191,15 @@ function createSlot({ slotIndex, scene, geometry, worldStore, stylizedConfig, sh
   forestFloorTexture.needsUpdate = true;
 
   const chunkCenter = uniform(new THREE.Vector2());
-  const slotData = { tileTexture, heightTexture, surfaceMaskTexture, forestFloorTexture, chunkCenter };
+  const coastPatterns = createCoastPatternOrigins();
+  const slotData = {
+    tileTexture,
+    heightTexture,
+    surfaceMaskTexture,
+    forestFloorTexture,
+    chunkCenter,
+    coastPatterns,
+  };
   const bakeGpuState = createTerrainMaterialBakeGpuState(stylizedConfig.materialBake);
   const material = sharedMaterial(slotData, bakeGpuState);
   // Own bounds over the shared buffers: the height is applied in the shader.
@@ -223,6 +232,7 @@ function createSlot({ slotIndex, scene, geometry, worldStore, stylizedConfig, sh
     forestFloorTexture,
     forestFloorKey: null,
     chunkCenter,
+    coastPatterns,
     material,
     mesh,
   };
@@ -842,6 +852,7 @@ export class InfiniteTerrainView {
     );
     slot.mesh.position.set(render.x, 0, render.z);
     slot.chunkCenter.value.set(slot.descriptor.centerWorldX, slot.descriptor.centerWorldZ);
+    slot.coastPatterns.update(slot.descriptor.centerWorldX, slot.descriptor.centerWorldZ);
   }
 
   onWorldChange(change) {

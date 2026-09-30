@@ -11,6 +11,7 @@ import { WATER_FLOW_CHANNELS, waterFieldHasCoverage } from '../water/WaterField.
 import { createStylizedWaterMaterial } from './StylizedWaterMaterial.js';
 import { SEA_SWELL_COMPONENTS, seaSwellPhaseOrigin } from '../water/SeaSwell.js';
 import { waterfallPatternOrigin } from './WaterfallShading.js';
+import { createWaterPatternOrigins } from './WaterPatternOrigins.js';
 
 const WATER_FIELD_CHANNELS = 4;
 // Chebyshev radius, in chunks around the focus chunk, within which water is
@@ -31,6 +32,8 @@ export class StylizedWaterSlot {
     this.rippleOrigin = uniform(new THREE.Vector2());
     // This chunk's centre wrapped for the fall strands, in double precision.
     this.patternOrigin = uniform(new THREE.Vector2());
+    // Every surface pattern's origin at this chunk's centre, in double precision.
+    this.surfacePatterns = createWaterPatternOrigins(config.water);
     this.seaPhaseDescriptor = null;
     this.fieldSize = terrainView.chunkSize + 1;
     this.waterFieldPixels = new Uint16Array(
@@ -86,6 +89,7 @@ export class StylizedWaterSlot {
       seaPhaseOrigin: this.seaPhaseOrigin,
       rippleOrigin: this.rippleOrigin,
       patternOrigin: this.patternOrigin,
+      surfacePatterns: this.surfacePatterns,
       sunDirection,
     };
     this.material = this.createMaterial(false);
@@ -219,6 +223,7 @@ export class StylizedWaterSlot {
       );
       const [patternX, patternZ] = waterfallPatternOrigin(descriptor.centerWorldX, descriptor.centerWorldZ);
       this.patternOrigin.value.set(patternX, patternZ);
+      this.surfacePatterns.update(descriptor.centerWorldX, descriptor.centerWorldZ);
     }
   }
 

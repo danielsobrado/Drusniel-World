@@ -44,7 +44,12 @@ import { createFootprintShading } from './stylized/deformation/FootprintShading.
 import { applyCloudShadow } from './stylized/CloudShadow.js';
 import { createRainWetnessShading } from './stylized/RainWetnessShading.js';
 import { resolveSurfaceWetnessConfig } from './weather/surfaceWetnessConfig.js';
-import { createSlotBakeGpuState, slotTexture, slotVector2 } from './materials/TerrainSlotBindings.js';
+import {
+  createSlotBakeGpuState,
+  slotPatternOrigins,
+  slotTexture,
+  slotVector2,
+} from './materials/TerrainSlotBindings.js';
 
 const HEIGHT_SHADE_SCALE = 0.018;
 /** How dark the ground goes under a trunk or boulder at full contact shade. */
@@ -70,6 +75,9 @@ export function createTerrainMaterial({
   surfaceMaskTexture,
   forestFloorTexture,
   chunkCenter: chunkCenterTemplate,
+  // The slot's swash pattern origins (createCoastPatternOrigins). Without
+  // them there is no swash: it cannot be drawn from canonical positions.
+  coastPatterns: coastPatternsTemplate = null,
   chunkWorldSize,
   stylizedConfig,
   bakeGpuState = null,
@@ -96,10 +104,12 @@ export function createTerrainMaterial({
     MAXIMUM_HEIGHT_SHADE,
   );
 
-  const worldXZ = vec2(
-    chunkCenter.x.add(terrainUv.x.sub(0.5).mul(chunkWorldSize)),
-    chunkCenter.y.add(float(0.5).sub(terrainUv.y).mul(chunkWorldSize)),
+  // Metres from the chunk centre, canonical axes.
+  const localXZ = vec2(
+    terrainUv.x.sub(0.5).mul(chunkWorldSize),
+    float(0.5).sub(terrainUv.y).mul(chunkWorldSize),
   );
+  const worldXZ = chunkCenter.add(localXZ);
   const cameraDistance = distance(cameraPosition, positionWorld);
   const dirtSettings = {
     scale: float(stylizedConfig.dirt.scale),
@@ -261,8 +271,9 @@ export function createTerrainMaterial({
       stylizedConfig,
     });
     // Swash, foam and wet sand where the ground meets the sea.
-    const swash = createCoastSwashNodes({
-      worldXZ,
+    const swash = coastPatternsTemplate && createCoastSwashNodes({
+      localXZ,
+      patternOrigins: slotPatternOrigins('coastPatterns', coastPatternsTemplate),
       groundHeight: terrainHeight,
       config: { ...DEFAULT_COAST_SWASH, ...(stylizedConfig.water?.coast ?? {}) },
     });

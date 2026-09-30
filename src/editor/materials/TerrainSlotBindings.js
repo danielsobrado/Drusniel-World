@@ -13,7 +13,8 @@ import { getTerrainMaterialBakeGpuState } from './TerrainMaterialBakeGpu.js';
  * the god-rays pass: a ~17 s first frame). Shared nodes share one build.
  *
  * A slot mesh carries `userData[TERRAIN_SLOT_KEY]` — its tile, height, surface
- * mask and forest floor textures and its `chunkCenter` uniform — and its bake
+ * mask and forest floor textures, its `chunkCenter` uniform and its
+ * `coastPatterns` origins — and its bake
  * GPU state (attachTerrainMaterialBakeGpuState on the mesh). The templates are
  * one slot's own, which fix texture formats at build time and stand in for a
  * mesh without slot data.
@@ -47,6 +48,11 @@ export function slotTexture(name, template, uvNode) {
 export function slotVector2(name, template) {
   return uniform(template.value.clone())
     .onObjectUpdate(({ object }) => slotData(object)?.[name]?.value ?? template.value);
+}
+
+/** The drawn slot's own PatternOrigins `name`, as the shared material reads it. */
+export function slotPatternOrigins(name, template) {
+  return template.perObject((object) => slotData(object)?.[name]);
 }
 
 /**

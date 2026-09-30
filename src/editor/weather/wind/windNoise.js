@@ -53,13 +53,17 @@ export function gradientNoise2dCpu(x, y) {
   ) + 0.5;
 }
 
-export function latticeHashNode(cellX, cellY) {
+/** The lattice hash as its 32 raw bits, for a caller that wants more than one value per cell. */
+export function latticeHashBitsNode(cellX, cellY) {
   let h = cellX.mul(uint(HASH_X)).bitXor(cellY.mul(uint(HASH_Y)));
   h = h.bitXor(h.shiftRight(uint(15))).mul(uint(HASH_MIX_A));
   h = h.bitXor(h.shiftRight(uint(12)));
   h = h.mul(uint(HASH_MIX_B));
-  h = h.bitXor(h.shiftRight(uint(15)));
-  return float(h).div(TWO_POW_32);
+  return h.bitXor(h.shiftRight(uint(15)));
+}
+
+export function latticeHashNode(cellX, cellY) {
+  return float(latticeHashBitsNode(cellX, cellY)).div(TWO_POW_32);
 }
 
 // Keep the return type explicit: nested warps otherwise expand this expression

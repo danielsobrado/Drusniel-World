@@ -1,3 +1,4 @@
+import { withSettlementData } from './settlements/SettlementData.js';
 import { ProceduralWorldGenerator } from './ProceduralWorldGenerator.js';
 import { createWorldGenerator } from './WorldGeneratorFactory.js';
 import {
@@ -723,7 +724,12 @@ export class InfiniteWorldStore {
       }
     }
 
-    this.setBaseTerrain(document.world?.baseTerrain ?? null);
+    // Worlds imported before settlements existed get them from their campaign.
+    this.setBaseTerrain(withSettlementData(
+      document.world?.baseTerrain ?? null,
+      document.campaign,
+      { enabled: this.settlementsEnabled !== false },
+    ));
     this.tileOverrides = tileOverrides;
     this.heightOverrides = heightOverrides;
     this.forestEdits = structuredClone(

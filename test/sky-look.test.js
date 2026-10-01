@@ -41,7 +41,7 @@ test('the configured look is the sky exactly as configured', () => {
   assert.equal(look.fogDensityScale, 1);
   assert.equal(look.cloudShadowStrength, 0.45);
   assert.equal(look.night, false);
-  assert.equal(resolveSkyLook(SKY, 'no-such-preset').sunAzimuth, 258, 'unknown names fall back');
+  assert.equal(resolveSkyLook(SKY, 'no-such-preset').sunAzimuth, resolveSkyLook(SKY, 'meadow').sunAzimuth, 'unknown names fall back to the default');
 });
 
 test('every preset resolves to a complete look', () => {
@@ -80,7 +80,7 @@ test('overcast greys any look and keeps night dark', () => {
 test('the controller eases between presets and writes the sky only while changing', () => {
   const applied = [];
   const skyView = { config: { sky: SKY }, applyLook: (look) => applied.push(look) };
-  const controller = new SkyLookController({ skyView });
+  const controller = new SkyLookController({ skyView, preset: 'configured' });
   assert.equal(controller.update(0.1), false, 'configured at rest touches nothing');
   controller.setPreset('moonrise');
   for (let i = 0; i < 40; i += 1) controller.update(0.1);
@@ -126,4 +126,12 @@ test('changing preset mid-transition carries on from the look on screen', () => 
   for (const key of ['sunElevation', 'directionalIntensity', 'ambientIntensity']) {
     assert.ok(Math.abs(next[key] - onScreen[key]) < 1e-3, `${key} jumped from ${onScreen[key]} to ${next[key]}`);
   }
+});
+
+test('the default look is applied on the first frame', () => {
+  const applied = [];
+  const skyView = { config: { sky: SKY }, applyLook: (look) => applied.push(look) };
+  const controller = new SkyLookController({ skyView });
+  assert.equal(controller.update(0.1), true);
+  assert.equal(applied.at(-1).sunElevation, resolveSkyLook(SKY, 'meadow').sunElevation);
 });

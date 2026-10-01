@@ -45,9 +45,11 @@ test('extraction manifest covers the complete offline library and runtime subset
   const published = outputs.filter((output) => output.published);
   const wholeScene = manifest.sources.find((source) => source.key === 'low-poly-tree-scene');
 
-  assert.equal(manifest.sources.length, 9);
-  assert.equal(outputs.length, 86);
-  assert.equal(published.length, 38);
+  // Ten sources: the tenth is grass-test's path pebbles, one file of four
+  // (donor-rock-pebbles).
+  assert.equal(manifest.sources.length, 10);
+  assert.equal(outputs.length, 87);
+  assert.equal(published.length, 39);
   assert.equal(wholeScene.outputs.filter((output) => output.name.startsWith('tree-')).length, 23);
   assert.ok(outputs.every((output) => Math.abs(output.bounds.min[1]) < 0.0001));
 });

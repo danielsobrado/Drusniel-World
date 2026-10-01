@@ -17,6 +17,14 @@ export const CONSTRUCTION_JOINT_PROFILES = Object.freeze({
     minimumRenderedWidth: 0.12,
     minimumRenderedHeight: 0.08,
   }),
+  "glade-sandstone": Object.freeze({
+    headJoint: Object.freeze({ min: 0.004, max: 0.008 }),
+    bedJoint: Object.freeze({ min: 0.003, max: 0.006 }),
+    coarseLodMultiplier: 1.1,
+    mortarSafetyOverlap: 0.003,
+    minimumRenderedWidth: 0.12,
+    minimumRenderedHeight: 0.08,
+  }),
   "rounded-fieldstone": Object.freeze({
     headJoint: Object.freeze({ min: 0.008, max: 0.016 }),
     bedJoint: Object.freeze({ min: 0.008, max: 0.014 }),

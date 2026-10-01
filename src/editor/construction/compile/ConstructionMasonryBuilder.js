@@ -27,6 +27,7 @@ import { applyConstructionStoneColorGrade } from './ConstructionStoneColorGrade.
 import { resolveStoneTopology } from './ConstructionStoneTopologyResolver.js';
 import { buildSoftStoneGeometry } from './ConstructionSoftStoneGeometry.js';
 import { buildRoundedModuleMasonry } from './ConstructionRoundedMasonryBuilder.js';
+import { buildConstructionGrowth } from './ConstructionGrowthBuilder.js';
 
 /**
  * Turn module-local stone placements into merged geometry.
@@ -46,6 +47,7 @@ import {
   createMortarDescriptor,
   resolveStoneShape,
 } from './ConstructionStoneShape.js';
+import { constructionStoneExposure } from './ConstructionStoneExposure.js';
 
 export {
   constructionRecipe,
@@ -342,7 +344,48 @@ function resolveStoneEdgeWear({
  *   solved relative to grade, so the packer never needs terrain and none has to
  *   cross into the worker; ground is resolved here, on the main thread.
  */
-export function buildModuleMasonry(placements, {
+export function buildModuleMasonry(placements, options) {
+  const built = buildStoneBatches(placements, options);
+  const growth = buildConstructionGrowth(options);
+  if (growth) {
+    built.meshes.push(growth);
+    built.stats.growthLeaves = growth.userData.constructionGrowthLeaves;
+    built.stats.growthTriangles = growth.geometry.index.count / 3;
+    built.stats.totalTriangles += built.stats.growthTriangles;
+    built.stats.triangles = built.stats.totalTriangles;
+  }
+  return built;
+}
+
+function buildStoneBatches(placements, options) {
+  if (constructionStyle(options.record.style.key).geometry === 'rounded') {
+    return buildRoundedModuleMasonry(placements, options);
+  }
+  const fitted = placements?.filter(placement => placement.contourPolygons) ?? [];
+  if (!fitted.length) return buildSoftModuleMasonry(placements, options);
+  const ordinary = buildSoftModuleMasonry(placements.filter(placement => !placement.contourPolygons), options);
+  const contour = buildRoundedModuleMasonry(fitted, options);
+  for (const mesh of contour.meshes) {
+    const existing = ordinary.meshes.find(other => (
+      other.userData.constructionMaterialSlot === mesh.userData.constructionMaterialSlot
+    ));
+    if (!existing) { ordinary.meshes.push(mesh); continue; }
+    for (const geometry of [existing.geometry, mesh.geometry]) {
+      if (!geometry.index) geometry.setIndex(Array.from({ length: geometry.attributes.position.count }, (_, i) => i));
+    }
+    harmonizeVertexColors([existing.geometry, mesh.geometry]);
+    const geometry = mergeGeometries([existing.geometry, mesh.geometry]);
+    existing.geometry.dispose(); mesh.geometry.dispose();
+    existing.geometry = geometry;
+    geometry.computeBoundingBox(); geometry.computeBoundingSphere();
+  }
+  for (const [key, value] of Object.entries(contour.stats)) {
+    if (typeof value === 'number') ordinary.stats[key] = (ordinary.stats[key] ?? 0) + value;
+  }
+  return ordinary;
+}
+
+function buildSoftModuleMasonry(placements, {
   record,
   materials,
   arcTable,
@@ -357,11 +400,6 @@ export function buildModuleMasonry(placements, {
   if (!placements || placements.length === 0) return { meshes: [], stats };
 
   const style = constructionStyle(record.style.key);
-  if (style.geometry === 'rounded') {
-    return buildRoundedModuleMasonry(placements, {
-      record, materials, arcTable, moduleOrigin, groundHeightAt, lodBand,
-    });
-  }
   const lodProfile = constructionStoneLodProfile(record.style.key);
   const reliefProfile = disableRelief
     ? Object.freeze({
@@ -623,6 +661,9 @@ export function buildModuleMasonry(placements, {
       nominalPosition: params.position,
       nominalRotation: params.rotation,
       config: mortarConfig,
+      exposure: constructionStoneExposure(placement, {
+        totalLength: arcTable.totalLength, closed: record.path.closed,
+      }),
     });
     if (mortarDescriptor) mortarDescriptors.push(mortarDescriptor);
   }

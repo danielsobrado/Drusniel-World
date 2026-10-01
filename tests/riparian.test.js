@@ -172,3 +172,43 @@ test('species selection is unweighted when no riparian signal is present', () =>
   );
   assert.deepEqual(weights, [1, 1]);
 });
+
+test('coarse samples skip the water field and match a dry habitat', () => {
+  let waterQueries = 0;
+  const waterField = createWaterField();
+  const riparian = createHabitat({
+    waterDistanceAt: (x, z) => {
+      waterQueries += 1;
+      return waterField.worldDistanceAt(x, z);
+    },
+  });
+  const dry = createHabitat();
+  for (const cellX of [21, 40, 200]) {
+    const coarse = riparian.sampleCoarse(cellX * TILE_SIZE, -40);
+    assert.deepEqual(coarse, dry.sample(cellX * TILE_SIZE, -40));
+  }
+  // The far backdrop samples rings hundreds of metres apart; each water query
+  // would build a whole chunk's chamfer field on the main thread.
+  assert.equal(waterQueries, 0);
+  assert.equal(riparian.sampleCache.size, 0);
+});
+
+test('a coarse sample given its terrain queries none of it', () => {
+  let tileQueries = 0;
+  let heightQueries = 0;
+  const habitat = new ForestHabitatField({
+    seed: 4242,
+    tileSize: TILE_SIZE,
+    tileAt: () => { tileQueries += 1; return GRASSLAND_TILE; },
+    heightAt: () => { heightQueries += 1; return 4; },
+    config: { patchSupercellSize: 384 },
+  });
+  const given = habitat.sampleCoarse(400, -40, { tileId: GRASSLAND_TILE, elevation: 4, slope: 0 });
+  assert.equal(tileQueries, 0);
+  assert.equal(heightQueries, 0);
+  // The same answer the field reaches by asking the terrain itself.
+  const asked = habitat.sampleCoarse(400, -40);
+  assert.ok(tileQueries > 0 && heightQueries > 0);
+  assert.equal(given.suitability, asked.suitability);
+  assert.equal(given.patchCoverage, asked.patchCoverage);
+});

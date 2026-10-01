@@ -248,9 +248,14 @@ export class MacroFarTerrainView {
     return color;
   }
 
-  forestSignalAt(field, x, z) {
+  /**
+   * How wooded the ground at (x, z) reads from afar. `terrain` is the ring's own
+   * macro tile, height and slope there, so the habitat does not re-query the
+   * fine terrain five times a sample (see ForestHabitatField.sampleCoarse).
+   */
+  forestSignalAt(field, x, z, terrain = null) {
     if (!field) return 0;
-    const habitat = field.sample(x, z);
+    const habitat = field.sampleCoarse?.(x, z, terrain) ?? field.sample(x, z);
     return habitat.patchCoverage * Math.min(1, habitat.suitability * 1.4);
   }
 
@@ -275,19 +280,13 @@ export class MacroFarTerrainView {
     for (let spoke = 0; spoke < spokes; spoke += 1) {
       const index = ring * spokes + spoke;
       const offset = index * 3;
-      const renderX = this.pendingPositions[offset];
-      const renderZ = this.pendingPositions[offset + 2];
-      const canonicalX = renderX + job.originX;
-      const canonicalZ = renderZ + job.originZ;
-      const cellX = Math.floor(canonicalX / tileSize);
-      const cellZ = Math.floor(-canonicalZ / tileSize);
+      const cellX = Math.floor((this.pendingPositions[offset] + job.originX) / tileSize);
+      const cellZ = Math.floor(-(this.pendingPositions[offset + 2] + job.originZ) / tileSize);
       const { height, tileId } = this.generator.sampleMacroColumn(cellX, cellZ);
-      const forestSignal = this.forestSignalAt(job.field, canonicalX, canonicalZ);
-      const canopyRelief = forestSignal * (0.32 + ((ring * 17 + spoke * 31) % 7) / 35);
       job.heights[index] = height;
       job.tileIds[index] = tileId;
-      job.forest[index] = forestSignal;
-      this.pendingPositions[offset + 1] = height - this.heightBias + canopyRelief;
+      // The canopy lifts it in the shading pass, once the ring slopes are known.
+      this.pendingPositions[offset + 1] = height - this.heightBias;
     }
   }
 
@@ -349,8 +348,18 @@ export class MacroFarTerrainView {
       green += (this.snowColor.g - green) * snowAmount;
       blue += (this.snowColor.b - blue) * snowAmount;
 
-      const forestSignal = job.forest[index];
+      // The forest reads the ring's own tile, height and slope: at this spacing
+      // they are what the backdrop draws, and the fine terrain is five queries
+      // a sample through the water-terrain model.
       const offset = index * 3;
+      const forestSignal = this.forestSignalAt(
+        job.field,
+        this.pendingPositions[offset] + job.originX,
+        this.pendingPositions[offset + 2] + job.originZ,
+        { tileId: job.tileIds[index], elevation: height, slope },
+      );
+      job.forest[index] = forestSignal;
+      this.pendingPositions[offset + 1] += forestSignal * (0.32 + ((ring * 17 + spoke * 31) % 7) / 35);
       this.pendingColors[offset] = red * (1 - forestSignal * 0.25);
       this.pendingColors[offset + 1] = green * (1 - forestSignal * 0.14);
       this.pendingColors[offset + 2] = blue * (1 - forestSignal * 0.24);

@@ -217,3 +217,36 @@ test('the print fades once the body stops, and a recovered map uploads nothing',
   assert.equal(map.texture.version, version, 'nothing is uploaded once the trail is gone');
   map.dispose();
 });
+
+test('meadow palette is optional and validated', () => {
+  assert.equal(resolveMeadowGrassConfig({}).palette, null);
+  assert.deepEqual(
+    resolveMeadowGrassConfig({ palette: { base: '#50852b', tip: '#a6bf65' } }).palette,
+    { palettes: [{ base: '#50852b', tip: '#a6bf65' }], brightness: 1 },
+  );
+  assert.throws(() => resolveMeadowGrassConfig({ palette: { base: 'green', tip: '#a6bf65' } }), /palette\.base/);
+});
+
+test('per-biome palettes ride in the look code beside the shape', () => {
+  const settings = resolveMeadowGrassConfig({
+    shapes: { default: 'slender', byTileId: { 12: 'reed' } },
+    palette: {
+      base: '#50852b',
+      tip: '#a6bf65',
+      byTileId: {
+        9: { base: '#2c4f2a', tip: '#7a9a5a' },
+        10: { base: '#2c4f2a', tip: '#7a9a5a' },
+        12: { base: '#2e5a27', tip: '#7fa653' },
+      },
+    },
+  });
+  // One palette per distinct colour pair; biomes sharing a pair share its index.
+  assert.equal(settings.palette.palettes.length, 3);
+  const count = 3;
+  assert.equal(settings.shapeTable[4], 0, 'default shape, default palette');
+  assert.equal(settings.shapeTable[9], 0 + count * 1);
+  assert.equal(settings.shapeTable[10], settings.shapeTable[9]);
+  assert.equal(settings.shapeTable[12], 1 + count * 2, 'reed keeps its shape under its palette');
+  // Without per-biome entries the table is the plain shape table.
+  assert.equal(resolveMeadowGrassConfig({ shapes: { byTileId: { 12: 'reed' } } }).shapeTable[12], 1);
+});

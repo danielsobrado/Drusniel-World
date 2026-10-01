@@ -11,12 +11,36 @@ import { constructionStyle } from '../src/editor/construction/masonry/Constructi
 import { packCurvedWall } from '../src/editor/construction/masonry/CurvedCoursePacker.js';
 import {
   createWallCourseTable,
+  fitWallCourseHeight,
   footingCourseHeight,
 } from '../src/editor/construction/masonry/WallCourseTable.js';
 import { createWallTopProfile } from '../src/editor/construction/masonry/WallTopProfile.js';
 import { coarsePlacements } from '../src/editor/construction/render/ConstructionLod.js';
 
 const ROUNDED = constructionStyle('rounded-fieldstone');
+
+test('short walls fit complete courses even when the footing is the only course', () => {
+  for (const [wallHeight, expected] of [[0.8, 0.62], [1.4, 0.61]]) {
+    const fitted = fitWallCourseHeight({
+      courseHeight: ROUNDED.courseHeight,
+      footing: ROUNDED.footing,
+      wallHeight,
+      copingHeight: ROUNDED.coping.height,
+    });
+    assert.ok(Math.abs(fitted - expected) < 1e-9, `${wallHeight} m wall fitted to ${fitted}`);
+  }
+});
+
+test('course fitting stays finite, bounded and deterministic through footing transitions', () => {
+  for (let step = 4; step <= 120; step += 1) {
+    for (const footing of [null, ROUNDED.footing, { heightRatio: 3 }]) {
+      const input = { courseHeight: 0.5, footing, wallHeight: step / 10, copingHeight: 0.24 };
+      const fitted = fitWallCourseHeight(input);
+      assert.ok(fitted >= 0.4 && fitted <= 0.625, `out-of-range height ${fitted}`);
+      assert.equal(fitWallCourseHeight(input), fitted);
+    }
+  }
+});
 
 function setup({ length = 24, height = 3.5, thickness = 0.8, top = 'flat', key = 'rounded-fieldstone' } = {}) {
   const record = normalizeConstructionRecord({

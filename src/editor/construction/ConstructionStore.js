@@ -92,8 +92,8 @@ export class ConstructionStore {
 
   /**
    * `hint` rides along on the emitted change so the renderer can narrow its
-   * rebuild. It is advisory only — the store never interprets it, and a view
-   * that ignores it stays correct, just slower.
+   * rebuild. Decoration-only changes also keep the active collision revision:
+   * an in-flight structural plan is still valid after a vegetation edit.
    */
   update(id, input, hint = null) {
     const key = String(id);
@@ -106,7 +106,7 @@ export class ConstructionStore {
       revision: current.revision + 1,
     });
     this.records.set(key, record);
-    constructionCollisionSource.setActive(record);
+    if (!hint?.decorationOnly) constructionCollisionSource.setActive(record);
     const before = clone(current);
     const after = clone(record);
     this.emit({ kind: 'update', id: key, before, after, hint });
@@ -146,7 +146,7 @@ export class ConstructionStore {
     if (target) {
       runtimeTarget = this.normalizeForRuntime(target);
       this.records.set(runtimeTarget.id, runtimeTarget);
-      constructionCollisionSource.setActive(runtimeTarget);
+      if (!change.decorationOnly) constructionCollisionSource.setActive(runtimeTarget);
     } else if (source) {
       constructionCollisionSource.remove(source.id);
     }
@@ -156,7 +156,7 @@ export class ConstructionStore {
     );
     // Forward the command hint so undo of a palette paint stays material-only
     // and does not re-pack every stone on a long wall.
-    const hint = change.materialOnly
+    const hint = change.decorationOnly ? { decorationOnly: true } : change.materialOnly
       ? { dirtySegmentIds: [...(change.dirtySegmentIds ?? [])], materialOnly: true }
       : Array.isArray(change.dirtySegmentIds)
         ? { dirtySegmentIds: [...change.dirtySegmentIds] }

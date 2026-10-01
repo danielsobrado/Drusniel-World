@@ -11,7 +11,7 @@ import {
 } from 'three/tsl';
 
 import { stylizedFbm2 } from '../StylizedNoiseNodes.js';
-import { sampleWorldWindCanonical } from '../../weather/wind/worldWindState.js';
+import { sampleWorldWindCanonical, windWaveCoordinates } from '../../weather/wind/worldWindState.js';
 
 /**
  * Wind-blown snow and sand streaming across the ground — after grass-test's
@@ -259,8 +259,9 @@ export function blownStreaks({
     If(amount.greaterThan(ACTIVE_AMOUNT), () => {
       // Built from worldXZ inside the branch: an expression first built inside an
       // If and read later leaves the reader an unassigned variable.
-      const along = dot(worldXZ, wind.direction);
-      const across = dot(worldXZ, vec2(wind.direction.y.negate(), wind.direction.x));
+      // Against the prevailing wind: the local field's curl would scatter the
+      // streak cells on a planet-scale map (windWaveCoordinates).
+      const { along, across } = windWaveCoordinates(worldXZ);
       const cell = vec2(along.sub(drift).div(surface.length), across.div(surface.width));
       const fine = stylizedFbm2(cell)
         .add(stylizedFbm2(cell.mul(vec2(1.9, 2.3)).add(vec2(5.2, 1.3))).mul(0.5));

@@ -1,4 +1,4 @@
-import { DEFAULT_SKY_PRESET, SKY_PRESETS } from './SkyPresets.js';
+import { CONFIGURED_SKY_PRESET, DEFAULT_SKY_PRESET, SKY_PRESETS } from './SkyPresets.js';
 import { mixSkyLooks, overcastSkyLook, resolveSkyLook } from './SkyLook.js';
 import { snowCountryLook } from './snowCountryLook.js';
 
@@ -43,7 +43,7 @@ export class SkyLookController {
     this.overcastTarget = 0;
     this.snowCountry = 0;
     this.snowCountryTarget = 0;
-    this.dirty = this.preset !== DEFAULT_SKY_PRESET;
+    this.dirty = this.preset !== CONFIGURED_SKY_PRESET;
     this.current = this.from;
   }
 

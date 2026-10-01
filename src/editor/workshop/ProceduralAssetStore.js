@@ -26,12 +26,19 @@ import {
   DEFAULT_IRREGULARITY,
   LEGACY_IRREGULARITY,
 } from './ProceduralWorkshopIrregularity.js';
+import {
+  defaultWorkshopVariant,
+  getWorkshopVariant,
+  isVariantArchetype,
+} from './ProceduralWorkshopArchetypeCatalog.js';
 
 const ASSET_VERSION = 7;
 const MAX_ASSETS = 32;
 const SUPPORTED_ASSET_VERSIONS = new Set([1, 2, 3, 4, 5, 6, ASSET_VERSION]);
 const LEGACY_ROOF_PITCH = 40;
-const VALID_ARCHETYPES = new Set(['wall', 'gatehouse', 'tower', 'square-tower', 'manor']);
+const VALID_ARCHETYPES = new Set([
+  'wall', 'gatehouse', 'tower', 'square-tower', 'manor', 'house', 'prop',
+]);
 const VALID_STYLES = new Set(['granite', 'limestone', 'sandstone']);
 const VALID_TOP_STYLES = new Set(['battlements', 'slate', 'terracotta']);
 const VALID_FINISHES = new Set(['masonry', 'ochre', 'limewash', 'rose']);
@@ -85,6 +92,29 @@ function optionalBoolean(value, field, fallback) {
   return value;
 }
 
+/**
+ * `variant` exists only on archetypes that are families of designs. Keeping it
+ * off every other recipe leaves their canonical form, and therefore their
+ * signature hash, exactly as it was before variants existed.
+ */
+function normalizeVariant(source, archetype) {
+  if (!isVariantArchetype(archetype)) {
+    if (source.variant !== undefined) {
+      throw new Error(`Workshop archetype ${archetype} has no variants.`);
+    }
+    return {};
+  }
+  const variant = optionalString(
+    source.variant,
+    'Workshop variant',
+    defaultWorkshopVariant(archetype),
+  );
+  if (!getWorkshopVariant(archetype, variant)) {
+    throw new Error(`Unknown ${archetype} variant: ${variant}.`);
+  }
+  return { variant };
+}
+
 function slugify(value) {
   return value
     .trim()
@@ -134,6 +164,7 @@ export function normalizeProceduralRecipe(input = {}) {
   const materialDocument = normalizeWorkshopMaterialDocument(source, { surfaceTextures });
   return Object.freeze({
     archetype,
+    ...normalizeVariant(source, archetype),
     style,
     topStyle,
     finish,

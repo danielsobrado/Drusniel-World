@@ -45,6 +45,8 @@ import {
 import { patchViewportFramebufferSources } from '../render/patchViewportFramebufferSources.js';
 import { raiseDeviceLimits } from '../render/deviceLimits.js';
 import { GpuOcclusion } from '../render/occlusion/GpuOcclusion.js';
+import { resolveCinematicFinish } from './stylized/cinematicFinish.js';
+import { FOREST_FLOOR_SIZE } from './stylized/forestFloorTexture.js';
 import { createTerrainOccluderGeometry } from './world/terrainOccluderProxy.js';
 import { createSlotGeometry, fitSlotBounds } from './world/TerrainSlotBounds.js';
 
@@ -135,11 +137,10 @@ function createSlot({ slotIndex, scene, geometry, worldStore, stylizedConfig, sh
   const texturePixels = new Uint8Array(chunkSize * chunkSize * 4);
   const surfaceMaskPixels = new Uint8Array(chunkSize * chunkSize * 4);
   const heightPixels = new Float32Array((chunkSize + 1) * (chunkSize + 1));
-  const forestFloorSize = 16;
   // Two channels: R is the forest canopy's shading of the ground, G the contact
   // shade under trunks and boulders. One texture, because the ground reads both in
-  // the same fetch — and 16 texels over a 128 m chunk is eight metres each, which
-  // is why the contact patch is canopy-sized rather than trunk-sized.
+  // the same fetch (forestFloorTexture.js).
+  const forestFloorSize = FOREST_FLOOR_SIZE;
   const forestFloorPixels = new Uint8Array(forestFloorSize * forestFloorSize * 4);
   const tileTexture = new THREE.DataTexture(
     texturePixels,
@@ -340,6 +341,7 @@ export class InfiniteTerrainView {
         skyConfig?.sunAzimuth ?? 258,
       ),
       sunColor: skyConfig?.sunColor ?? '#ffffff',
+      finish: resolveCinematicFinish(stylizedConfig?.cinematicFinish),
     });
     this.geometry = new THREE.PlaneGeometry(
       this.chunkWorldSize,

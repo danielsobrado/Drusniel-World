@@ -1,3 +1,4 @@
+import { geometrySpansAt as mortarSpansAt } from './helpers/constructionGeometrySlices.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three/webgpu';
@@ -155,23 +156,6 @@ function mortarDescriptors(placements, arcTable) {
  * geometry so the test sees what renders, not what the builder intended. The
  * wall is straight, so a prism's world `x` is its arc coordinate.
  */
-function mortarSpansAt(geometry, y) {
-  const position = geometry.getAttribute('position');
-  const count = geometry.userData.mortarPrisms;
-  const spans = [];
-  for (let prism = 0; prism < count; prism += 1) {
-    const base = prism * 24;
-    const xs = [];
-    const ys = [];
-    for (let corner = 0; corner < 4; corner += 1) {
-      xs.push(position.getX(base + corner));
-      ys.push(position.getY(base + corner));
-    }
-    if (y < Math.min(...ys) - 1e-9 || y > Math.max(...ys) + 1e-9) continue;
-    spans.push([Math.min(...xs), Math.max(...xs)]);
-  }
-  return spans.sort((left, right) => left[0] - right[0]);
-}
 
 /** The solid gap that contains `centre`, from a sorted list of solid intervals. */
 function voidGap(spans, centre) {
@@ -270,14 +254,20 @@ test('mortar never occupies an opening void, including a course straddling the c
   const packed = pack(wall, [opening]);
   const descriptors = mortarDescriptors(packed.stones, wall.arcTable);
 
-  // The defect this test guards: unclipped, the straddling course fills the void.
+  // The straddling course is now packed around the widest void of its whole
+  // band (handoff §4C), so even the unclipped core leaves the void open; the
+  // clip remains the second line of defence, proven on the synthetic prism
+  // below.
   const straddlingY = 2.26;
   assert.ok(openingHalfWidthAt(opening, straddlingY) > 0, 'fixture has no void at the straddling height');
   const unclipped = buildMortarCoreGeometry(descriptors);
-  assert.ok(
-    mortarSpansAt(unclipped, straddlingY).some(([from, to]) => from < opening.s && to > opening.s),
-    'expected the unclipped core to span the void',
-  );
+  const unclippedHalf = openingHalfWidthAt(opening, straddlingY);
+  for (const [from, to] of mortarSpansAt(unclipped, straddlingY)) {
+    assert.ok(
+      to <= opening.s - unclippedHalf + 1e-6 || from >= opening.s + unclippedHalf - 1e-6,
+      `packed core ${from}..${to} crosses the void at the straddling height`,
+    );
+  }
   unclipped.dispose();
 
   // Clipped, no core sits in the void at any height of the contour, and the

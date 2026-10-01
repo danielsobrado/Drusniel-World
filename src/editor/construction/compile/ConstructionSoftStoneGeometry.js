@@ -147,8 +147,10 @@ function writeSideWalls(buffers, loopCount, frontLoop, backLoop, frontZ, backZ) 
     const backA = frontA + 1;
     const frontB = start + next * 2;
     const backB = frontB + 1;
-    buffers.writeTriangle(frontA, frontB, backB);
-    buffers.writeTriangle(frontA, backB, backA);
+    // The face loops are counterclockwise viewed from +Z. Traversing an edge
+    // toward the back first puts the side normal outside that loop.
+    buffers.writeTriangle(frontA, backB, frontB);
+    buffers.writeTriangle(frontA, backA, backB);
   }
 }
 

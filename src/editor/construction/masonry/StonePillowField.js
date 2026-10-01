@@ -78,6 +78,7 @@ function sampleFace(profile, hash, { shortSide, depth, scale }) {
     tiltU: signedLane(hash, 16) * profile.asymmetry,
     tiltV: signedLane(hash, 24) * profile.asymmetry,
     saddle: signedLane(mixSeed(hash, 1), 0) * profile.saddle,
+    flatness: profile.faceFlatness ?? 0,
   });
 }
 

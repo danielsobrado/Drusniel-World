@@ -87,6 +87,34 @@ test.afterEach(() => {
   disposeConstructionMaterials();
 });
 
+test('ground growth can be toggled during compilation and undone without rebuilding masonry', async () => {
+  const store = new ConstructionStore();
+  const compiler = createDeferredCompiler();
+  const view = new ConstructionView({ terrainView: createTerrainView(), store, compilerClient: compiler });
+  const record = { ...wallRecord(), seed: 3141, style: { key: 'glade-sandstone', version: 1 } };
+  store.add(record);
+  const edit = executeConstructionCommand(store, { type: 'set_growth', constructionId: record.id, growth: 'none' });
+  assert.equal(compiler.requests.length, 1);
+  compiler.requests[0].resolve();
+  await flushAsync();
+  const entry = view.entries.get(record.id);
+  drainBuildQueue(view, entry.plan);
+  const masonry = [...entry.modules.values()].flatMap(resident => resident.meshes.map(mesh => mesh.geometry));
+  assert.equal(view.stats.growthLeaves, 0);
+  store.applyChange(edit, 'undo');
+  assert.ok(view.stats.growthLeaves > 0);
+  const growthMaterial = [...entry.modules.values()].flatMap(resident => resident.meshes)
+    .find(mesh => mesh.userData.constructionMaterialSlot === 'growth').material;
+  view.setSelection(record.id);
+  assert.ok([...entry.modules.values()].flatMap(resident => resident.meshes)
+    .filter(mesh => mesh.userData.constructionMaterialSlot === 'growth').every(mesh => mesh.material === growthMaterial));
+  store.applyChange(edit, 'redo');
+  assert.equal(view.stats.growthLeaves, 0);
+  assert.deepEqual([...entry.modules.values()].flatMap(resident => resident.meshes.map(mesh => mesh.geometry)), masonry);
+  assert.equal(compiler.requests.length, 1);
+  view.dispose();
+});
+
 test('a material-only change does not strand the in-flight structural compile', async () => {
   const store = new ConstructionStore();
   const compiler = createDeferredCompiler();

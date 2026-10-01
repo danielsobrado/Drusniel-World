@@ -7,6 +7,8 @@ import { ridgeHeight, validateMountainRidges } from './MountainRidges.js';
 import { valueNoise } from './valueNoise2d.js';
 import { TrailGrading, validateTrailGrading } from './TrailGrading.js';
 import { validateRouteMetadata } from '../import/AzgaarRoutes.js';
+import { SettlementField } from './settlements/SettlementField.js';
+import { validateSettlementMetadata } from './settlements/SettlementData.js';
 import { TILE_BY_KEY } from '../tileCatalog.js';
 import { WORLD_MAX_SAFE_CELL_COORDINATE } from './worldConstants.js';
 
@@ -235,8 +237,10 @@ export class AzgaarMacroWorldGenerator {
     validateRiverMetadata(source.rivers);
     validateLakeMetadata(source.lakes);
     validateRouteMetadata(source.routes);
+    validateSettlementMetadata(source.settlements);
     this.source = source;
     this.trailGrading = undefined;
+    this.settlementField = undefined;
     this.heights = decodeGuidanceField(source, 'elevation');
     this.biomeAtlas = decodeGuidanceField(source, 'biomeId');
     this.features = hasGuidanceField(source, 'featureId')
@@ -403,9 +407,55 @@ export class AzgaarMacroWorldGenerator {
    * trail grading (`import.azgaarTrails`).
    */
   sampleHeight(vertexX, vertexZ) {
+    const ground = this.sampleGroundHeight(vertexX, vertexZ);
+    const settlements = this.ensureSettlementField();
+    return settlements ? settlements.grade(vertexX, vertexZ, ground) : ground;
+  }
+
+  /** The ground with paths graded in, before settlement pads are flattened into it. */
+  sampleGroundHeight(vertexX, vertexZ) {
     const height = this.sampleTerrainHeight(vertexX, vertexZ);
     const trails = this.ensureTrailGrading();
     return trails ? trails.grade(vertexX, vertexZ, height) : height;
+  }
+
+  /**
+   * Azgaar burgs planned as settlements (world/settlements). Built on first use;
+   * each settlement is planned only when something asks about ground inside it.
+   */
+  ensureSettlementField() {
+    if (this.settlementField !== undefined) return this.settlementField;
+    const settlements = this.source.settlements;
+    if (!settlements?.length) {
+      this.settlementField = null;
+      return null;
+    }
+    const { bounds, atlas, physical } = this.source;
+    const toCell = ([x, y]) => [
+      bounds.minCellX + x / atlas.width * bounds.widthCells,
+      bounds.minCellZ + y / atlas.height * bounds.heightCells,
+    ];
+    this.settlementField = new SettlementField({
+      settlements,
+      tileSize: physical?.widthMeters > 0 ? physical.widthMeters / bounds.widthCells : 2,
+      worldSeed: this.seed,
+      routes: (this.source.routes ?? []).map((route) => route.points.map(toCell)),
+      sampleGround: (cellX, cellZ) => this.sampleGroundHeight(cellX, cellZ),
+      isBuildable: (cellX, cellZ) => this.isDryLand(cellX, cellZ),
+      landSearchStepCells: bounds.widthCells / atlas.width,
+    });
+    return this.settlementField;
+  }
+
+  /** Plans of the settlements near a cell, nearest first, for the renderer. */
+  settlementsNear(cellX, cellZ, radiusCells) {
+    return this.ensureSettlementField()?.near(cellX, cellZ, radiusCells) ?? [];
+  }
+
+  /** Inside the map, above the coast and off any river. */
+  isDryLand(cellX, cellZ) {
+    if (!this.isInside(cellX, cellZ)) return false;
+    return this.sampleRawHeight(cellX, cellZ) >= LAND_HEIGHT + 0.5 && !this.isRiver(Math.floor(cellX), Math.floor(cellZ));
   }
 
   /** Built on first use: indexing the routes is only worth it where heights are asked for. */
@@ -507,6 +557,7 @@ export class AzgaarMacroWorldGenerator {
     if (rawHeight >= LAND_HEIGHT && this.isRiver(cellX, cellZ)) return WATER_TILE_ID;
     if (rawHeight < LAND_HEIGHT) return WATER_TILE_ID;
     if ((this.ensureTrailGrading()?.pathCover(cellX + 0.5, cellZ + 0.5) ?? 0) >= 0.5) return PATH_TILE_ID;
+    if ((this.ensureSettlementField()?.cover(cellX + 0.5, cellZ + 0.5) ?? 0) >= 0.5) return PATH_TILE_ID;
     return this.biomeBySourceId.get(this.biomeAtlas[index]).tileId;
   }
 }

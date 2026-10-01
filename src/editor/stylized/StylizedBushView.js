@@ -10,6 +10,7 @@ import {
   pruneStateMap,
   writeInstances,
 } from './lod/StylizedLodRuntime.js';
+import { InstanceAnchor } from './lod/InstanceAnchor.js';
 import { ScatterClusterField } from './forest/ScatterClusterField.js';
 import { forestFloorDensity } from './forest/ForestFloor.js';
 import { resolveForestSeed } from './forest/ForestRuntimeConfig.js';
@@ -111,6 +112,8 @@ export class StylizedBushView {
     this.disposed = false;
     this.clusterField = null;
     this.root = new THREE.Group();
+    // Instances are written relative to this, not in canonical metres (InstanceAnchor).
+    this.instanceAnchor = new InstanceAnchor();
     this.root.name = 'stylized-bushes';
     terrainView.scene.add(this.root);
   }
@@ -315,7 +318,7 @@ export class StylizedBushView {
     if (!this.terrainView.focusChunkKey || !camera) return;
     const focus = this.terrainView.focusChunk;
     const origin = this.terrainView.floatingOrigin.getState();
-    this.root.position.set(-origin.x, 0, -origin.z);
+    this.instanceAnchor.place(this.root, origin);
     const settings = lodSettings(this.config);
     const renderRadius = settings.enabled
       ? settings.proxyRadius
@@ -455,8 +458,11 @@ export class StylizedBushView {
       }
     }
 
-    const nearCount = writeInstances(this.meshes, near);
-    const proxyCount = writeInstances(this.proxyMeshes, proxy);
+    const anchorOrigin = this.terrainView.floatingOrigin.getState();
+    this.instanceAnchor.follow(anchorOrigin);
+    const nearCount = writeInstances(this.meshes, near, this.instanceAnchor);
+    const proxyCount = writeInstances(this.proxyMeshes, proxy, this.instanceAnchor);
+    this.instanceAnchor.place(this.root, anchorOrigin);
     this.placements = placements;
     PerfCounters.set('bushNearInstances', nearCount);
     PerfCounters.set('bushProxyInstances', proxyCount);

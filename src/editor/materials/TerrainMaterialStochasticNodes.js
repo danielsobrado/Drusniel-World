@@ -1,4 +1,5 @@
 import {
+  Fn,
   abs,
   clamp,
   dot,
@@ -29,6 +30,17 @@ const MAX_DETAIL_MULTIPLIER = 1.35;
 const MAX_SECONDARY_BLEND = 0.5;
 const SECONDARY_FADE_WIDTH = 0.18;
 const MIN_PAIR_WEIGHT = 0.0001;
+
+/*
+ * Shader size. TSL emits `select()` as an if/else and builds each branch's
+ * inputs inside that branch, so a sub-graph read by both branches is written out
+ * twice — and these selects nest (a four-way rotation and a mirror inside every
+ * atlas tap, top against side projection outside them). Left alone, the eight
+ * atlas taps here came out as 287 in the terrain's fragment shader: 3.2 MB of
+ * WGSL per terrain variant, most of the world's shader compile at boot. Every
+ * value a select reads twice is therefore taken into a variable first, inside
+ * one `Fn`, so a branch reads a name instead of re-emitting the graph.
+ */
 
 function hash2(cell, vector, offset = 0) {
   return fract(
@@ -64,8 +76,8 @@ function sampleVariant(atlas, baseUv, vertex, familyIndex, variantsPerFamily, sc
   const variant = floor(variantHash.mul(variantsPerFamily));
   const layer = familyIndex.mul(variantsPerFamily).add(variant);
   const scale = mix(float(1 - scaleJitter), float(1 + scaleJitter), scaleHash);
-  let sampleUv = baseUv.mul(scale).add(vec2(shiftX, shiftY));
-  sampleUv = rotateQuarterTurns(sampleUv, transformHash);
+  let sampleUv = baseUv.mul(scale).add(vec2(shiftX, shiftY)).toVar();
+  sampleUv = rotateQuarterTurns(sampleUv, transformHash).toVar();
   sampleUv = select(
     mirrorHash.greaterThan(0.5),
     vec2(sampleUv.x.negate(), sampleUv.y),
@@ -90,9 +102,9 @@ function stochasticTriSample({
     grid.x.add(grid.y.mul(TRIANGLE_SKEW)),
     grid.y.mul(SQRT_THREE_OVER_TWO),
   );
-  const cell = floor(skewed);
-  const local = fract(skewed);
-  const sum = local.x.add(local.y);
+  const cell = floor(skewed).toVar();
+  const local = fract(skewed).toVar();
+  const sum = local.x.add(local.y).toVar();
   const upper = sum.greaterThan(1);
   const vertex0 = select(upper, cell.add(vec2(1, 1)), cell);
   const vertex1 = cell.add(vec2(1, 0));
@@ -229,70 +241,75 @@ export function createTerrainMaterialFamilyMultiplier({
   families,
 }) {
   if (!atlas || !families?.enabled) return vec3(1);
-  const pair = topTwoFamilies(materialWeights);
-  const blend = secondaryBlend(pair, families);
-  const microVisibility = oneMinus(smoothstep(
-    families.microFadeStartDistance,
-    families.microFadeEndDistance,
-    cameraDistance,
-  ));
-  const topPrimary = projectedDetail({
-    atlas,
-    planarMeters: worldXZ,
-    familyIndex: pair.primaryIndex,
-    families,
-    microVisibility,
-  });
-  const topSecondary = projectedDetail({
-    atlas,
-    planarMeters: worldXZ,
-    familyIndex: pair.secondaryIndex,
-    families,
-    microVisibility,
-    secondary: true,
-  });
-  const topDetail = mix(topPrimary, topSecondary, blend);
-  const vertical = terrainHeight.mul(families.projection.verticalScale);
-  const sidePlanar = select(
-    abs(farNormal.r).greaterThan(abs(farNormal.g)),
-    vec2(worldXZ.y, vertical),
-    vec2(worldXZ.x, vertical),
-  );
-  const slope = terrainShape.r;
-  const sidePrimary = projectedDetail({
-    atlas,
-    planarMeters: sidePlanar,
-    familyIndex: pair.primaryIndex,
-    families,
-    microVisibility,
-  });
-  const sideSecondary = projectedDetail({
-    atlas,
-    planarMeters: sidePlanar,
-    familyIndex: pair.secondaryIndex,
-    families,
-    microVisibility,
-    secondary: true,
-  });
-  const sideDetail = mix(sidePrimary, sideSecondary, blend);
-  const projectionBlend = smoothstep(
-    families.projection.slopeStart,
-    families.projection.slopeFull,
-    slope,
-  );
-  const projected = select(
-    slope.lessThan(families.projection.slopeStart),
-    topDetail,
-    select(
-      slope.greaterThan(families.projection.slopeFull),
-      sideDetail,
-      mix(topDetail, sideDetail, projectionBlend),
-    ),
-  );
-  const environmentScale = mix(float(1), float(families.environment.wetDetailScale), wetness)
-    .mul(mix(float(1), float(families.environment.canopyDetailScale), canopy));
-  const pairConfidence = clamp(pair.primaryWeight.add(pair.secondaryWeight), 0, 1);
-  const confidenceScale = pow(pairConfidence, families.dominantFadePower);
-  const strength = confidenceScale.mul(environmentScale).mul(families.strength);
-  return mix(vec3(1), projected, strength);
+  // One `Fn`, so the variables below are declared once (see the note at the top).
+  return Fn(() => {
+    const pair = topTwoFamilies(materialWeights);
+    const blend = secondaryBlend(pair, families);
+    const microVisibility = oneMinus(smoothstep(
+      families.microFadeStartDistance,
+      families.microFadeEndDistance,
+      cameraDistance,
+    ));
+    const topPrimary = projectedDetail({
+      atlas,
+      planarMeters: worldXZ,
+      familyIndex: pair.primaryIndex,
+      families,
+      microVisibility,
+    });
+    const topSecondary = projectedDetail({
+      atlas,
+      planarMeters: worldXZ,
+      familyIndex: pair.secondaryIndex,
+      families,
+      microVisibility,
+      secondary: true,
+    });
+    const topDetail = mix(topPrimary, topSecondary, blend);
+    const topVar = topDetail.toVar();
+    const vertical = terrainHeight.mul(families.projection.verticalScale);
+    const sidePlanar = select(
+      abs(farNormal.r).greaterThan(abs(farNormal.g)),
+      vec2(worldXZ.y, vertical),
+      vec2(worldXZ.x, vertical),
+    );
+    const slope = terrainShape.r;
+    const sidePrimary = projectedDetail({
+      atlas,
+      planarMeters: sidePlanar,
+      familyIndex: pair.primaryIndex,
+      families,
+      microVisibility,
+    });
+    const sideSecondary = projectedDetail({
+      atlas,
+      planarMeters: sidePlanar,
+      familyIndex: pair.secondaryIndex,
+      families,
+      microVisibility,
+      secondary: true,
+    });
+    const sideDetail = mix(sidePrimary, sideSecondary, blend);
+    const sideVar = sideDetail.toVar();
+    const projectionBlend = smoothstep(
+      families.projection.slopeStart,
+      families.projection.slopeFull,
+      slope,
+    );
+    const projected = select(
+      slope.lessThan(families.projection.slopeStart),
+      topVar,
+      select(
+        slope.greaterThan(families.projection.slopeFull),
+        sideVar,
+        mix(topVar, sideVar, projectionBlend),
+      ),
+    );
+    const environmentScale = mix(float(1), float(families.environment.wetDetailScale), wetness)
+      .mul(mix(float(1), float(families.environment.canopyDetailScale), canopy));
+    const pairConfidence = clamp(pair.primaryWeight.add(pair.secondaryWeight), 0, 1);
+    const confidenceScale = pow(pairConfidence, families.dominantFadePower);
+    const strength = confidenceScale.mul(environmentScale).mul(families.strength);
+    return mix(vec3(1), projected, strength);
+  })();
 }

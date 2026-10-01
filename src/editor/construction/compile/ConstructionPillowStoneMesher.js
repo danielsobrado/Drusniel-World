@@ -32,6 +32,24 @@ const FIT_ATTEMPTS = 4;
 const FIT_SHRINK = 0.7;
 
 /** Vertices and triangles one stone costs at a tessellation level. */
+/**
+ * Face height profile and its derivative in rho at normalised radius `rho`.
+ * `flatness` 0 is the original dome, kept bit-identical.
+ */
+export function faceProfile(rho, flatness = 0) {
+  if (!(flatness > 0)) {
+    const falloff = 1 - rho * rho;
+    return { profile: falloff * falloff, slopeProfile: -4 * rho * falloff };
+  }
+  const exponent = 2 + 2 * Math.min(1, flatness);
+  const power = rho ** exponent;
+  const falloff = 1 - power;
+  return {
+    profile: falloff * falloff,
+    slopeProfile: -2 * falloff * exponent * (rho > 0 ? power / rho : 0),
+  };
+}
+
 export function estimatePillowStone({ arcSegments, rimRings, faceRings }) {
   const pointCount = outlinePointCount(arcSegments);
   const faceVertices = (rimRings + 1 + faceRings) * pointCount + 1;
@@ -99,24 +117,28 @@ function ringBounds(ring) {
  * Kept as a closure over reusable scratch so a stone allocates nothing per
  * vertex.
  */
-function createEmitter(writer, {
+export function createStoneVertexEmitter(writer, {
   matrix,
   position,
   bounds,
   shade,
   drape,
   uvDensity,
+  exposure,
 }) {
   const color = [0, 0, 0];
   const uv = [0, 0];
   const ground = [0, 0];
+  const bent = [0, 0, 0, 0];
+  const bend = drape?.bend ?? null;
   const spanY = Math.max(1e-6, bounds.maxY - bounds.minY);
+  const hasExposure = exposure?.top || exposure?.bottom || exposure?.start || exposure?.end;
   const [m0, m1, m2, m3, m4, m5, m6, m7, m8] = matrix;
 
   return function emit(lx, ly, lz, lnx, lny, lnz, crevice) {
-    const px = m0 * lx + m1 * ly + m2 * lz + position[0];
+    let px = m0 * lx + m1 * ly + m2 * lz + position[0];
     let py = m3 * lx + m4 * ly + m5 * lz + position[1];
-    const pz = m6 * lx + m7 * ly + m8 * lz + position[2];
+    let pz = m6 * lx + m7 * ly + m8 * lz + position[2];
     let nx = m0 * lnx + m1 * lny + m2 * lnz;
     let ny = m3 * lnx + m4 * lny + m5 * lnz;
     let nz = m6 * lnx + m7 * lny + m8 * lnz;
@@ -140,9 +162,22 @@ function createEmitter(writer, {
         nz /= length;
       }
     }
+    if (bend) {
+      // Onto the arc, after the drape: the drape reads its along-wall position
+      // from the stone's own straight frame (compile/ConstructionArcBend.js).
+      bend(px, pz, nx, nz, bent);
+      [px, pz, nx, nz] = bent;
+    }
 
     projectedUvAt(uv, 0, px, py, pz, nx, ny, nz, uvDensity);
-    shade(color, aboveGrade, (ly - bounds.minY) / spanY, crevice, ny);
+    // A rim only has contact shadow on edges buried against another stone.
+    // Blend by the local normal so the open top/end rolls smoothly into the
+    // shaded face joint, even after the stone rotates with a curved path.
+    const open = hasExposure ? Math.max(
+      0, exposure.top ? lny : 0, exposure.start ? -lnx : 0, exposure.end ? lnx : 0,
+      exposure.bottom ? -lny : 0,
+    ) : 0;
+    shade(color, aboveGrade, (ly - bounds.minY) / spanY, crevice * (1 - open), ny);
     return writer.vertex(px, py, pz, nx, ny, nz, color[0], color[1], color[2], uv[0], uv[1]);
   };
 }
@@ -192,14 +227,14 @@ function writeFace(writer, emit, {
   }
 
   // The dome: rings scaled toward the centroid from the rim's innermost ring.
-  // Height follows bulge * (1 - rho^2)^2, flat where it meets the rim so there
-  // is no crease ring, and tilted/twisted per face by `domeFactor`.
+  // Height follows bulge * (1 - rho^n)^2 with n = 2 + 2 * flatness — a full
+  // dome at 0, a broad plateau at 1 — flat where it meets the rim so there is
+  // no crease ring, and tilted/twisted per face by `domeFactor`.
   const [cx, cy] = centroid;
+  const flatness = face.flatness ?? 0;
   for (let ring = 1; ring <= faceRings; ring += 1) {
     const rho = 1 - ring / (faceRings + 1);
-    const falloff = 1 - rho * rho;
-    const profile = falloff * falloff;
-    const slopeProfile = -4 * rho * falloff;
+    const { profile, slopeProfile } = faceProfile(rho, flatness);
     const indices = new Array(pointCount);
     for (let point = 0; point < pointCount; point += 1) {
       const edgeX = outline.pointX(point, edgeRadius);
@@ -259,8 +294,10 @@ function writeFace(writer, emit, {
  * @param options.lod `{ arcSegments, rimRings, faceRings }`
  * @param options.shade from `createRoundedStoneShader`
  * @param options.creviceReach crevice saturation depth in (edge radius + bulge)
- * @param options.drape optional `{ tangentX, tangentZ, sample(x, z, out) }`
- *   writing ground height and along-wall slope into `out[0]`, `out[1]`
+ * @param options.exposure optional `{ top, start, end }` open face-plane edges
+ * @param options.drape optional `{ tangentX, tangentZ, sample(x, z, out), bend? }`
+ *   writing ground height and along-wall slope into `out[0]`, `out[1]`; `bend`
+ *   is an optional `createStoneBend` that maps the stone onto a curved arc
  * @returns `{ vertices, triangles, shrunk }`, or null when the quad cannot be
  *   rounded and the caller must fall back to a prism.
  */
@@ -270,6 +307,7 @@ export function writePillowStone(writer, stone, {
   creviceReach = 1,
   drape = null,
   uvDensity = WORKSHOP_UV_DENSITY,
+  exposure = null,
 }) {
   const ring = normalizeConvexQuad(stone.corners);
   if (!ring || !(stone.depth > 0)) return null;
@@ -288,13 +326,14 @@ export function writePillowStone(writer, stone, {
   const startVertices = writer.vertexCount;
   const startIndices = writer.indexCount;
 
-  const emit = createEmitter(writer, {
+  const emit = createStoneVertexEmitter(writer, {
     matrix: eulerXYZMatrix(stone.rotation),
     position: stone.position,
     bounds,
     shade,
     drape,
     uvDensity,
+    exposure,
   });
 
   const sides = [];

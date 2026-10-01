@@ -9,11 +9,13 @@ import {
   disposeInstancedRenderers,
   writeInstances,
 } from './lod/StylizedLodRuntime.js';
+import { InstanceAnchor } from './lod/InstanceAnchor.js';
 import { extractAuthoredGroupedPrototypes } from './StylizedPrototypeBake.js';
 import { acceptsStrategicDetailPlacement } from './StrategicDetailPlacement.js';
 import { registerPrototypeIndices } from './BiomeAssetPalette.js';
 import { createBiomePrototypeSelector } from './BiomePrototypeSelector.js';
 import { evaluateStrandPlacement } from './strandPlacement.js';
+import { groundDetailWindPosition } from './groundDetailWind.js';
 
 const DETAIL_UP = new THREE.Vector3(0, 1, 0);
 const DETAIL_SCRATCH = {
@@ -22,8 +24,11 @@ const DETAIL_SCRATCH = {
   scale: new THREE.Vector3(),
 };
 
-function cloneDetailMaterial(source) {
+function cloneDetailMaterial(source, { wind = null, height = 0 } = {}) {
   const material = source.clone();
+  // Swayed with the meadow's own wave, so a tuft is not a rigid patch in a moving
+  // sward (groundDetailWind.js).
+  if (wind && height > 0) material.positionNode = groundDetailWindPosition(wind, height);
   if ('roughness' in material) material.roughness = Math.max(0.72, material.roughness ?? 1);
   if ('metalness' in material) material.metalness = 0;
   if (material.map?.colorSpace !== undefined) {
@@ -58,15 +63,15 @@ export class StylizedGroundDetailView {
     biomeAssetPalette = null,
     regionalCharacterField = null,
     forestFieldProvider = null,
+    paletteLayerId = null,
   }) {
     this.terrainView = terrainView;
     this.config = config;
     this.revisionTracker = revisionTracker;
     this.layerConfig = layerConfig;
     this.layerName = layerName;
-    this.paletteLayerId = layerName === 'aquaticPlant'
-      ? 'aquaticPlants'
-      : 'groundDetails';
+    this.paletteLayerId = paletteLayerId
+      ?? (layerName === 'aquaticPlant' ? 'aquaticPlants' : 'groundDetails');
     this.priorityChannel = priorityChannel;
     this.biomeAssetPalette = biomeAssetPalette;
     this.regionalCharacterField = regionalCharacterField;
@@ -86,6 +91,8 @@ export class StylizedGroundDetailView {
     this.pendingRebuild = null;
     this.disposed = false;
     this.root = new THREE.Group();
+    // Instances are written relative to this, not in canonical metres (InstanceAnchor).
+    this.instanceAnchor = new InstanceAnchor();
     this.root.name = `stylized-${layerName}`;
     terrainView.scene.add(this.root);
   }
@@ -132,9 +139,17 @@ export class StylizedGroundDetailView {
             geometry.dispose();
             throw new Error(`${this.layerName} prototype contains a mesh without a material.`);
           }
+          geometry.computeBoundingBox();
           return {
             geometry,
-            material: cloneDetailMaterial(sourceMaterial),
+            material: cloneDetailMaterial(sourceMaterial, {
+              // Water plants keep their own current-driven sway, not the air's;
+              // stones (`sway: false`) keep still.
+              wind: this.layerName === 'aquaticPlant' || definition.sway === false
+                ? null
+                : (this.config.wind ?? null),
+              height: geometry.boundingBox.max.y - Math.min(0, geometry.boundingBox.min.y),
+            }),
             kind: 'detail',
           };
         }));
@@ -341,7 +356,7 @@ export class StylizedGroundDetailView {
     if (this.disposed || this.prototypes.length === 0 || !this.terrainView.focusChunkKey) return;
     const focus = this.terrainView.focusChunk;
     const origin = this.terrainView.floatingOrigin.getState();
-    this.root.position.set(-origin.x, 0, -origin.z);
+    this.instanceAnchor.place(this.root, origin);
     const radius = this.layerConfig.residentRadius;
     const revisionSignature = this.revisionTracker.windowSignature(focus, radius + 1, 1);
     const updateKey = `${focus.chunkX}:${focus.chunkZ}:${revisionSignature}:${
@@ -395,7 +410,10 @@ export class StylizedGroundDetailView {
         }
       }
     }
-    const count = writeInstances(this.meshes, instances);
+    const anchorOrigin = this.terrainView.floatingOrigin.getState();
+    this.instanceAnchor.follow(anchorOrigin);
+    const count = writeInstances(this.meshes, instances, this.instanceAnchor);
+    this.instanceAnchor.place(this.root, anchorOrigin);
     PerfCounters.set(`${this.layerName}Instances`, count);
     for (const key of this.manifestCache.keys()) {
       if (!activeChunks.has(key)) this.manifestCache.delete(key);

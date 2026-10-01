@@ -360,6 +360,16 @@ async function main() {
   }
 
   const manifestPath = absolute('assets/extracted/manifest.json');
+  if (onlyKey && fs.existsSync(manifestPath)) {
+    // `--only` re-extracts one source; every other source keeps its entry, in
+    // configuration order, rather than dropping out of the manifest.
+    const previous = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const bySource = new Map(previous.sources.map((entry) => [entry.key, entry]));
+    for (const entry of manifest.sources) bySource.set(entry.key, entry);
+    manifest.sources = AUTHORED_ASSET_EXTRACTIONS
+      .map((definition) => bySource.get(definition.key))
+      .filter(Boolean);
+  }
   fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(

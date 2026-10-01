@@ -18,6 +18,7 @@ export const SCENE_ASSET_LAYERS = Object.freeze({
   trees: 'treeVariants',
   groundDetails: 'groundDetailVariants',
   aquaticPlants: 'aquaticVariants',
+  tropicalKit: 'tropicalKitVariants',
 });
 
 const VALID_ASSET_LAYERS = new Set(Object.keys(SCENE_ASSET_LAYERS));

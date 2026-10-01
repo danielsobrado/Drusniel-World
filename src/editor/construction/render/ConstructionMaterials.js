@@ -8,9 +8,11 @@ import {
   surfaceRoughnessTexture,
 } from '../../workshop/ProceduralWorkshopMaterials.js';
 import { stoneSurfaceProfile } from '../../workshop/ProceduralWorkshopStoneSurfaceConfig.js';
+import { WORKSHOP_UV_DENSITY } from '../../workshop/WorkshopProjectedUv.js';
 import { constructionStyle } from '../masonry/ConstructionStyleCatalog.js';
 import { CONSTRUCTION_MATERIAL_SLOT } from './ConstructionMaterialSlots.js';
 import { mortarProfile } from './ConstructionMortarConfig.js';
+import { applyStoneFaceDetail, sharedStoneFaceDetailTexture } from './ConstructionShellDetail.js';
 
 const cache = new Map();
 const PRESET_TEXTURE_CACHE = new Map();
@@ -120,6 +122,13 @@ function createStoneMaterial(record, style) {
   }
   if (Number.isFinite(config.constructionEnvMapIntensity)) {
     material.envMapIntensity = config.constructionEnvMapIntensity;
+  }
+  if (style.faceDetail) {
+    applyStoneFaceDetail(material, sharedStoneFaceDetailTexture(), {
+      strength: style.faceDetail.strength,
+      metres: style.faceDetail.metres,
+      uvDensity: WORKSHOP_UV_DENSITY,
+    });
   }
   material.userData.constructionSlot = CONSTRUCTION_MATERIAL_SLOT.STONE;
   material.userData.stoneSurfaceProfile = style.stonePalette;
@@ -381,7 +390,10 @@ export function createConstructionMaterials(record, materialDocument = null) {
     mortar.userData.constructionSlot = CONSTRUCTION_MATERIAL_SLOT.MORTAR;
   }
 
-  const materials = Object.freeze({ stone, stoneSelected, mortar });
+  const growth = new THREE.MeshStandardNodeMaterial({
+    color: '#ffffff', vertexColors: true, roughness: 1, side: THREE.DoubleSide,
+  });
+  const materials = Object.freeze({ stone, stoneSelected, mortar, growth });
   const presetTextures = new Set();
   for (const textureKey of acquiredKeys) {
     const entry = PRESET_TEXTURE_CACHE.get(textureKey);

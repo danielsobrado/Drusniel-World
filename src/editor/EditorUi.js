@@ -289,6 +289,7 @@ export class EditorUi {
                   <option value="trees">Trees</option>
                   <option value="groundDetails">Ground details</option>
                   <option value="aquaticPlants">Aquatic plants</option>
+                  <option value="tropicalKit">Tropical plants</option>
                 </select>
               </label>
               <label class="settings-select settings-select--stacked">
@@ -1468,6 +1469,13 @@ export class EditorUi {
         'is-active',
         button.dataset.constructionMode === state.constructionMode,
       );
+    }
+    // Matching a wall also changes the brush dimensions; keep the controls honest.
+    if (document.activeElement !== this.constructionHeight) {
+      this.constructionHeight.value = state.constructionHeight;
+    }
+    if (document.activeElement !== this.constructionThickness) {
+      this.constructionThickness.value = state.constructionThickness;
     }
     this.tileTools.hidden = state.terrainMode !== 'paint';
     for (const button of this.palette.querySelectorAll('[data-tile-id]')) {

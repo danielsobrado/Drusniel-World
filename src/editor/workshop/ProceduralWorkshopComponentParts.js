@@ -229,7 +229,7 @@ function createStructureAnchors(entries) {
       id: hint.id,
       label: hint.label,
       kind: 'structure',
-      parentId: null,
+      parentId: hint.parentId ?? null,
       entries: [],
       attachmentSurface: hint.attachmentSurface ?? null,
     };
@@ -246,7 +246,7 @@ function createStructureAnchors(entries) {
         id: group.id,
         label: group.label,
         kind: group.kind,
-        parentId: null,
+        parentId: group.parentId,
         bounds,
         center: bounds.getCenter(new THREE.Vector3()),
         size: bounds.getSize(new THREE.Vector3()),
@@ -515,6 +515,29 @@ function isTopologyDrivenOpening(recipe, component) {
   return component.kind === 'door' || component.kind === 'window';
 }
 
+const DETAIL_KINDS = new Set(['woodwork', 'metalwork', 'roof', 'foliage']);
+
+/**
+ * A structure built entirely from detail families — a timber cart, an
+ * iron-bound chest — gets no entries of its own, because wood, metal and roof
+ * geometry is always filed under a detail child. Left alone, the empty parent
+ * is pruned and its children orphaned. Fold those children back into it: such
+ * an object is its details. Material regions stay per family, keyed by slot.
+ */
+function foldDetailOnlyStructures(components) {
+  for (const parent of components.values()) {
+    if (parent.kind !== 'structure' || parent.entries.length > 0) continue;
+    for (const child of components.values()) {
+      if (child.parentId !== parent.id || !DETAIL_KINDS.has(child.kind)) continue;
+      for (const entry of child.entries) {
+        entry.componentId = parent.id;
+        parent.entries.push(entry);
+      }
+      child.entries = [];
+    }
+  }
+}
+
 function classifyComponents(entries, recipe) {
   const structures = createStructureAnchors(entries);
   const openings = createOpeningAnchors(entries, recipe, structures);
@@ -552,6 +575,7 @@ function classifyComponents(entries, recipe) {
     entry.componentId = definition.id;
     ensureComponent(components, definition).entries.push(entry);
   }
+  foldDetailOnlyStructures(components);
 
   for (const [componentId, component] of components) {
     if (component.entries.length === 0) {
@@ -562,20 +586,40 @@ function classifyComponents(entries, recipe) {
     component.center = component.bounds.getCenter(new THREE.Vector3());
     component.size = component.bounds.getSize(new THREE.Vector3());
     const floorPivot = ['structure', 'door', 'window', 'opening', 'woodwork'].includes(component.kind);
-    component.pivot = new THREE.Vector3(
-      component.center.x,
-      floorPivot ? component.bounds.min.y : component.center.y,
-      component.center.z,
-    );
+    const origin = component.kind === 'structure' ? component.attachmentSurface?.origin : null;
+    component.pivot = origin
+      ? new THREE.Vector3(...origin)
+      : new THREE.Vector3(
+        component.center.x,
+        floorPivot ? component.bounds.min.y : component.center.y,
+        component.center.z,
+      );
     component.storedTransform = getComponentTransform(recipe.componentTransforms, componentId);
     component.transformPolicy = isTopologyDrivenOpening(recipe, component) ? 'opening2d' : 'free';
     component.transform = component.storedTransform;
     if (component.parentId && !components.has(component.parentId)) {
       throw new Error(`Workshop component ${componentId} has a missing parent.`);
     }
+  }
+  for (const component of components.values()) {
+    component.frameYaw = frameYawOf(component, components);
     Object.freeze(component);
   }
   return components;
+}
+
+/**
+ * A component's frame yaw: its own facade's, or its parent's. Children of a
+ * side wall share the wall's frame, so an opening's local X still runs along
+ * the facade it sits in.
+ */
+function frameYawOf(component, components, depth = 0) {
+  if (component.kind === 'structure' && Number.isFinite(component.attachmentSurface?.yaw)) {
+    return component.attachmentSurface.yaw;
+  }
+  const parent = component.parentId ? components.get(component.parentId) : null;
+  if (!parent || depth > 16) return 0;
+  return Number.isFinite(parent.frameYaw) ? parent.frameYaw : frameYawOf(parent, components, depth + 1);
 }
 
 function componentMetadata(component) {
@@ -585,6 +629,7 @@ function componentMetadata(component) {
     kind: component.kind,
     parentId: component.parentId,
     pivot: Object.freeze(component.pivot.toArray()),
+    frameYaw: component.frameYaw,
     transform: component.transform,
     storedTransform: component.storedTransform,
     transformPolicy: component.transformPolicy,
@@ -597,23 +642,50 @@ function componentMetadata(component) {
   });
 }
 
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+
+function yawQuaternion(yaw) {
+  return new THREE.Quaternion().setFromAxisAngle(Y_AXIS, yaw ?? 0);
+}
+
+/**
+ * Local matrix of a component relative to its parent.
+ *
+ * A component's rest pose is its pivot, turned by its frame yaw. The stored
+ * transform's translation is measured in the parent's frame and its rotation
+ * and scale in the component's own, so a component with no frame yaw (every
+ * archetype before facade frames existed) composes exactly as it always has.
+ */
 function componentLocalMatrix(component, components) {
-  const parentPivot = component.parentId
-    ? components.get(component.parentId).pivot
-    : ZERO;
+  const parent = component.parentId ? components.get(component.parentId) : null;
+  const parentPivot = parent?.pivot ?? ZERO;
+  const parentYaw = parent?.frameYaw ?? 0;
   const transform = component.transformPolicy === 'opening2d'
     ? createIdentityComponentTransform()
     : component.transform;
   const position = component.pivot
     .clone()
     .sub(parentPivot)
+    .applyQuaternion(yawQuaternion(-parentYaw))
     .add(new THREE.Vector3(...transform.position));
-  const quaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(...transform.rotation));
+  const quaternion = yawQuaternion((component.frameYaw ?? 0) - parentYaw)
+    .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...transform.rotation)));
   return new THREE.Matrix4().compose(
     position,
     quaternion,
     new THREE.Vector3(...transform.scale),
   );
+}
+
+/** World geometry → a component's rest frame: un-yaw about its pivot. */
+function restFrameInverse(component) {
+  return new THREE.Matrix4()
+    .makeRotationY(-(component.frameYaw ?? 0))
+    .multiply(new THREE.Matrix4().makeTranslation(
+      -component.pivot.x,
+      -component.pivot.y,
+      -component.pivot.z,
+    ));
 }
 
 function componentWorldMatrix(component, components, cache, visiting = new Set()) {
@@ -637,11 +709,7 @@ function componentWorldMatrix(component, components, cache, visiting = new Set()
 function componentGeometryMatrix(component, components, cache) {
   return componentWorldMatrix(component, components, cache)
     .clone()
-    .multiply(new THREE.Matrix4().makeTranslation(
-      -component.pivot.x,
-      -component.pivot.y,
-      -component.pivot.z,
-    ));
+    .multiply(restFrameInverse(component));
 }
 
 function mergedGeometry(geometries, errorMessage) {
@@ -675,11 +743,7 @@ function buildPreviewParts(entries, components, remesh) {
       materialRegion: entry.materialRegion,
       geometries: [],
     };
-    entry.geometry.translate(
-      -group.component.pivot.x,
-      -group.component.pivot.y,
-      -group.component.pivot.z,
-    );
+    entry.geometry.applyMatrix4(restFrameInverse(group.component));
     group.geometries.push(entry.geometry);
     groups.set(key, group);
   }

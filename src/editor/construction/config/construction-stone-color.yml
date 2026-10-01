@@ -64,3 +64,19 @@ styles:
     outlier:
       chance: 0.04
       multiplier: [0.9, 0.915, 0.905]
+
+  # One warm hue, as in docs/reference/tiny-glade: no cool or grey stones; the
+  # rare outlier goes a shade deeper orange rather than grey.
+  glade-sandstone:
+    enabled: true
+    strength: 0.8
+    warmChance: 0.6
+    neutralChance: 0.4
+    value:
+      min: 0.9
+      max: 1.06
+    warm: [1.05, 0.97, 0.9]
+    cool: [1.0, 0.99, 0.975]
+    outlier:
+      chance: 0.08
+      multiplier: [0.98, 0.84, 0.74]

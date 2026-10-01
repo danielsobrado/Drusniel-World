@@ -427,6 +427,21 @@ export class PlayerController {
     return Object.freeze({ x: this.state.x, z: this.state.z });
   }
 
+  /**
+   * The body's position and footing written into `out`, allocating nothing — for
+   * per-frame readers (the snow wake) that need none of `getStatus`'s copies.
+   *
+   * @param {{ x: number, z: number, footY: number, grounded: boolean, waterState: string }} out
+   */
+  readFooting(out) {
+    out.x = this.state.x;
+    out.z = this.state.z;
+    out.footY = this.state.footY;
+    out.grounded = this.state.grounded;
+    out.waterState = this.state.waterState;
+    return out;
+  }
+
   shiftWorld(shiftX, shiftZ) {
     this.state = {
       ...this.state,

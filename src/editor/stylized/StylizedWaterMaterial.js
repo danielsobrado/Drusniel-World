@@ -45,8 +45,9 @@ import {
 } from './WaterPatternOrigins.js';
 import { createSurfaceClassNodes } from './SurfaceMaskNodes.js';
 import { createWaterfallFoamNode } from './WaterfallShading.js';
-import { createSeaSurfaceNodes } from './SeaSurfaceShading.js';
+import { createSeaSurfaceNodes, seaWaterMask } from './SeaSurfaceShading.js';
 import { createRainRippleNode } from './RainRippleShading.js';
+import { createRiverSurfaceNodes } from './RiverSurfaceShading.js';
 import { seaStateUniforms } from '../water/seaState.js';
 import { skyLightUniforms } from './sky/skyLight.js';
 
@@ -182,6 +183,27 @@ export function createStylizedWaterMaterial({
       config: water.sea,
     })
     : null;
+  // Inland water takes grass-test's surface; the sea keeps its own shading.
+  const fall = fallPlunge ? fallPlunge.x : float(0);
+  const river = water.riverSurface?.enabled && quality.flow && quality.depthOptics && sunDirection
+    ? createRiverSurfaceNodes({
+      patternXZ: surfacePatterns.latticePoint('riverDetail', localXZ),
+      flow: currentFlow,
+      currentStrength,
+      fall,
+      waterDepth,
+      shoreDistance,
+      time,
+      sunDirection: normalize(sunDirection),
+      viewDirection: normalize(cameraPosition.sub(positionWorld)),
+      config: water.riverSurface,
+    })
+    : null;
+  // The sea keeps its own shading, with or without its swell.
+  const inland = !river ? float(1) : oneMinus(sea ? sea.mask : seaWaterMask({
+    surfaceWorldHeight: waterField.g.add(waterSurfaceOrigin),
+    currentStrength,
+  }));
   const distort = surfaceNoise.sub(0.5).mul(water.distortAmount);
   const sampleUv = surfacePatterns.latticePoint('cells', localXZ)
     .add(surfaceOffset)
@@ -232,6 +254,8 @@ export function createStylizedWaterMaterial({
   let surfaceDetailMix = float(0);
   let surfaceReflection = float(0);
   let foamAmount = float(0);
+  // Where the surface's reflection shows: above water, near enough, not on the bank.
+  let reflectionVisibility = float(0);
 
   if (quality.depthOptics) {
     const optics = water.optics;
@@ -275,11 +299,10 @@ export function createStylizedWaterMaterial({
         1,
       )
       : viewCosine;
+    reflectionVisibility = oneMinus(underwaterBlend).mul(fade).mul(waterlineFade);
     surfaceReflection = pow(oneMinus(reflectionCosine), FRESNEL_POWER)
       .mul(quality.fresnelStrength)
-      .mul(oneMinus(underwaterBlend))
-      .mul(fade)
-      .mul(waterlineFade);
+      .mul(reflectionVisibility);
     color = mix(bodyColor, legacyColor, surfaceDetailMix);
     alpha = mix(
       float(optics.minimumOpacity),
@@ -314,8 +337,15 @@ export function createStylizedWaterMaterial({
     );
     foamAmount = max(shoreBand, flowBand)
       .mul(noiseBreakup)
-      .mul(foam.intensity * quality.foamStrength)
-      .mul(waterCoverage);
+      .mul(foam.intensity * quality.foamStrength);
+    // The river's foam replaces the shore and flow bands but keeps the tier's scale.
+    // It has its own strength (`riverSurface.foamStrength`): `foam.intensity`
+    // scales the sea's bands, whose look it was tuned for.
+    if (river) {
+      const riverFoam = river.foam.mul(quality.foamStrength * (water.riverSurface.foamStrength ?? 1));
+      foamAmount = mix(foamAmount, riverFoam, inland);
+    }
+    foamAmount = foamAmount.mul(waterCoverage);
   }
 
   // Whitewater is opaque, so it also lifts the sheet's alpha — applied after
@@ -459,7 +489,15 @@ export function createStylizedWaterMaterial({
     color = mix(
       color,
       colorNode(water.highlightColor).mul(skyLightUniforms.reflectionTint),
-      clamp(surfaceReflection, 0, 1),
+      clamp(river ? surfaceReflection.mul(oneMinus(inland)) : surfaceReflection, 0, 1),
+    );
+  }
+  if (river) {
+    // The donor's own Fresnel over its sky, damped on a fall's white face.
+    color = mix(
+      color,
+      river.sky.mul(skyLightUniforms.reflectionTint),
+      river.fresnel.mul(oneMinus(fall.mul(0.85))).mul(reflectionVisibility).mul(inland),
     );
   }
 
@@ -510,7 +548,14 @@ export function createStylizedWaterMaterial({
   });
   material.positionNode = positionLocal.add(vec3(0, 0, surfaceHeight));
   // Unlit, so it dims with the sky's light itself.
-  material.colorNode = color.mul(skyLightUniforms.brightness);
+  let lit = color.mul(skyLightUniforms.brightness);
+  // The sun's glint is its own light, not the sky's: added after the dimming.
+  if (river) {
+    lit = lit.add(river.glint.mul(skyLightUniforms.sunColor)
+      .mul(inland).mul(waterCoverage).mul(reflectionVisibility)
+      .mul(oneMinus(clamp(foamAmount, 0, 1))));
+  }
+  material.colorNode = lit;
   material.opacityNode = alpha;
   material.alphaTest = 0.02;
   return assignWaterMaterialData(material);

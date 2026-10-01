@@ -13,24 +13,24 @@ built module by module exactly as the view builds it.
 
 | Metric | Previous | Rounded |
 | --- | ---: | ---: |
-| Stones | 414 | 397 |
-| Stone triangles | 34208 | 101632 |
-| Triangles per stone | 82.6 | 256.0 |
-| Mortar triangles | 4968 | 4764 |
-| Module build p50 (ms) | 7.88 | 2.34 |
-| Module build p95 (ms) | 11.49 | 4.06 |
-| Module build max (ms) | 14.51 | 5.04 |
+| Stones | 410 | 409 |
+| Stone triangles | 33256 | 104704 |
+| Triangles per stone | 81.1 | 256.0 |
+| Mortar triangles | 4920 | 5136 |
+| Module build p50 (ms) | 6.03 | 1.89 |
+| Module build p95 (ms) | 9.12 | 4.16 |
+| Module build max (ms) | 10.20 | 6.54 |
 | Footing stones | 0 | 49 |
-| Capstones | 0 | 46 |
+| Capstones | 0 | 45 |
 
 ## Coarse band
 
 | Metric | Previous | Rounded |
 | --- | ---: | ---: |
-| Stone triangles | 6540 | 19520 |
+| Stone triangles | 6832 | 19584 |
 | Triangles per stone | 30.4 | 64.0 |
-| Module build p50 (ms) | 2.00 | 0.52 |
-| Module build p95 (ms) | 3.90 | 1.16 |
+| Module build p50 (ms) | 1.72 | 0.51 |
+| Module build p95 (ms) | 3.44 | 1.13 |
 
 ## Face coverage
 
@@ -40,8 +40,8 @@ every module's stones pooled. The coarse column should match near.
 
 | Wall | Near | Coarse |
 | --- | ---: | ---: |
-| Rounded fieldstone, flat top | 0.02% | 0.03% |
-| Coursed rubble, flat top | 0.04% | 0.16% |
+| Rounded fieldstone, flat top | 0.10% | 0.10% |
+| Coursed rubble, flat top | 0.12% | 0.13% |
 
 ## Gates
 
@@ -49,7 +49,7 @@ every module's stones pooled. The coarse column should match near.
 | --- | --- | --- |
 | Near triangles per stone | ≤ 280 | 256.0 PASS |
 | Coarse triangles per stone | ≤ 72 | 64.0 PASS |
-| Near module build p95 | ≤ previous (11.49 ms) | 4.06 ms PASS |
+| Near module build p95 | ≤ previous (9.12 ms) | 4.16 ms PASS |
 | Meshes per module | 2 | PASS |
 | Vertex buffers | ≤ 4 | 4 PASS |
 | Fallback rate | < 0.5% | 0.000% PASS |
@@ -58,7 +58,7 @@ every module's stones pooled. The coarse column should match near.
 | Capstone course present | yes | PASS |
 | Crenellated and ruined tops build | yes | PASS |
 | Footing reaches the lower ground on a 0.4 cross slope | below -0.18 m | -0.32 m PASS |
-| Coarse band uncovers no more face than near (rounded; coursed, flat top) | < 0.30 points | +0.01; +0.13 PASS |
+| Coarse band uncovers no more face than near (rounded; coursed, flat top) | < 0.30 points | +0.00; +0.02 PASS |
 
 Overall: **PASS**
 

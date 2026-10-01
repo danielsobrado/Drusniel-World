@@ -2,7 +2,6 @@ import * as THREE from 'three/webgpu';
 import {
   attribute,
   cos,
-  dot,
   float,
   max,
   min,
@@ -23,7 +22,7 @@ import {
   stylizedPathWearMask,
 } from './StylizedNoiseNodes.js';
 import { createSurfaceClassNodes } from './SurfaceMaskNodes.js';
-import { sampleWorldWindCanonical } from '../weather/wind/worldWindState.js';
+import { sampleWorldWindCanonical, windWaveCoordinates } from '../weather/wind/worldWindState.js';
 
 function colorNode(value) {
   const color = new THREE.Color(value);
@@ -87,12 +86,16 @@ export function createStylizedFlowerMaterial({
   const windDirection = worldWind.direction;
   const gustScale = worldWind.envelope.clamp(0.35, 3.5);
   const windPerpendicular = vec2(windDirection.y.negate(), windDirection.x);
-  const primary = sin(dot(worldXZ, windDirection).mul(config.wind.frequency)
+  // Wave phase against the prevailing wind, not the local field: on a planet-scale
+  // map the latter scatters neighbouring patches onto unrelated phases
+  // (windWaveCoordinates).
+  const windWave = windWaveCoordinates(worldXZ);
+  const primary = sin(windWave.along.mul(config.wind.frequency)
     .add(time.mul(config.wind.speed)));
-  const secondary = sin(dot(worldXZ, windDirection).mul(config.wind.frequency * 2.6)
+  const secondary = sin(windWave.along.mul(config.wind.frequency * 2.6)
     .add(time.mul(config.wind.speed * 1.8))
     .add(1.3)).mul(0.35);
-  const turbulence = sin(dot(worldXZ, windPerpendicular).mul(config.wind.frequency * 1.9)
+  const turbulence = sin(windWave.across.mul(config.wind.frequency * 1.9)
     .add(time.mul(config.wind.speed * 0.7))
     .add(2.6)).mul(config.wind.turbulence);
   const wind = windDirection.mul(

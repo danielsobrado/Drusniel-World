@@ -2,10 +2,14 @@ water:
   qualityTier: high
   currentAnimationSpeed: 0.22
   currentInfluence: 0.85
+  # Inland water after grass-test's (`WaterMaterial`, river and lake branch): a
+  # dark, clear teal — `#246d70` lit, `#164e52` deep — over a bed it absorbs red
+  # from first. The former bright cyan (#72d8e8 → #0b4a68) with a white cell
+  # pattern over it was this project's own cartoon water.
   optics:
-    shallowColor: '#72d8e8'
-    deepColor: '#0b4a68'
-    underwaterColor: '#15596d'
+    shallowColor: '#246d70'
+    deepColor: '#164e52'
+    underwaterColor: '#10303d'
     absorptionDensity: 0.42
     minimumOpacity: 0.08
     maximumOpacity: 0.94
@@ -17,7 +21,8 @@ water:
     # Thickness over which the sheet fades out at the bank. Keep it under the
     # ~0.12 m the surface sits above terrain, or the waterline reads as a step.
     shorelineFadeDepth: 0.35
-    surfaceDetailStrength: 0.28
+    # The cell pattern the donor never had.
+    surfaceDetailStrength: 0
     underwaterTintStrength: 0.35
   refraction:
     enabled: true
@@ -31,14 +36,17 @@ water:
     depthBiasMeters: 0.15
     mipLevel: 0
     sceneColorStrength: 0.94
-    absorptionCoefficients: [0.72, 0.28, 0.12]
+    # The donor's silty lake/river absorption, 0.22/0.085/0.06 per unit at 2.8
+    # units to the metre.
+    absorptionCoefficients: [0.62, 0.24, 0.17]
   foam:
     enabled: true
-    color: '#e8fbff'
-    intensity: 0.78
+    # The donor's calm river foam (#d6e7db): greener than white, lit with the scene.
+    color: '#d6e7db'
+    intensity: 0.6
     shoreWidth: 1.6
     noiseStrength: 0.42
-    flowStrength: 0.32
+    flowStrength: 0.12
     flowBandScale: 0.58
     flowBandSpeed: 0.42
     flowBandContrast: 2.4
@@ -113,6 +121,29 @@ water:
     filmTintStrength: 0.18
     foamColor: '#edf8fb'
     foamStrength: 0.85
+  # grass-test's lake and river surface (`WaterMaterial`, inland branch): its detail
+  # normals advected along the current, its Fresnel against its sky, its sun glint
+  # (pow 170 × 1.8 + pow 20 × 0.08), and its foam — noise foam in the 0.02–0.75 m
+  # shallows, a fringe along the banks, streaks where the current runs fast. It
+  # replaces the shore and flow-band foam above; the sea keeps its own shading.
+  riverSurface:
+    enabled: true
+    # Scales the donor's detail slopes (0.15 lake, 0.16 river, 0.025 micro).
+    normalStrength: 0.5
+    # Seconds per cross-fade of the two advected detail phases.
+    cycleSeconds: 3
+    # Metres per second the detail drifts on still water (the donor's lake), and
+    # on a river at full current.
+    stillDrift: 0.07
+    currentDrift: 1.2
+    # The donor river speed (its units per second) a full-strength current stands
+    # for: turbulence streaks start at 0.7.
+    fullCurrentSpeed: 3
+    # Scales the donor's shore, bank and turbulence foam on inland water, apart
+    # from `foam.intensity`, which is tuned for the sea's bands.
+    foamStrength: 1
+    # Metres from the bank over which the bank foam fades out (donor 0.1–1.15).
+    bankFoamWidth: 1.15
   # Rain rings on every water surface, as dense and bright as the rain is heavy.
   rainRipples:
     enabled: true
@@ -122,7 +153,8 @@ water:
     # spreading it over a blob, so it needs a *lower* intensity than the old
     # FBM, not a higher one: at 0.5 the filaments read as cracked ice over the
     # whole shallows. Absorption thins it further with depth.
-    intensity: 0.12
+    # The donor's rivers carry no caustics.
+    intensity: 0
     scale: 0.45
     speed: 0.34
     # Filament sharpness, not an exponent: the band is 1/contrast wide in the
@@ -133,7 +165,7 @@ water:
   projectedCaustics:
     enabled: true
     color: '#b9f4e5'
-    intensity: 0.16
+    intensity: 0
     scale: 0.42
     speed: 0.55
     contrast: 2.6

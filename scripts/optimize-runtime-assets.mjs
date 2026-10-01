@@ -93,6 +93,7 @@ function requiredNamesByScene(editorConfig) {
     ...(assets.treeVariants ?? []),
     ...(assets.groundDetailVariants ?? []),
     ...(assets.aquaticVariants ?? []),
+    ...(assets.tropicalKitVariants ?? []),
     ...(assets.wildlifeVariants ?? []),
     // Characters name no extra nodes: verifyNames already requires every named
     // source node — every bone — to survive optimization.

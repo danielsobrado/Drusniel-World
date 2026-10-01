@@ -57,6 +57,7 @@ export function createTerrainWorkerBaseTerrain(baseTerrain) {
     rivers: cloneValue(baseTerrain.rivers ?? []),
     lakes: cloneValue(baseTerrain.lakes ?? []),
     routes: cloneValue(baseTerrain.routes ?? []),
+    ...(baseTerrain.settlements ? { settlements: cloneValue(baseTerrain.settlements) } : {}),
   };
 }
 

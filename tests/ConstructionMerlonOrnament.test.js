@@ -157,6 +157,22 @@ test('a merlon is a pure function of its seed and index', () => {
   assert.ok(shapes.size > 12, `only ${shapes.size} distinct shapes in 32 merlons`);
 });
 
+test('merlons sit on the wall and carry open edges around their crowns and arrow loops', () => {
+  for (const ornament of crown(64)) {
+    const { units, shape } = ornament;
+    const bottom = Math.min(...units.map(unit => unit.y - unit.height / 2));
+    assert.ok(Math.abs(bottom - shape.base) < 1e-9, 'the merlon floats above the body');
+    const top = Math.max(...units.map(unit => unit.y + unit.height / 2));
+    for (const unit of units) {
+      if (Math.abs(unit.y + unit.height / 2 - top) < 1e-6) assert.equal(unit.exposure.top, true);
+      if (Math.abs(unit.y - unit.height / 2 - bottom) < 1e-6) assert.equal(unit.exposure.bottom, false);
+    }
+    assert.ok(units.some(unit => unit.exposure.start));
+    assert.ok(units.some(unit => unit.exposure.end));
+    if (ornament.pierced) assert.ok(units.some(unit => unit.exposure.bottom), 'the arrow-loop soffit is open');
+  }
+});
+
 test('a merlon too narrow to course lays whole rows instead of splinters', () => {
   const { units } = layoutMerlon(
     { s: 3, width: 0.16, base: 3.5, height: 0.72 },

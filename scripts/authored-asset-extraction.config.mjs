@@ -188,6 +188,27 @@ export const AUTHORED_ASSET_EXTRACTIONS = Object.freeze([
     ],
   ),
   source(
+    // grass-test's rock pack, as prepared by scripts/prepare-donor-rock-assets.mjs.
+    // The boulders are placed whole from the pack (rockVariants); only its four
+    // pebble shapes, which the donor strews along paths (MeadowDetails), are
+    // extracted as ground detail, in donor units (the pack's own 0.01 node scale
+    // is already in the baked transform).
+    'donor-rock-pebbles',
+    'assets/runtime-sources/rocks/donor/rocks.glb',
+    'assets/extracted/rocks/donor-pebbles',
+    [
+      // One file, four prototype groups: the four share one painted-stone
+      // texture, which a file each would download and install four times.
+      // 256 px, since the largest is a quarter of a metre across.
+      grouped({
+        name: 'pebbles',
+        roots: ['SM_Rocks_06', 'SM_Rocks_07', 'SM_Rocks_10', 'SM_Rocks_11'],
+        publishDir: 'public/assets/rocks/donor',
+        textureSize: 256,
+      }),
+    ],
+  ),
+  source(
     'stylized-grass',
     'assets/grass/stylized_grass.glb',
     'assets/extracted/ground/stylized-grass',

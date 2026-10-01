@@ -172,6 +172,23 @@
   gap: 4px;
 }
 
+.construction-inspector-match {
+  padding: 8px 10px;
+  border: 1px solid rgb(238 209 154 / 45%);
+  border-radius: 8px;
+  background: #65523a;
+  color: #fff3d9;
+  font: inherit;
+  cursor: pointer;
+}
+
+.construction-inspector-match:hover,
+.construction-inspector-match:focus-visible {
+  background: #806846;
+  outline: 2px solid #edcf93;
+  outline-offset: 2px;
+}
+
 .construction-inspector input,
 .construction-inspector select {
   width: 100%;

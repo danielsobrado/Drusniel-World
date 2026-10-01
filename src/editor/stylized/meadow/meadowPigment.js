@@ -20,8 +20,13 @@ export function meadowPigment({ uniforms, tuning, config, blade }) {
   const patch = meadowNoise(blade.canonical.mul(appearance.patchScale)).mul(0.65)
     .add(meadowNoise(blade.canonical.mul(appearance.patchScale.mul(2.7)).add(19.3)).mul(0.35));
   const tint = mix(uniforms.patchCool, uniforms.patchWarm, smoothstep(0.15, 0.85, patch));
-  const root = mix(tuning.colorBottom, tuning.colorTop, appearance.groundTipMix).mul(tint);
-  let tip = tuning.colorTop.mul(tint);
+  const palette = uniforms.palette;
+  const index = blade.palette.toInt();
+  const bottom = palette ? palette.base.element(index) : tuning.colorBottom;
+  const top = palette ? palette.tip.element(index) : tuning.colorTop;
+  const brightness = palette?.brightness ?? tuning.brightness;
+  const root = mix(bottom, top, appearance.groundTipMix).mul(tint);
+  let tip = top.mul(tint);
   const fringe = config.path?.fringe ?? {};
   if (fringe.enabled !== false) {
     const wear = stylizedPathWearMask(blade.path, blade.canonical, {
@@ -43,7 +48,7 @@ export function meadowPigment({ uniforms, tuning, config, blade }) {
   return {
     pigment,
     bladeValue,
-    color: based.mul(rootShade).mul(variation).mul(bladeValue).mul(tuning.brightness),
+    color: based.mul(rootShade).mul(variation).mul(bladeValue).mul(brightness),
     height,
   };
 }

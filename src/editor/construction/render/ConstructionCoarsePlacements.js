@@ -96,6 +96,9 @@ function mergeCellLeaves(group) {
   const s = (minS + maxS) / 2;
   const y = (minY + maxY) / 2;
   const dominant = selectDominantPlacement(group);
+  const exposure = group.some(leaf => leaf.exposure) ? Object.fromEntries(
+    ['start', 'end', 'top', 'bottom'].map(edge => [edge, group.some(leaf => leaf.exposure?.[edge])]),
+  ) : null;
   // The merged stone occupies every leaf's arc, so its span must too: keeping
   // only the dominant leaf's span made a vertically split cell look half empty
   // to the coverage test, and the course below it then refused to stretch.
@@ -117,6 +120,7 @@ function mergeCellLeaves(group) {
 
   return {
     ...dominant,
+    ...(exposure ? { exposure } : {}),
     support,
     s,
     y,
@@ -163,6 +167,7 @@ function mergeSplitCells(field) {
 }
 
 export function amplifyCoarseJoints(placement, profile) {
+  if (placement.contourPolygons) return placement;
   if (!placement.corners || !placement.jointWidths || !placement.mortarCorners) {
     return placement;
   }
@@ -231,7 +236,13 @@ export function coarsePlacements(placements, { styleKey = null, courseRangeAt = 
     // Footing stones are a course of their own height: pairing them with the
     // course above would stretch them by the wrong step, and there are few
     // enough of them to keep whole.
-    if (placement.category === 'field' && !placement.footing) field.push(placement);
+    //
+    // Stones fitted around an opening keep the opening's contour, so they are
+    // kept whole too; and because they leave the courses, no stone below is
+    // judged covered by them and stretched into the void.
+    // Crown stones retain the exposed edge used to recess their mortar.
+    if (placement.category === 'field'
+      && !placement.footing && !placement.openingFit && !placement.exposure?.top) field.push(placement);
     else rest.push(placement);
   }
   if (field.length === 0) return placements;

@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { beveledBox, beveledQuadPrism } from '../../workshop/ProceduralWorkshopGeometry.js';
 import { stoneJitter } from '../../workshop/ProceduralWorkshopIrregularity.js';
 import {
@@ -11,6 +12,7 @@ import { constructionStyle } from '../masonry/ConstructionStyleCatalog.js';
 import { sampleStonePillow } from '../masonry/StonePillowField.js';
 import { CONSTRUCTION_MATERIAL_SLOT } from '../render/ConstructionMaterialSlots.js';
 import { mortarConfigForStyle } from '../render/ConstructionMortarConfig.js';
+import { createArcBendTable, createStoneBend } from './ConstructionArcBend.js';
 import { createArcGroundTable, createStoneDrape } from './ConstructionArcGround.js';
 import { buildMortarCoreGeometry } from './ConstructionMortarCoreBuilder.js';
 import { estimatePillowStone, writePillowStone } from './ConstructionPillowStoneMesher.js';
@@ -25,6 +27,8 @@ import {
 } from './ConstructionStoneShape.js';
 import { MasonryVertexWriter } from './MasonryVertexWriter.js';
 import { createRoundedStoneShader } from './RoundedStoneShading.js';
+import { constructionStoneExposure } from './ConstructionStoneExposure.js';
+import { writeContourStone } from './ConstructionContourStone.js';
 
 /**
  * Module masonry for styles whose `geometry` is `rounded`.
@@ -165,10 +169,21 @@ function appendFallbackStone(writer, {
     hasCustomStoneMaterial,
   });
   const position = geometry.getAttribute('position');
+  const normal = geometry.getAttribute('normal');
   const ground = [0, 0];
+  const bent = [0, 0, 0, 0];
   for (let index = 0; index < position.count; index += 1) {
-    drape.sample(position.getX(index), position.getZ(index), ground);
+    const x = position.getX(index);
+    const z = position.getZ(index);
+    drape.sample(x, z, ground);
     position.setY(index, position.getY(index) + ground[0]);
+    if (drape.bend) {
+      drape.bend(x, z, normal.getX(index), normal.getZ(index), bent);
+      position.setX(index, bent[0]);
+      position.setZ(index, bent[1]);
+      normal.setX(index, bent[2]);
+      normal.setZ(index, bent[3]);
+    }
   }
   writer.append({
     positions: position.array,
@@ -239,6 +254,12 @@ export function buildRoundedModuleMasonry(placements, {
     from: minS - GROUND_MARGIN,
     to: maxS + GROUND_MARGIN,
   });
+  const bendTable = createArcBendTable({
+    arcTable,
+    moduleOrigin,
+    from: minS - GROUND_MARGIN,
+    to: maxS + GROUND_MARGIN,
+  });
 
   const estimate = estimatePillowStone(lod);
   const writer = new MasonryVertexWriter({
@@ -246,6 +267,7 @@ export function buildRoundedModuleMasonry(placements, {
     indices: estimate.triangles * 3 * placements.length,
   });
   const mortarDescriptors = [];
+  const contourMortar = new MasonryVertexWriter();
   const albedo = new Float32Array(3);
 
   for (const placement of placements) {
@@ -264,12 +286,21 @@ export function buildRoundedModuleMasonry(placements, {
       rotation: [0, frame.yaw, placement.roll],
     };
     const category = placement.category ?? 'field';
+    const exposure = constructionStoneExposure(placement, {
+      totalLength: arcTable.totalLength, closed: record.path.closed,
+    });
     const shaped = dampProtrusion(
       stoneJitter(recipe, params, placement.stableIndex, category),
       params.position,
       profile.protrusionScale,
     );
-    const shape = resolveStoneShape({ placement, params, shaped, detail: style.detail });
+    const shape = resolveStoneShape({
+      placement,
+      params,
+      shaped,
+      detail: style.detail,
+      exactFit: Boolean(style.exactFit),
+    });
     const burial = footingBurial({
       footing: style.footing,
       frame,
@@ -283,12 +314,26 @@ export function buildRoundedModuleMasonry(placements, {
     const corners = burial > 0 ? lowerBottomCorners(faceCorners, burial) : faceCorners;
     if (placement.footing) stats.footingStones += 1;
 
+    const drapeFrame = {
+      s: placement.s,
+      x: center[0],
+      z: center[2],
+      tangentX: frame.tangentX,
+      tangentZ: frame.tangentZ,
+    };
     const drape = createStoneDrape(ground, {
       s: placement.s,
       centerX: center[0],
       centerZ: center[2],
       tangentX: frame.tangentX,
       tangentZ: frame.tangentZ,
+      bend: createStoneBend(bendTable, {
+        s: placement.s,
+        x: frame.x - moduleOrigin.x,
+        z: frame.z - moduleOrigin.z,
+        tangentX: frame.tangentX,
+        tangentZ: frame.tangentZ,
+      }),
     });
     const pillow = sampleStonePillow({
       profile,
@@ -313,7 +358,12 @@ export function buildRoundedModuleMasonry(placements, {
       occlusion: profile.occlusion,
     });
 
-    const written = writePillowStone(writer, {
+    const written = placement.contourPolygons ? writeContourStone(writer, {
+      polygons: placement.contourPolygons,
+      depth: placement.depth,
+      position: center,
+      rotation: params.rotation,
+    }, { shade, drape, exposure }) : writePillowStone(writer, {
       corners,
       depth: shape.depth,
       position: shape.position,
@@ -324,6 +374,7 @@ export function buildRoundedModuleMasonry(placements, {
       shade,
       creviceReach: profile.occlusion.creviceReach,
       drape,
+      exposure,
     });
     if (written) {
       stats.roundedStones += 1;
@@ -343,6 +394,14 @@ export function buildRoundedModuleMasonry(placements, {
       });
     }
 
+    if (placement.contourPolygons) {
+      writeContourStone(contourMortar, {
+        polygons: placement.mortarPolygons ?? [],
+        depth: Math.max(0.05, placement.depth - mortarConfig.faceRecess * 2),
+        position: center, rotation: params.rotation, bevel: 0,
+      }, { drape, shade: out => { out[0] = 1; out[1] = 1; out[2] = 1; } });
+      continue;
+    }
     const mortarPlacement = burial > 0 && placement.mortarCorners
       ? { ...placement, mortarCorners: lowerBottomCorners(placement.mortarCorners, burial) }
       : placement;
@@ -352,17 +411,13 @@ export function buildRoundedModuleMasonry(placements, {
       nominalPosition: params.position,
       nominalRotation: params.rotation,
       config: mortarConfig,
+      exposure,
     });
     if (descriptor) {
       mortarDescriptors.push({
         ...descriptor,
-        drapeFrame: {
-          s: placement.s,
-          x: center[0],
-          z: center[2],
-          tangentX: frame.tangentX,
-          tangentZ: frame.tangentZ,
-        },
+        drapeFrame,
+        bend: drape.bend,
       });
     }
   }
@@ -373,6 +428,7 @@ export function buildRoundedModuleMasonry(placements, {
   const stoneGeometry = stoneGeometryFromArrays(arrays);
 
   const mortarStarted = now();
+  const bentMortar = [0, 0, 0, 0];
   let mortarGeometry = null;
   try {
     mortarGeometry = buildMortarCoreGeometry(mortarDescriptors, {
@@ -381,11 +437,26 @@ export function buildRoundedModuleMasonry(placements, {
           + (x - drapeFrame.x) * drapeFrame.tangentX
           + (z - drapeFrame.z) * drapeFrame.tangentZ,
       ),
+      bend: (descriptor, point) => {
+        descriptor.bend(point.x, point.z, 0, 0, bentMortar);
+        point.x = bentMortar[0];
+        point.z = bentMortar[1];
+      },
       openings,
     });
   } catch (error) {
     stoneGeometry.dispose();
     throw error;
+  }
+  if (contourMortar.vertexCount) {
+    const fitted = stoneGeometryFromArrays(contourMortar.toArrays());
+    if (mortarGeometry) {
+      // Prism mortar has no colour attribute; both batches use the same material.
+      fitted.deleteAttribute('color');
+      const combined = mergeGeometries([mortarGeometry, fitted]);
+      mortarGeometry.dispose(); fitted.dispose();
+      mortarGeometry = combined;
+    } else mortarGeometry = fitted;
   }
   stats.mortarBuildMs = now() - mortarStarted;
 

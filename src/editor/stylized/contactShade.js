@@ -15,23 +15,26 @@
 
 export const DEFAULT_CONTACT_SHADE = Object.freeze({
   enabled: true,
-  // Canopy scale, not trunk scale, and that is forced by the texture rather than
-  // chosen: the ground texture is 16 texels over a 128 m chunk, so one texel is
-  // eight metres and a trunk-width patch is a fraction of a texel — it would paint
-  // nothing at all. A patch the size of the tree's own canopy is a texel or two and
-  // is what a stand of trees actually darkens the ground with.
-  radiusPerScale: 7,
-  treeStrength: 0.8,
-  rockStrength: 0.65,
+  // The donor's footprints, at trunk scale now that the ground texture has 2 m
+  // texels (forestFloorTexture.js): `trunk · 3 + 3` round a tree and
+  // `radius · 1.5 + 1` round a stone. A patch is `base + radiusPerScale · scale`
+  // metres; 1.2 a unit of scale stands for the donor's trunk and stone radii.
+  treeRadius: 3,
+  rockRadius: 1,
+  radiusPerScale: 1.2,
+  treeStrength: 1,
+  rockStrength: 0.8,
 });
 
 export function resolveContactShade(config) {
   const configured = config?.contactShade;
   if (configured?.enabled === false) return null;
   const settings = { ...DEFAULT_CONTACT_SHADE, ...(configured ?? {}) };
-  const radius = Number(settings.radiusPerScale);
-  if (!Number.isFinite(radius) || radius < 0) {
-    throw new Error('Invalid editor configuration: contactShade.radiusPerScale must not be negative.');
+  for (const key of ['treeRadius', 'rockRadius', 'radiusPerScale']) {
+    const value = Number(settings[key]);
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error(`Invalid editor configuration: contactShade.${key} must not be negative.`);
+    }
   }
   for (const key of ['treeStrength', 'rockStrength']) {
     const value = Number(settings[key]);
@@ -40,6 +43,18 @@ export function resolveContactShade(config) {
     }
   }
   return settings;
+}
+
+/**
+ * The patch round one tree or stone, in metres.
+ *
+ * @param {object} settings resolved contact shade
+ * @param {'tree' | 'rock'} kind
+ * @param {number} scale the placement's scale
+ */
+export function contactShadeRadius(settings, kind, scale = 1) {
+  const base = kind === 'tree' ? settings.treeRadius : settings.rockRadius;
+  return base + settings.radiusPerScale * (Number.isFinite(scale) ? scale : 1);
 }
 
 /**

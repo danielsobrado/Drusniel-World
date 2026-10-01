@@ -2,9 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   DEFAULT_CONTACT_SHADE,
+  contactShadeRadius,
   paintContactShade,
   resolveContactShade,
 } from '../src/editor/stylized/contactShade.js';
+import {
+  FOREST_FLOOR_CANOPY_SAMPLES,
+  FOREST_FLOOR_SIZE,
+  writeForestFloorCanopy,
+} from '../src/editor/stylized/forestFloorTexture.js';
 
 const SIZE = 16;
 const CHUNK = 128;
@@ -140,4 +146,39 @@ test('the config resolves, and disabling it resolves to nothing', () => {
   assert.equal(resolveContactShade({}).radiusPerScale, DEFAULT_CONTACT_SHADE.radiusPerScale);
   assert.throws(() => resolveContactShade({ contactShade: { treeStrength: 2 } }), /must be within \[0, 1\]/);
   assert.throws(() => resolveContactShade({ contactShade: { radiusPerScale: -1 } }), /must not be negative/);
+  assert.throws(() => resolveContactShade({ contactShade: { treeRadius: -1 } }), /treeRadius must not be negative/);
+});
+
+test('patches follow the donor: trunk · 3 + 3 round a tree, radius · 1.5 + 1 round a stone', () => {
+  const settings = resolveContactShade({});
+  // A unit-scale tree's patch is about four metres, a stone's two: two texels
+  // or more on the 2 m ground texture, so both actually paint.
+  assert.ok(Math.abs(contactShadeRadius(settings, 'tree', 1) - 4.2) < 1e-9);
+  assert.ok(Math.abs(contactShadeRadius(settings, 'rock', 1) - 2.2) < 1e-9);
+  assert.ok(contactShadeRadius(settings, 'tree', 2) > contactShadeRadius(settings, 'tree', 1));
+  assert.equal(contactShadeRadius(settings, 'rock', Number.NaN), contactShadeRadius(settings, 'rock', 1));
+});
+
+test('the forest floor keeps the canopy coarse and upsamples it smoothly', () => {
+  const size = FOREST_FLOOR_SIZE;
+  const samples = FOREST_FLOOR_CANOPY_SAMPLES;
+  const pixels = new Uint8Array(size * size * 4).fill(77);
+  let calls = 0;
+  writeForestFloorCanopy({
+    pixels,
+    size,
+    samples,
+    // A ramp from west to east.
+    canopyAt: (x) => { calls += 1; return x / (samples - 1); },
+  });
+  // The habitat is sampled at the old 16 × 16, not per texel.
+  assert.equal(calls, samples * samples);
+  const row = Array.from({ length: size }, (_, x) => pixels[(10 * size + x) * 4]);
+  assert.equal(row[0], 0);
+  assert.equal(row[size - 1], 255);
+  for (let x = 1; x < size; x += 1) assert.ok(row[x] >= row[x - 1], 'the ramp must not step back');
+  // Shade and blue are cleared for the contact pass; alpha is opaque.
+  assert.equal(pixels[1], 0);
+  assert.equal(pixels[2], 0);
+  assert.equal(pixels[3], 255);
 });

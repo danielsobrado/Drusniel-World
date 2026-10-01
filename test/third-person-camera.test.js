@@ -115,3 +115,29 @@ test('third-person view follows the player camera far range', () => {
   assert.equal(activeCamera, thirdPersonCamera.camera);
   assert.equal(activeCamera.far, 24000);
 });
+
+test('a lifted camera sits above the boom and tilts down to keep the pivot in aim', () => {
+  const flat = { heightAt: () => 0 };
+  const level = new ThirdPersonCamera({ terrain: flat, fovDegrees: 52, farPlane: 5000, config: { distance: 4, pivotHeight: 1, shoulder: 0 } });
+  const lifted = new ThirdPersonCamera({ terrain: flat, fovDegrees: 52, farPlane: 5000, config: { distance: 4, pivotHeight: 1, shoulder: 0, lift: 0.5 } });
+  level.update(1 / 60, status());
+  lifted.update(1 / 60, status());
+  assert.ok(Math.abs(lifted.camera.position.y - level.camera.position.y - 0.5) < 1e-9);
+  assert.ok(Math.abs(lifted.camera.rotation.x + Math.atan2(0.5, 4)) < 1e-9, 'pitched down by atan(lift / boom)');
+  // Aimed at the pivot (0, 1, 0): the view ray passes through it.
+  const forward = lifted.camera.getWorldDirection(lifted.camera.position.clone());
+  const toPivot = { x: -lifted.camera.position.x, y: 1 - lifted.camera.position.y, z: -lifted.camera.position.z };
+  const length = Math.hypot(toPivot.x, toPivot.y, toPivot.z);
+  assert.ok(Math.abs(forward.y - toPivot.y / length) < 1e-6);
+  assert.throws(() => createThirdPersonCameraSettings({ lift: -1 }), /lift/);
+});
+
+test('third-person camera takes its own lens when configured', () => {
+  const follow = new ThirdPersonCamera({ terrain: { heightAt: () => 0 }, fovDegrees: 68, farPlane: 5000 });
+  assert.equal(follow.camera.fov, 68);
+  const own = new ThirdPersonCamera({
+    terrain: { heightAt: () => 0 }, fovDegrees: 68, farPlane: 5000, config: { fovDegrees: 45 },
+  });
+  assert.equal(own.camera.fov, 45);
+  assert.throws(() => createThirdPersonCameraSettings({ fovDegrees: 180 }), /fovDegrees/);
+});

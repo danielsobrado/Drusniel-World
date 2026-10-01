@@ -24,6 +24,7 @@ import {
 import { coarsePlacements } from '../src/editor/construction/render/ConstructionLod.js';
 import { CONSTRUCTION_MORTAR_CONFIG } from '../src/editor/construction/render/ConstructionMortarConfig.js';
 import { buildMortarCoreGeometry } from '../src/editor/construction/compile/ConstructionMortarCoreBuilder.js';
+import { openingHalfWidthAt } from '../src/editor/construction/masonry/OpeningLayout.js';
 
 const STYLE = constructionStyle('coursed-rubble');
 
@@ -336,7 +337,19 @@ test('opening-edge mortar stays on the surviving interval', () => {
   const jambLeft = arch.s - arch.width / 2;
   const jambRight = arch.s + arch.width / 2;
   const field = packed.stones.filter((stone) => stone.category === 'field');
+  let fittedCores = 0;
   for (const stone of field) {
+    if (stone.contourPolygons) {
+      for (const [x, y] of (stone.mortarPolygons ?? []).flat(2)) {
+        const halfWidth = openingHalfWidthAt(arch, stone.y + y);
+        if (halfWidth != null) {
+          assert.ok(Math.abs(stone.s + x - arch.s) >= halfWidth - 0.001,
+            'fitted backing must stay outside the opening contour');
+        }
+      }
+      fittedCores += Number(stone.mortarPolygons?.length > 0);
+      continue;
+    }
     if (!stone.mortarCorners) continue;
     const descriptor = createMortarDescriptor({
       placement: stone,
@@ -354,6 +367,7 @@ test('opening-edge mortar stays on the surviving interval', () => {
       assert.ok(minX >= jambRight - CONSTRUCTION_MORTAR_CONFIG.safetyOverlap - 1e-4);
     }
   }
+  assert.ok(fittedCores > 0, 'the test must inspect fitted arch backing');
 });
 
 test('wide soft-limestone joints still cover adjacent backing', () => {

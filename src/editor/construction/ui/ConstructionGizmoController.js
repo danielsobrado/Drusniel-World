@@ -129,6 +129,7 @@ export class ConstructionGizmoController {
       },
       { id: 'cut', label: 'Cut an opening', slot: 'top', icon: icon('cut') },
       { id: 'properties', label: 'Wall properties', slot: 'bottom', icon: icon('settings') },
+      { id: 'match', label: 'Draw matching wall', slot: 'bottom-right', icon: icon('bond-coursed-rubble') },
       { id: 'delete', label: 'Delete wall', slot: 'left', icon: icon('trash') },
       {
         // Visible because it has to be: Ctrl now means "suppress snapping"
@@ -218,6 +219,14 @@ export class ConstructionGizmoController {
 
   action(action) {
     if (!this.constructionId) return;
+    if (action === 'match') {
+      const id = this.constructionId;
+      this.close();
+      if (this.controller.drawMatchingConstruction(id)) {
+        this.onStatus?.('Draw another wall with this look.');
+      }
+      return;
+    }
     if (action === 'openings') {
       if (this.grid.isOpen) this.closeGrid();
       else this.grid.open({ ...this.anchor, groups: this.openingGroups() });

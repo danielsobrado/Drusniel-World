@@ -15,7 +15,7 @@
  */
 
 import * as THREE from 'three';
-import { float, max, mix, smoothstep, texture, uniform } from 'three/tsl';
+import { dot, float, max, mix, smoothstep, texture, uniform, vec2 } from 'three/tsl';
 
 export const WIND_TEXTURE_SIZE = 128;
 /** Metres the texture spans. At 128 texels that is 3 m per texel. */
@@ -71,6 +71,40 @@ export function sampleWorldWind(worldXZ) {
  */
 export function sampleWorldWindCanonical(canonicalXZ) {
   return sampleWindWindow(canonicalXZ.sub(worldWindUniforms.windowCenterCanonical));
+}
+
+/**
+ * A render-space position in canonical metres, from the two window centres the
+ * wind pass keeps in step — for materials that only know render space.
+ *
+ * @param {object} renderXZ TSL vec2
+ */
+export function canonicalFromRender(renderXZ) {
+  return renderXZ.add(worldWindUniforms.windowCenterCanonical.sub(worldWindUniforms.windowCenter));
+}
+
+/**
+ * Where a canonical point sits in the travelling wind waves: metres along and
+ * across the PREVAILING direction.
+ *
+ * A wave's phase must not be taken against the local field direction. That
+ * direction curls from texel to texel, and on a planet-scale map a canonical
+ * position is hundreds of kilometres long, so a thousandth of a radian of curl
+ * moves `dot(position, direction)` by hundreds of metres: neighbouring patches
+ * fall onto unrelated phases and the sward breaks into swaths that sway apart.
+ * The prevailing direction is one value for the whole world, so every stem
+ * shares one wave; the local field still sets which way a stem bends and how
+ * hard the gust pushes it.
+ *
+ * @param {object} canonicalXZ TSL vec2, canonical position
+ * @returns {{ along: object, across: object }}
+ */
+export function windWaveCoordinates(canonicalXZ) {
+  const { prevailing } = worldWindUniforms;
+  return {
+    along: dot(canonicalXZ, prevailing),
+    across: dot(canonicalXZ, vec2(prevailing.y.negate(), prevailing.x)),
+  };
 }
 
 /** @param {object} offset TSL vec2, metres from the window centre */

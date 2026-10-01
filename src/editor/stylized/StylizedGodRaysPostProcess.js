@@ -17,6 +17,7 @@ import {
 } from 'three/tsl';
 import { buildDustGodRays } from './GodRaysScreenScattering.js';
 import { setPipelineOutput } from './pipelineOutput.js';
+import { createFinishUniforms } from './cinematicFinish.js';
 export {
   advectedDustDensityReference,
   dustModulationReference,
@@ -144,10 +145,14 @@ export class StylizedGodRaysPostProcess {
     config,
     sunDirection,
     sunColor,
+    finish = null,
   }) {
     this.renderer = renderer;
     this.scene = scene;
     this.config = config ?? {};
+    // The donor's grade and bloom on the walking frame (cinematicFinish.js).
+    this.finish = finish?.enabled ? finish : null;
+    this.finishUniforms = this.finish ? createFinishUniforms(this.finish) : null;
     this.config.volumetric ??= {};
     this.enabled = Boolean(config?.enabled);
     this.technique = GOD_RAY_TECHNIQUES.includes(config?.technique)
@@ -242,6 +247,10 @@ export class StylizedGodRaysPostProcess {
     return this.cloudPass ? this.cloudPass.getTextureNode('output') : null;
   }
 
+  finishFor(beauty) {
+    return this.finish ? { beauty, settings: this.finish, uniforms: this.finishUniforms } : null;
+  }
+
   ensureScreenPipeline(camera) {
     this.ensureScenePass(camera);
     if (this.screenPipeline) return this.screenPipeline;
@@ -270,7 +279,7 @@ export class StylizedGodRaysPostProcess {
     this.screenPipeline = setPipelineOutput(new THREE.RenderPipeline(this.renderer), vec4(
       beauty.rgb.add(this.raysTexture.sample(screenUV).rgb.mul(this.tint).mul(this.lightScale)),
       beauty.a,
-    ), { fxaa: this.config.fxaa !== false });
+    ), { fxaa: this.config.fxaa !== false, finish: this.finishFor(beauty) }).pipeline;
     return this.screenPipeline;
   }
 
@@ -334,7 +343,7 @@ export class StylizedGodRaysPostProcess {
     this.volumetricPipeline = setPipelineOutput(new THREE.RenderPipeline(this.renderer), vec4(
       beauty.rgb.add(this.tint.mul(this.lightScale).mul(rayAmount)),
       beauty.a,
-    ), { fxaa: this.config.fxaa !== false });
+    ), { fxaa: this.config.fxaa !== false, finish: this.finishFor(beauty) }).pipeline;
     this.volumetricCamera = camera;
     return this.volumetricPipeline;
   }

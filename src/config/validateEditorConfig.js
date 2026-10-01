@@ -722,6 +722,11 @@ function validateStylizedSurface(config) {
     if (variant.prototypeGroups !== undefined) {
       assertPrototypeGroups(variant.prototypeGroups, `${path}.prototypeGroups`);
     }
+    // Where the placement stands the tree: the middle of its bounds (default) or
+    // the foot of its trunk, for crowns that lean far off their stem.
+    if (variant.pivot !== undefined && variant.pivot !== 'bounds' && variant.pivot !== 'trunk') {
+      throw new Error(`Invalid editor configuration: ${path}.pivot must be 'bounds' or 'trunk'.`);
+    }
     // Trees pick their prototype through the species registry, so only the biome
     // gate applies here; regional character and canopy are already expressed by
     // the forest habitat field that placed the tree.
@@ -772,10 +777,11 @@ function validateStylizedSurface(config) {
   for (const [layerName, variantsName] of [
     ['groundDetails', 'groundDetailVariants'],
     ['aquaticPlants', 'aquaticVariants'],
+    ['tropicalKit', 'tropicalKitVariants'],
   ]) {
     const variants = surface.assets?.[variantsName] ?? [];
     const collectionPath = `stylizedSurface.assets.${variantsName}`;
-    if (!Array.isArray(variants) || (surface[layerName].enabled && variants.length === 0)) {
+    if (!Array.isArray(variants) || (surface[layerName]?.enabled && variants.length === 0)) {
       throw new Error(
         `Invalid editor configuration: ${collectionPath} must be a non-empty array when ${layerName} are enabled.`,
       );
@@ -809,6 +815,9 @@ function validateStylizedSurface(config) {
       if (variant.heightOffset !== undefined && !Number.isFinite(variant.heightOffset)) {
         throw new Error(`Invalid editor configuration: ${path}.heightOffset must be finite.`);
       }
+      if (variant.sway !== undefined && typeof variant.sway !== 'boolean') {
+        throw new Error(`Invalid editor configuration: ${path}.sway must be boolean.`);
+      }
       if (variant.prototypeHeightOffsets !== undefined) {
         if (!Array.isArray(variant.prototypeHeightOffsets)
             || variant.prototypeHeightOffsets.length !== variant.prototypeGroups.length
@@ -835,9 +844,17 @@ function validateStylizedSurface(config) {
         if (!placement || typeof placement !== 'object' || Array.isArray(placement)) {
           throw new Error(`Invalid editor configuration: ${placementPath} must be an object.`);
         }
+        if (placement.strategy === 'path-interior') {
+          if (!Number.isInteger(placement.insetCells) || placement.insetCells < 1) {
+            throw new Error(
+              `Invalid editor configuration: ${placementPath}.insetCells must be a positive integer.`,
+            );
+          }
+          return;
+        }
         if (placement.strategy !== 'shoreline-colonies') {
           throw new Error(
-            `Invalid editor configuration: ${placementPath}.strategy must be shoreline-colonies.`,
+            `Invalid editor configuration: ${placementPath}.strategy must be shoreline-colonies or path-interior.`,
           );
         }
         for (const field of ['supercellSize', 'radius']) {

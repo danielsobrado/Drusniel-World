@@ -152,6 +152,32 @@ export const STONE_PALETTES = Object.freeze({
     outlier: [156, 146, 128],
     outlierChance: 0.05,
   }),
+
+  /**
+   * `glade-sandstone`: one warm peach-to-sand hue, as in the references —
+   * gentle per-stone variation, a few lighter blocks, nothing dark.
+   *
+   * Construction stones use palette values directly as linear vertex-colour
+   * multipliers. The references' sRGB peach (#ecbc88 and neighbours) stored
+   * as-is displayed as a pale cream the cool sky light turned grey; fully
+   * converted to linear it turned muddy brown, because the references also owe
+   * their brightness to warm bounce light this scene does not have. These are
+   * the sRGB values raised to 1.4 — warm and still high-key.
+   */
+  'glade-sandstone': defineStonePalette({
+    base: [250, 168, 94],
+    warm: [252, 176, 100],
+    color: '#faa85e',
+    ramp: [
+      [250, 172, 98],
+      [244, 162, 90],
+      [252, 180, 106],
+      [248, 166, 94],
+      [240, 158, 88],
+    ],
+    outlier: [252, 188, 114],
+    outlierChance: 0.06,
+  }),
 });
 
 /**
@@ -388,6 +414,16 @@ function createImportedAlbedoResolver(recipe) {
   };
 }
 
+/** Base colour of the foliage family; per-leaf vertex colours multiply it. */
+export const FOLIAGE_BASE_COLOR = '#4c8a37';
+
+/** Archetypes whose `mortar` family is a rendered wall shell rather than joint mortar. */
+const PLASTERED_ARCHETYPES = new Set(['manor', 'house']);
+
+export function hasPlasterWalls(recipe) {
+  return PLASTERED_ARCHETYPES.has(recipe.archetype) && recipe.finish !== 'masonry';
+}
+
 function tagWorkshopMaterial(material, slot) {
   material.userData.workshopSlot = slot;
   return material;
@@ -421,7 +457,7 @@ export function hasImportedAlbedoFamily(recipe, family) {
   if (family === 'roof') {
     resolved = slot('roof');
   } else {
-    const wallsAreStone = recipe.archetype !== 'manor' || recipe.finish === 'masonry';
+    const wallsAreStone = !hasPlasterWalls(recipe);
     resolved = slot('stone') || (wallsAreStone && slot('walls'));
   }
   byFamily.set(family, resolved);
@@ -607,7 +643,7 @@ export function createWorkshopMaterials(recipe) {
   const importedAlbedo = createImportedAlbedoResolver(recipe);
   const wallAlbedo = importedAlbedo('walls');
   const explicitStoneAlbedo = importedAlbedo('stone');
-  const wallsAreStone = recipe.archetype !== 'manor' || recipe.finish === 'masonry';
+  const wallsAreStone = !hasPlasterWalls(recipe);
   const stoneAlbedo = explicitStoneAlbedo ?? (wallsAreStone ? importedAlbedo('walls') : null);
   const roofAlbedo = importedAlbedo('roof');
   const woodAlbedo = importedAlbedo('wood');
@@ -744,7 +780,7 @@ export function createWorkshopMaterials(recipe) {
       side: THREE.DoubleSide,
     }), 'metal'),
     foliage: tagWorkshopMaterial(new THREE.MeshStandardNodeMaterial({
-      color: '#4c8a37',
+      color: FOLIAGE_BASE_COLOR,
       // Per-leaf tint and a base-to-tip gradient, baked by `leaf()`. Vines carry
       // no colour of their own and are filled white at merge time.
       vertexColors: true,
@@ -759,5 +795,15 @@ export function createWorkshopMaterials(recipe) {
       emissive: '#071216',
       emissiveIntensity: 0.18,
     }), 'recess'),
+    // Lit lantern glass and hearth embers. Emissive rather than a light source:
+    // a baked object may be placed hundreds of times, and a real light per
+    // placement would not scale.
+    glow: tagWorkshopMaterial(new THREE.MeshStandardNodeMaterial({
+      color: '#ffe2a8',
+      roughness: 0.35,
+      metalness: 0,
+      emissive: '#ffae45',
+      emissiveIntensity: 1.6,
+    }), 'glow'),
   });
 }

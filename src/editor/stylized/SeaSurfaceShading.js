@@ -32,6 +32,17 @@ import { seaStateUniforms } from '../water/seaState.js';
  * Evaluated per vertex and interpolated: the shortest component is 7.5 m, over
  * a 2 m grid.
  */
+/**
+ * How much of the water here is sea, 0..1. The water field has no kind channel,
+ * so the sea is water standing at the world's still-water level with no current:
+ * lakes sit at their own level and rivers flow. Needs no swell, so it holds with
+ * the swell switched off too.
+ */
+export function seaWaterMask({ surfaceWorldHeight, currentStrength }) {
+  return oneMinus(smoothstep(0.05, 0.3, abs(surfaceWorldHeight.sub(seaStateUniforms.seaLevel))))
+    .mul(oneMinus(clamp(currentStrength.mul(4), 0, 1)));
+}
+
 export function createSeaSurfaceNodes({
   terrainUv,
   chunkWorldSize,
@@ -44,7 +55,7 @@ export function createSeaSurfaceNodes({
   sunDirection,
   config,
 }) {
-  const { storm, seaLevel } = seaStateUniforms;
+  const { storm } = seaStateUniforms;
   // Metres from the chunk centre on canonical axes, matching the chunk's world position.
   const localXZ = vec2(
     terrainUv.x.sub(0.5).mul(chunkWorldSize),
@@ -52,8 +63,7 @@ export function createSeaSurfaceNodes({
   );
   const sharpness = float(config.choppiness * 0.075).mul(storm.mul(0.5).add(1));
   const swell = createSeaSwellNodes({ localXZ, phaseOrigin, time, sharpness });
-  const seaMask = oneMinus(smoothstep(0.05, 0.3, abs(surfaceWorldHeight.sub(seaLevel))))
-    .mul(oneMinus(clamp(currentStrength.mul(4), 0, 1)));
+  const seaMask = seaWaterMask({ surfaceWorldHeight, currentStrength });
   const offshore = float(config.amplitude).mul(storm.mul(config.stormScale - 1).add(1));
   const amplitude = min(offshore, waterDepth.mul(config.depthRatio))
     .mul(smoothstep(0, config.shallowDepth, waterDepth))
@@ -88,6 +98,8 @@ export function createSeaSurfaceNodes({
   return {
     displacement: swell.height.mul(amplitude),
     normal,
+    // How much of this water is sea, 0..1: at sea level and without a current.
+    mask: seaMask,
     shade(color, highlight) {
       const shaded = color.mul(float(1).add(lit.mul(config.slopeShading)));
       return mix(shaded, highlight, crest.mul(config.crestLift));

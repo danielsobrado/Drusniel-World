@@ -25,7 +25,7 @@ This complements rather than replaces the proposed live wall-path system. Use th
 ## Implemented workflow
 
 1. Open **Workshop** from Editor mode.
-2. Choose wall, gatehouse, round tower, square keep tower, or a composite tower house.
+2. Choose wall, gatehouse, round tower, square keep tower, a composite tower house, a village house design, or a village prop.
 3. Set bounded dimensions, plaster finish, trim stone, roof family, silhouette, tower wing, roof height/overhang, detail, age, **hand-built irregularity**, and deterministic seed. (updated 2026-07-25)
 4. Optionally import PNG, JPEG, or WebP albedo images for **Walls**, **Stone trim**, **Roof**, and **Doors & wood**.
 5. For each imported image, choose repeat, mirrored repeat, or single-image mapping; adjust repeat, rotate in 90-degree steps, tint it, or copy the same source and settings to other areas.
@@ -129,6 +129,71 @@ The opening count is derived from the authored width, so wider spans gain more b
 - Quoins, bond stones, forbidden-joint bands and the two-face-plus-rubble-core split of `04-masonry-and-stone-generation.md` §5/§9/§10 remain unimplemented. The `category` argument threaded through `stoneJitter` is the intended hook for them.
 
 ## Changelog
+
+### 2026-09-30 — every wall editable, walkway props, more building types
+
+- **Every wall is a host.** A house design now declares storeys
+  (`village/HouseStoreys.js`); each built side of a storey is its own planar
+  facade host. The front keeps the storey's id (so earlier edits survive) and the
+  other sides nest under it as `<storey>-back|left|right`. Doors and windows on
+  any wall resolve through `resolveWorkshopOpeningLayout`.
+- **Component frames.** A structure tag may carry `origin` and `yaw`; the
+  component pivot and rest frame follow them, so a side wall's local +X runs
+  along the wall and +Z out of it — the frame the component editor already
+  assumed for every planar host. Stored transforms stay frame-relative
+  (`componentLocalMatrix`, `restFrameInverse`, and the controller's
+  `workshopBaseQuaternion`); components without a yaw compose exactly as before.
+  Recentring a house moves the facade origins with the walls.
+- **Walkway props:** walk lantern, stone lantern, torch post, carved totem,
+  adoration post (wayside shrine), wayside cross, milestone, cairn, flower
+  planter and chained bollards. The design picker groups props and houses.
+- **More buildings:** row house, shop (counters and awnings follow edited shop
+  windows), warehouse with hoist, longhouse farm, board-clad barn (new `boards`
+  wall type), bakery with bread oven, and a buttressed chapel with a bellcote.
+- **Generated house** (`variants/GeneratedHouse.js`): the building grammar —
+  storeys, wall materials, jetties, framing, roof form, wing, dormers, chimney,
+  fenestration — is rolled from the seed, so rerolling yields a new house.
+  Fuzzed over 150 seeds with no failures (≈75 ms and ≤ 97 k triangles each).
+
+### 2026-09-30 — village houses and props
+
+Goal: author the grass-test village (its five half-timbered houses, lanterns and
+street furniture) in the workshop instead of shipping 7–10 MB baked GLBs, which
+the grass-test merge plan skipped on art-direction and budget grounds.
+
+- **Variant archetypes** (`ProceduralWorkshopArchetypeCatalog.js`, `ProceduralWorkshopArchetypes.js`).
+  `house` and `prop` are families; a recipe picks one design with `variant`. The
+  field exists only on those archetypes, so every earlier recipe keeps its
+  canonical form and signature hash. Both plug into the medieval pipeline's
+  material sets, so materials, remeshing, component editing, LOD and baking are shared.
+- **Village houses** (`village/`): cottage (L-plan with outside stair), jettied
+  tavern, smithy with forge lean-to, tall jettied town house with hipped roof and
+  front bay, and a tavern on a plank deck — after grass-test houses 003–009, but
+  parametric in width, depth, eave height, pitch, overhang and seed. Stone storeys
+  are packed courses with real voids, quoins, voussoirs and lintels (§19);
+  upper storeys are plaster shells with half-timbering laid around the openings.
+  Roofs are one parametric surface (`HouseRoofSurface.js`) covering straight,
+  bell-cast (`sweep`), sagging and hipped forms, with gable infill and framing,
+  dormers, battens below Ultra and individual tiles at Ultra.
+- **Editable house openings.** Each storey's front facade is a host; its doors
+  and windows go through `resolveWorkshopOpeningLayout`, so move, resize,
+  duplicate and auto-join regenerate the masonry void and insert.
+- **Props** (`props/`): lantern post, wall lantern, roofed well, market stall,
+  hand cart, barrels, crates, bench, signpost, rail fence and iron-bound chest.
+- **`glow` material family** for lit lantern glass and forge coals: emissive, not
+  a light per placement.
+- **Shared modules extracted** from `ProceduralMedievalGenerator.js`:
+  `ProceduralWorkshopMasonry.js` (course packing, `addStone`) and
+  `ProceduralWorkshopSemantics.js` (component tags). Output of existing
+  archetypes is unchanged.
+- **Component classifier fix.** A structure made only of detail families (wood,
+  metal) used to lose its parent and throw; its detail children now fold back into it.
+- Houses and props measure their placement footprint from generated geometry
+  and are recentred on their plan, so a barrel no longer inherits the form's width.
+
+Verification: `tests/ProceduralWorkshopVillage.test.js`; full `npm test` passes;
+every design was rendered in the WebGPU workshop preview at High and Ultra detail.
+
 
 ### 2026-07-25 — hand-built irregularity, shingled roofs, clustered foliage
 

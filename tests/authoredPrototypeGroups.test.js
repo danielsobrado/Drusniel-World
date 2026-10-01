@@ -122,3 +122,21 @@ test('authored detail weights keep expensive models as deterministic rare accent
     /must be positive/,
   );
 });
+
+test('a trunk pivot stands a leaning crown on the foot of its stem', async () => {
+  const { pivotOnTrunkBase } = await import('../src/editor/stylized/StylizedTreePrototypes.js');
+  // A 0.4 m stem at x = 0 and a crown streaming 6 m downwind: the bounds centre
+  // is ~2.8 m off the stem.
+  const trunk = new THREE.BoxGeometry(0.4, 10, 0.4).translate(0, 5, 0);
+  const crown = new THREE.BoxGeometry(6, 3, 2).translate(3, 9, 0);
+  const box = new THREE.Box3().setFromBufferAttribute(trunk.getAttribute('position'))
+    .union(new THREE.Box3().setFromBufferAttribute(crown.getAttribute('position')));
+  const offset = (box.min.x + box.max.x) * 0.5;
+  trunk.translate(-offset, 0, 0);
+  crown.translate(-offset, 0, 0);
+  const parts = pivotOnTrunkBase([{ kind: 'trunk', geometry: trunk }, { kind: 'leaf', geometry: crown }]);
+  const foot = new THREE.Box3().setFromBufferAttribute(parts[0].geometry.getAttribute('position'));
+  assert.ok(Math.abs((foot.min.x + foot.max.x) * 0.5) < 1e-6);
+  assert.ok(Math.abs((foot.min.z + foot.max.z) * 0.5) < 1e-6);
+  assert.equal(foot.min.y, 0, 'the pivot is horizontal only');
+});

@@ -7,4 +7,5 @@
 export const CONSTRUCTION_MATERIAL_SLOT = Object.freeze({
   STONE: 'stone',
   MORTAR: 'mortar',
+  GROWTH: 'growth',
 });

@@ -155,6 +155,11 @@ function contourLevels(openings, bottom, top) {
  * @returns {number[][][] | null} fragment rings, or null to emit the prism whole.
  */
 function clipDescriptorToOpenings(descriptor, openings) {
+  // A field stone the packer already fitted under a sill or onto an arch keeps
+  // its core: cutting it again by the widest void of its band removed backing
+  // beside the arch shoulder. A voussoir is rotated along the arch, and this
+  // axis-aligned band cut cannot read its ring, so it is left whole as well.
+  if (descriptor.openingFit) return null;
   const frame = descriptor.drapeFrame;
   const corners = descriptor.corners;
   if (!frame || !Array.isArray(corners) || corners.length !== 4) return null;
@@ -172,6 +177,16 @@ function clipDescriptorToOpenings(descriptor, openings) {
   const arcLow = frame.s + minX;
   const arcHigh = frame.s + maxX;
   const grade = descriptor.position[1];
+  // A prism the void never reaches horizontally stays whole: splitting it at
+  // the sill or crown would only replace its ring with rectangles.
+  const whole = survivingIntervalsOverBand([arcLow, arcHigh], openings, [grade + minY, grade + maxY]);
+  if (
+    whole.length === 1
+    && Math.abs(whole[0][0] - arcLow) <= DEGENERATE_EPSILON
+    && Math.abs(whole[0][1] - arcHigh) <= DEGENERATE_EPSILON
+  ) {
+    return null;
+  }
   const levels = contourLevels(openings, grade + minY, grade + maxY);
 
   const fragments = [];
@@ -245,13 +260,16 @@ function planPrisms(descriptors, openings) {
  * @param {(descriptor: object, x: number, z: number) => number} [options.drape]
  *   vertical offset for a transformed vertex, so a core can follow the same
  *   ground its draped stones do. Omitted, positions are used as given.
+ * @param {(descriptor: object, point: {x: number, z: number}) => void} [options.bend]
+ *   moves a transformed vertex onto the curved arc in place, after the drape,
+ *   so the core follows its bent stones (compile/ConstructionArcBend.js).
  * @param {Array<object>} [options.openings] the module's openings in the wall's
  *   own arc domain (`s`, `width`, `height`, `sill`, `profile`). When given, each
  *   prism that carries a `drapeFrame` is clipped to the shared contour so its
  *   core never fills a visible void.
  * @returns {THREE.BufferGeometry | null}
  */
-export function buildMortarCoreGeometry(descriptors, { drape = null, openings = null } = {}) {
+export function buildMortarCoreGeometry(descriptors, { drape = null, bend = null, openings = null } = {}) {
   if (!descriptors || descriptors.length === 0) return null;
 
   for (let index = 0; index < descriptors.length; index += 1) {
@@ -329,6 +347,7 @@ export function buildMortarCoreGeometry(descriptors, { drape = null, openings = 
         const localPoint = local[face.corners[cornerIndex]];
         point.set(localPoint[0], localPoint[1], localPoint[2]).applyMatrix4(matrix);
         if (drape) point.y += drape(descriptor, point.x, point.z);
+        if (bend) bend(descriptor, point);
         const vertex = vertexOffset;
         positions[vertex * 3] = point.x;
         positions[vertex * 3 + 1] = point.y;

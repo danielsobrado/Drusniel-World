@@ -218,11 +218,37 @@ export class ForestHabitatField {
       this.stats.cacheHits += 1;
       return cached;
     }
-    const { cellX, cellZ } = worldToCell(x, z, this.tileSize);
-    const tileId = this.tileAt(cellX, cellZ);
+    return this.cacheSample(cacheKey, this.evaluate(x, z, { withWater: true }));
+  }
+
+  /**
+   * The habitat without the water terms, for callers that sample far apart —
+   * the far-terrain backdrop's rings are hundreds of metres apart. Water
+   * distance comes from a per-chunk chamfer field, so every such sample would
+   * build a whole chunk's field on the main thread (a far-ring rebuild over a
+   * forest took minutes), and the riparian belt it feeds is tens of metres
+   * wide, below that spacing anyway. Without it the water weight is neutral
+   * and the belt absent, as where no water lies in range. Not cached: a ring
+   * rebuild would otherwise evict the near field's samples.
+   *
+   * `terrain` ({ tileId, elevation, slope }, any subset) is what the caller
+   * already knows about the ground there. The backdrop has its own macro tile,
+   * height and ring slope for every sample; without them each sample cost five
+   * fine height queries through the water-terrain model, most of a ring rebuild.
+   */
+  sampleCoarse(x, z, terrain = null) {
+    return this.evaluate(x, z, { withWater: false, terrain });
+  }
+
+  evaluate(x, z, { withWater, terrain = null }) {
+    let tileId = terrain?.tileId;
+    if (tileId === undefined || tileId === null) {
+      const { cellX, cellZ } = worldToCell(x, z, this.tileSize);
+      tileId = this.tileAt(cellX, cellZ);
+    }
     const profile = this.enabled ? this.profiles.get(tileId) : null;
     if (!profile) {
-      return this.cacheSample(cacheKey, Object.freeze({
+      return Object.freeze({
         tileId,
         profileKey: null,
         structure: null,
@@ -230,7 +256,7 @@ export class ForestHabitatField {
         patchCoverage: 0,
         patchEdge: 0,
         patchDistance: Number.POSITIVE_INFINITY,
-        elevation: this.heightAt(x, z),
+        elevation: terrain?.elevation ?? this.heightAt(x, z),
         slope: 0,
         elevationWeight: 0,
         slopeWeight: 0,
@@ -238,11 +264,11 @@ export class ForestHabitatField {
         waterDistance: Number.POSITIVE_INFINITY,
         riparian: 1,
         suitability: 0,
-      }));
+      });
     }
 
-    const elevation = this.heightAt(x, z);
-    const slope = this.slopeAt(x, z);
+    const elevation = terrain?.elevation ?? this.heightAt(x, z);
+    const slope = terrain?.slope ?? this.slopeAt(x, z);
     const patch = this.patchAt(x, z, profile);
     const elevationFactor = rangeWeight(
       elevation,
@@ -251,7 +277,9 @@ export class ForestHabitatField {
       profile.elevationFade,
     );
     const slopeFactor = slopeWeight(slope, profile.preferredSlope, profile.maximumSlope);
-    const distanceToWater = this.waterDistanceAt?.(x, z) ?? Number.POSITIVE_INFINITY;
+    const distanceToWater = withWater
+      ? this.waterDistanceAt?.(x, z) ?? Number.POSITIVE_INFINITY
+      : Number.POSITIVE_INFINITY;
     const waterFactor = waterWeight(distanceToWater, profile);
     const riparian = riparianCoverage(distanceToWater, profile);
     // A gallery wood along a river is not an upland patch that happens to touch
@@ -268,7 +296,7 @@ export class ForestHabitatField {
       * waterFactor,
     );
 
-    return this.cacheSample(cacheKey, Object.freeze({
+    return Object.freeze({
       tileId,
       profileKey: profile.key,
       structure: profile.structure,
@@ -290,7 +318,7 @@ export class ForestHabitatField {
       riparian,
       regionalForest,
       suitability,
-    }));
+    });
   }
 
   cacheSample(key, sample) {

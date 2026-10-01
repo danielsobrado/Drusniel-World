@@ -63,6 +63,15 @@ export function createMeadowUniforms(settings, interaction = null) {
       lodCompensation: uniform(appearance.lodCompensation),
       lodWidenMax: uniform(appearance.lodWidenMax),
     },
+    // Base and tip per palette index, live, so a look can repaint the meadow
+    // without a rebuild.
+    palette: settings.palette
+      ? {
+        base: uniformArray(settings.palette.palettes.map(({ base }) => new THREE.Color(base)), 'color'),
+        tip: uniformArray(settings.palette.palettes.map(({ tip }) => new THREE.Color(tip)), 'color'),
+        brightness: uniform(settings.palette.brightness),
+      }
+      : null,
     patchCool: vec3(...appearance.patchCool),
     patchWarm: vec3(...appearance.patchWarm),
   };

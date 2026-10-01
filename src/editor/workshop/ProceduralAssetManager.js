@@ -6,6 +6,7 @@ import { unregisterProceduralDefinitions } from './ProceduralDefinitionLifecycle
 import { ProceduralAssetStore } from './ProceduralAssetStore.js';
 import { createProceduralWorkshopComponentParts } from './ProceduralWorkshopComponentParts.js';
 import { filterComponentTransforms } from './ProceduralWorkshopComponentTransforms.js';
+import { getWorkshopVariant, isVariantArchetype } from './ProceduralWorkshopArchetypeCatalog.js';
 
 const CASTLE_WALL_WIDTH_PADDING = 0.7;
 const CASTLE_WALL_DEPTH_FACTOR = 2.3;
@@ -35,8 +36,22 @@ function authoredFootprint(parts, tileSize) {
   });
 }
 
+function archetypeIcon(recipe, { manorLike, towerLike, castleWallLike }) {
+  if (isVariantArchetype(recipe.archetype)) {
+    return getWorkshopVariant(recipe.archetype, recipe.variant)?.icon ?? '🏠';
+  }
+  if (manorLike) return '🏡';
+  if (towerLike) return '🗼';
+  if (recipe.archetype === 'gatehouse') return '🏯';
+  return castleWallLike ? '🏰' : '🧱';
+}
+
 function definitionFor(record, tileSize, parts) {
   const { recipe } = record;
+  // Houses and props are measured from their generated geometry alone: their
+  // recipe dimensions steer a design rather than bound it, and a barrel must
+  // not inherit an 8 m footprint from the form's default width.
+  const measuredOnly = isVariantArchetype(recipe.archetype);
   const manorLike = recipe.archetype === 'manor';
   const castleWallLike = recipe.archetype === 'wall' && recipe.shape !== 'classic';
   const manorTowerRadius = Math.max(1.25, Math.min(2.15, recipe.width * 0.22));
@@ -47,9 +62,9 @@ function definitionFor(record, tileSize, parts) {
     : manorHasTower
       ? recipe.width + manorTowerRadius * 0.62
       : castleWallLike ? recipe.width + CASTLE_WALL_WIDTH_PADDING : recipe.width;
-  const formulaWidth = Math.max(1, Math.ceil(radiusWidth / tileSize));
+  const formulaWidth = measuredOnly ? 1 : Math.max(1, Math.ceil(radiusWidth / tileSize));
   const towerLike = recipe.archetype === 'tower' || recipe.archetype === 'square-tower';
-  const formulaDepth = Math.max(1, Math.ceil(
+  const formulaDepth = measuredOnly ? 1 : Math.max(1, Math.ceil(
     (
       towerLike
         ? recipe.width
@@ -64,13 +79,7 @@ function definitionFor(record, tileSize, parts) {
   return Object.freeze({
     key: record.key,
     label: record.label,
-    icon: manorLike
-      ? '🏡'
-      : towerLike
-        ? '🗼'
-        : recipe.archetype === 'gatehouse'
-          ? '🏯'
-          : castleWallLike ? '🏰' : '🧱',
+    icon: archetypeIcon(recipe, { manorLike, towerLike, castleWallLike }),
     category: 'workshop',
     color: recipe.finish === 'ochre'
       ? '#d9a13b'

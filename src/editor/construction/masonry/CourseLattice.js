@@ -246,6 +246,9 @@ export function resolveCellCorners(cell, {
   tiltLeft = 0,
   tiltRight = 0,
   ceilingAt = null,
+  // Lowest height a stone may reach, `(s) => y`, or null. Stones packed over an
+  // opening rest on its contour (`openingTopOverSpan`) rather than in the void.
+  floorAt = null,
   flattenCeiling = true,
   minHeight = 0.08,
 }) {
@@ -276,6 +279,7 @@ export function resolveCellCorners(cell, {
       bottom = Math.min(bottom, ceilingAt(bottomS));
       top = Math.min(top, ceilingAt(topS));
     }
+    if (floorAt) bottom = Math.max(bottom, floorAt(bottomS));
     return [jointS + tilt * (v - 0.5), Math.max(0, bottom + (top - bottom) * v)];
   };
 
@@ -315,8 +319,13 @@ export function resolveCellCorners(cell, {
   }
   const width = maxS - minS;
   const height = maxY - minY;
-  // The ceiling clamp can flatten a top-course leaf to nothing.
+  // The ceiling clamp can flatten a top-course leaf to nothing, and a floor
+  // can lift a leaf's bottom up to or past its own top.
   if (!(height > minHeight) || !(width > 1e-6)) return null;
+  if (floorAt && !(
+    topLeft[1] - bottomLeft[1] > minHeight * 0.5
+    && topRight[1] - bottomRight[1] > minHeight * 0.5
+  )) return null;
 
   const anchorS = (cell.s0 + cell.s1) / 2;
   const anchorY = (minY + maxY) / 2;

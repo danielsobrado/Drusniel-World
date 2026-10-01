@@ -18,7 +18,8 @@ import { StylizedGroundDetailView } from './StylizedGroundDetailView.js';
 import { createShoreLifePrototypes } from './shoreLifePrototypes.js';
 import { createAquaticFloraPrototypes } from './aquaticFloraPrototypes.js';
 import { advancePlantSway } from './plantSway.js';
-import { paintContactShade, resolveContactShade } from './contactShade.js';
+import { contactShadeRadius, paintContactShade, resolveContactShade } from './contactShade.js';
+import { FOREST_FLOOR_CANOPY_SAMPLES, writeForestFloorCanopy } from './forestFloorTexture.js';
 import { isLandStreamingSuspended } from '../water/underwaterState.js';
 import {
   GRASS_BLADE_SEGMENTS,
@@ -64,6 +65,7 @@ export class StylizedSurfaceView {
     this.bushVariantPaths = [];
     this.groundDetailVariantPaths = [];
     this.aquaticVariantPaths = [];
+    this.tropicalKitVariantPaths = [];
     this.revisionTracker = this.enabled
       ? new StylizedChunkRevisionTracker({ worldStore: terrainView.worldStore })
       : null;
@@ -151,6 +153,25 @@ export class StylizedSurfaceView {
         biomeAssetPalette,
       })
       : null;
+    // grass-test's tropical kit (its coastal-jungle understory): jungle grasses,
+    // groundcover and elephant ear, streamed per biome through residency like
+    // the other authored layers, on a budget of its own (§11 item 4).
+    this.tropicalKitView = this.enabled
+      && !this.impostorBakeMode
+      && config.tropicalKit?.enabled
+      ? new StylizedGroundDetailView({
+        terrainView,
+        config,
+        revisionTracker: this.revisionTracker,
+        layerConfig: config.tropicalKit,
+        layerName: 'tropicalPlant',
+        paletteLayerId: 'tropicalKit',
+        priorityChannel: 49,
+        biomeAssetPalette,
+        regionalCharacterField: this.regionalCharacterField,
+        forestFieldProvider: () => this.treeView?.manifestStore?.forestField ?? null,
+      })
+      : null;
     // Water plants are procedural too: seagrass, kelp and the algae ride the same
     // layer as the authored aquatic variants, on the same water rule, but they need
     // no scene to load so they install here.
@@ -185,6 +206,7 @@ export class StylizedSurfaceView {
       this.groundDetailView,
       this.aquaticPlantView,
       this.shoreLifeView,
+      this.tropicalKitView,
     ].filter(Boolean);
     this.wildlifeView = this.enabled
       && !this.impostorBakeMode
@@ -400,6 +422,14 @@ export class StylizedSurfaceView {
           config.assets.aquaticVariants,
           this.aquaticVariantPaths,
           config.aquaticPlants?.residentRadius ?? 1,
+        ),
+        this.tropicalKitView && layer(
+          'tropicalKit',
+          'tropicalKit',
+          this.tropicalKitView,
+          config.assets.tropicalKitVariants,
+          this.tropicalKitVariantPaths,
+          config.tropicalKit?.residentRadius ?? 1,
         ),
       ].filter(Boolean),
     });
@@ -621,9 +651,7 @@ export class StylizedSurfaceView {
         return this.bushView?.applyPendingRebuild() ?? false;
       });
     }
-    this.groundDetailView?.update();
-    this.aquaticPlantView?.update();
-    this.shoreLifeView?.update();
+    for (const view of this.detailViews) view.update();
     // One clock for every swaying plant, advanced once here rather than per layer.
     advancePlantSway(timestamp);
     for (const view of this.detailViews) {
@@ -731,27 +759,24 @@ export class StylizedSurfaceView {
       const contactKey = this.contactShadeKey(descriptor);
       const key = `${descriptor.key}:${terrainSlot.pageRevision}:${field.signature}:${contactKey}`;
       if (terrainSlot.forestFloorKey === key) continue;
-      const size = terrainSlot.forestFloorSize;
+      const samples = FOREST_FLOOR_CANOPY_SAMPLES;
       const half = this.chunkWorldSize * 0.5;
-      for (let z = 0; z < size; z += 1) {
-        const worldZ = descriptor.centerWorldZ + half
-          - (z + 0.5) / size * this.chunkWorldSize;
-        for (let x = 0; x < size; x += 1) {
-          const worldX = descriptor.centerWorldX - half
-            + (x + 0.5) / size * this.chunkWorldSize;
-          const habitat = field.sample(worldX, worldZ);
-          // R is the canopy, G the contact shade: painting the canopy clears the
-          // previous shade with it, so the contact pass below starts from a clean
-          // texture instead of compounding on the last one.
-          const index = (z * size + x) * 4;
-          terrainSlot.forestFloorPixels[index] = Math.round(
-            Math.min(1, habitat.patchCoverage * habitat.suitability * 1.35) * 255,
+      // R is the canopy, G the contact shade: writing the canopy clears the
+      // previous shade with it, so the contact pass below starts from a clean
+      // texture instead of compounding on the last one.
+      this.canopyScratch = writeForestFloorCanopy({
+        pixels: terrainSlot.forestFloorPixels,
+        size: terrainSlot.forestFloorSize,
+        samples,
+        scratch: this.canopyScratch,
+        canopyAt: (x, z) => {
+          const habitat = field.sample(
+            descriptor.centerWorldX - half + (x + 0.5) / samples * this.chunkWorldSize,
+            descriptor.centerWorldZ + half - (z + 0.5) / samples * this.chunkWorldSize,
           );
-          terrainSlot.forestFloorPixels[index + 1] = 0;
-          terrainSlot.forestFloorPixels[index + 2] = 0;
-          terrainSlot.forestFloorPixels[index + 3] = 255;
-        }
-      }
+          return habitat.patchCoverage * habitat.suitability * 1.35;
+        },
+      });
       this.paintContactShade(terrainSlot, descriptor);
       terrainSlot.forestFloorTexture.needsUpdate = true;
       terrainSlot.forestFloorKey = key;
@@ -764,11 +789,8 @@ export class StylizedSurfaceView {
 
   /**
    * The soft dark patch where trunks and boulders meet the ground, in the ground
-   * texture's second channel — the donor's contact shade.
-   *
-   * Canopy-sized rather than trunk-sized, because that is what the texture can
-   * carry: eight metres to a texel at this resolution, so a trunk's own width is a
-   * fraction of a texel and would paint nothing.
+   * texture's second channel — the donor's contact shade, at trunk scale on the
+   * texture's two-metre texels.
    */
   paintContactShade(terrainSlot, descriptor) {
     if (!this.contactShadeSettings) return;
@@ -783,7 +805,7 @@ export class StylizedSurfaceView {
       sources.push({
         x: placement.x,
         z: placement.z,
-        radius: this.contactShadeSettings.radiusPerScale * scale,
+        radius: contactShadeRadius(this.contactShadeSettings, 'tree', scale),
         strength: this.contactShadeSettings.treeStrength,
       });
     }
@@ -793,7 +815,7 @@ export class StylizedSurfaceView {
       sources.push({
         x: placement.x,
         z: placement.z,
-        radius: this.contactShadeSettings.radiusPerScale * (placement.scale ?? 1) * 0.5,
+        radius: contactShadeRadius(this.contactShadeSettings, 'rock', placement.scale ?? 1),
         strength: this.contactShadeSettings.rockStrength,
       });
     }
@@ -839,9 +861,7 @@ export class StylizedSurfaceView {
     this.variantResidency = null;
     this.wildlifeView?.dispose();
     this.flowerView?.dispose();
-    this.groundDetailView?.dispose();
-    this.aquaticPlantView?.dispose();
-    this.shoreLifeView?.dispose();
+    for (const view of this.detailViews) view.dispose();
     this.detailViews = [];
     this.bushView?.dispose();
     this.treeView?.dispose();
@@ -860,6 +880,8 @@ export class StylizedSurfaceView {
     this.groundDetailVariantPaths.length = 0;
     for (const path of this.aquaticVariantPaths) this.sceneAssets?.release(path);
     this.aquaticVariantPaths.length = 0;
+    for (const path of this.tropicalKitVariantPaths) this.sceneAssets?.release(path);
+    this.tropicalKitVariantPaths.length = 0;
     this.sceneAssets?.dispose();
     this.sceneAssets = null;
     this.grassBuildQueue.clear();

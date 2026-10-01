@@ -88,6 +88,16 @@ export function createInstancedRenderers({
       morphologyPivot: treeMorphologyPivot(parts, part),
     });
     const mesh = new THREE.InstancedMesh(geometry, material, capacity);
+    // The matrices as a storage buffer, not an instanced vertex attribute. Past the
+    // uniform-buffer limit (~1000 matrices) three wraps a vertex attribute in an
+    // interleaved buffer and gives every material build its own views onto it; a
+    // view created after a partial write believes the buffer current and never
+    // uploads it. When a rebuild lands between our write and the old view's next
+    // draw (the environment arriving, a material swap), those instances keep the
+    // matrices the buffer was created with — the donor rock pack drew nothing at
+    // all until forced to re-upload. A storage buffer is its own binding with one
+    // version, so every tracked range reaches the GPU.
+    mesh.instanceMatrix = new THREE.StorageInstancedBufferAttribute(mesh.instanceMatrix.array, 16);
     mesh.count = 0;
     mesh.castShadow = Boolean(castShadow && part.kind !== 'leaf');
     mesh.receiveShadow = true;
@@ -143,13 +153,24 @@ function writeVector3Instance(attribute, index, value, range) {
   widenDirtyRange(range, index);
 }
 
-function writeMatrixInstance(attribute, index, matrix, range) {
+/**
+ * Writes one instance matrix, translated by (−offsetX, −offsetZ) (see
+ * InstanceAnchor). Compared as the float32 values the array will hold: against
+ * the float64 matrix nearly every element differed, so every rebuild re-uploaded
+ * every instance it kept.
+ */
+function writeMatrixInstance(attribute, index, matrix, range, offsetX, offsetZ) {
   const array = attribute.array;
   const offset = index * 16;
   const elements = matrix.elements;
   for (let element = 0; element < 16; element += 1) {
-    if (array[offset + element] !== elements[element]) {
+    const value = element === 12
+      ? elements[12] - offsetX
+      : element === 14 ? elements[14] - offsetZ : elements[element];
+    if (array[offset + element] !== Math.fround(value)) {
       array.set(elements, offset);
+      array[offset + 12] = elements[12] - offsetX;
+      array[offset + 14] = elements[14] - offsetZ;
       widenDirtyRange(range, index);
       return;
     }
@@ -161,7 +182,15 @@ const DITHER_RANGE = { min: Infinity, max: -1 };
 const TINT_RANGE = { min: Infinity, max: -1 };
 const MORPHOLOGY_RANGE = { min: Infinity, max: -1 };
 
-export function writeInstances(renderers, instancesByPrototype) {
+/**
+ * @param {Array<Array<THREE.InstancedMesh>>} renderers parts per prototype
+ * @param {Array<Array<object>>} instancesByPrototype
+ * @param {?{ x: number, z: number }} [anchor] canonical point the matrices are
+ *   written relative to (InstanceAnchor); the root must sit at anchor − origin
+ */
+export function writeInstances(renderers, instancesByPrototype, anchor = null) {
+  const offsetX = anchor?.x ?? 0;
+  const offsetZ = anchor?.z ?? 0;
   let total = 0;
   renderers.forEach((parts, prototypeIndex) => {
     const instances = instancesByPrototype[prototypeIndex] ?? [];
@@ -181,7 +210,7 @@ export function writeInstances(renderers, instancesByPrototype) {
       const morphologyRange = resetDirtyRange(MORPHOLOGY_RANGE);
       for (let index = 0; index < writableCount; index += 1) {
         const instance = instances[index];
-        writeMatrixInstance(mesh.instanceMatrix, index, instance.matrix, matrixRange);
+        writeMatrixInstance(mesh.instanceMatrix, index, instance.matrix, matrixRange, offsetX, offsetZ);
         writeDitherInstance(
           dither,
           index,

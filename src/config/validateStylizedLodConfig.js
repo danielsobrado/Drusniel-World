@@ -4,6 +4,7 @@ import { resolveBlownStreaks } from '../editor/stylized/ambient/BlownStreaks.js'
 import { resolveFrost } from '../editor/stylized/ambient/FrostShading.js';
 import { resolveValleyFogConfig } from '../editor/stylized/mist/valleyFogConfig.js';
 import { resolveMeadowGrassConfig } from '../editor/stylized/meadow/meadowGrassConfig.js';
+import { resolveCinematicFinish } from '../editor/stylized/cinematicFinish.js';
 
 function assertBoolean(value, path) {
   if (typeof value !== 'boolean') {
@@ -603,6 +604,7 @@ export function validateStylizedLodConfig(config) {
   }
   // Resolving throws on a bad band set or shape name, so a typo fails at load.
   resolveMeadowGrassConfig(surface.grass.meadow);
+  resolveCinematicFinish(surface.cinematicFinish);
   if (surface.flowers.outerRingDensity !== undefined) {
     assertUnitInterval(surface.flowers.outerRingDensity, 'stylizedSurface.flowers.outerRingDensity', false);
   }
@@ -652,6 +654,7 @@ export function validateStylizedLodConfig(config) {
   validateRockAppearance(surface.rocks);
   validateGroundDetailLayer(surface.groundDetails, 'stylizedSurface.groundDetails');
   validateGroundDetailLayer(surface.aquaticPlants, 'stylizedSurface.aquaticPlants');
+  validateGroundDetailLayer(surface.tropicalKit, 'stylizedSurface.tropicalKit');
   validateAquaticFlora(surface.aquaticPlants);
   validateShoreLife(surface.shoreLife);
   // Resolved so an out-of-range contact strength is a config error naming its path

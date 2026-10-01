@@ -2,7 +2,15 @@ import { constructionJointProfile } from '../config/ConstructionJointProfiles.ge
 import { constructionRuinProfile } from '../config/ConstructionRuinConfig.generated.js';
 import { packCourse } from '../../workshop/ProceduralWorkshopCoursePacker.js';
 import { createRandom, mixSeed } from '../../workshop/ProceduralRandom.js';
-import { layoutOpening, openingHalfWidthAt, survivingIntervals } from './OpeningLayout.js';
+import {
+  OPENING_CLEARANCE,
+  layoutOpening,
+  openingHalfWidthAt,
+  openingHalfWidthOverBand,
+  openingTopOverSpan,
+  openingVerticalSpan,
+  survivingIntervalsOverBand,
+} from './OpeningLayout.js';
 import {
   MIN_SPLIT_HEIGHT,
   createBedField,
@@ -14,6 +22,7 @@ import {
 } from './CourseLattice.js';
 import { clampJointWidths, sampleJointWidths } from './JointWidthField.js';
 import { layoutMerlon } from './MerlonOrnament.js';
+import { fitOpeningContour, openingVoidPolygon } from './OpeningContour.js';
 import { CONSTRUCTION_SUPPORT_ROLE } from './ConstructionSupportRoles.js';
 import { DEFAULT_COPING } from './ConstructionStyleCatalog.js';
 import { createWallCourseTable } from './WallCourseTable.js';
@@ -170,6 +179,79 @@ export function moduleCourseRange({ seed, targetWidth, arcRange, wallRange, cour
  * cap following the same noise reads as a wavy trim strip, whereas trimming the
  * full-height top course gives the broken block silhouette of hand-laid walls.
  */
+/**
+ * The spans one course is packed in, around the openings (wall handoff §4C).
+ *
+ * The void is taken at its widest over the course's whole height band, bed
+ * wave included, so no stone packed in a solid span can cross the contour — a
+ * cut at the course centre let a course straddling a sill or an arch crown run
+ * into the opening. The column that cut leaves over each opening is packed
+ * again where a stone still fits: under the void with its top capped at the
+ * sill, and over it with the void clipped from the stone's polygon.
+ *
+ * @returns `[{ from, to, ceiling, floorOpenings }]` in arc order
+ */
+export function courseSpans({ range, openings, band, clearance = OPENING_CLEARANCE, minHeight = MIN_LEAF_HEIGHT }) {
+  const spans = survivingIntervalsOverBand(range, openings, band, { clearance })
+    .map(([from, to]) => ({ from, to, ceiling: null, floorOpenings: null }));
+  const [bandLow, bandHigh] = band;
+  const columns = [];
+  for (const opening of openings) {
+    const half = openingHalfWidthOverBand(opening, bandLow, bandHigh);
+    if (!(half > 0)) continue;
+    const from = Math.max(range[0], opening.s - half - clearance);
+    const to = Math.min(range[1], opening.s + half + clearance);
+    if (!(to - from > 1e-6)) continue;
+    columns.push({ from, to, openings: [opening] });
+  }
+  const mergedColumns = [];
+  for (const column of columns.sort((a, b) => a.from - b.from || a.to - b.to)) {
+    const previous = mergedColumns.at(-1);
+    if (previous && column.from < previous.to) {
+      previous.to = Math.max(previous.to, column.to);
+      previous.openings.push(...column.openings);
+    } else mergedColumns.push(column);
+  }
+  for (const column of mergedColumns) {
+    const sill = Math.min(...column.openings.map((opening) => openingVerticalSpan(opening).sill));
+    if (sill - clearance > bandLow + minHeight) {
+      spans.push({ from: column.from, to: column.to, ceiling: sill - clearance, floorOpenings: null });
+    }
+    // Room over the void somewhere in the column: near its edges the contour
+    // is lowest, so probe just inside each edge.
+    const edgeFloor = Math.min(...[column.from, column.to].map((edge) => {
+      const probe = edge === column.from ? [edge, edge + 0.1] : [edge - 0.1, edge];
+      return columnFloor(column.openings, probe[0], probe[1], clearance);
+    }));
+    if (edgeFloor < bandHigh - minHeight) {
+      spans.push({ from: column.from, to: column.to, ceiling: null, floorOpenings: column.openings });
+    }
+  }
+  return spans.sort((a, b) => a.from - b.from || (a.ceiling == null) - (b.ceiling == null));
+}
+
+/** Conservative height probe for material above the void in `[s0, s1]`. */
+function columnFloor(openings, s0, s1, clearance) {
+  let floor = -Infinity;
+  for (const opening of openings) {
+    const top = openingTopOverSpan(opening, s0, s1);
+    if (top != null) floor = Math.max(floor, top + clearance);
+  }
+  return floor;
+}
+
+/** Ceiling and floor one packed stone's leaves are clamped to. */
+function stoneLimits(stone, bodyHeightAt) {
+  const constraint = stone.constraint;
+  if (!constraint) return { ceilingAt: bodyHeightAt, floorAt: null };
+  const ceilingAt = constraint.ceiling != null
+    ? (s) => Math.min(bodyHeightAt(s), constraint.ceiling)
+    : bodyHeightAt;
+  // Keep the cell's full band. Its material is cut to the actual contour below,
+  // rather than raised to a flat floor that leaves a staircase above an arch.
+  return { ceilingAt, floorAt: null };
+}
+
 export function usesCopingCourse(topStyle) {
   return topStyle === 'flat';
 }
@@ -328,6 +410,9 @@ export function packCurvedWall({
     amplitude: style.bedAmplitude ?? 0,
   });
   const tiltAmount = style.jointTilt ?? 0;
+  // How far a bed line can wave from its nominal height; the opening cut
+  // covers it so a stone lifted by the wave cannot reach into a void.
+  const bedMargin = Math.max(0, style.bedAmplitude ?? 0) * courseHeight;
   // Splitting is safe to scale per module: a base cell never straddles a
   // boundary, so no two modules have to agree about how one is cut. A course the
   // curvature has already narrowed has small cells, and cutting those again would
@@ -336,6 +421,9 @@ export function packCurvedWall({
 
   const wall = wallRange ?? [s0, s1];
   const [wallStart, wallEnd] = wall;
+  const openingVoids = openings.map(opening => openingVoidPolygon(opening));
+  const mortarVoids = openings.map(opening => openingVoidPolygon(opening, OPENING_CLEARANCE + 0.025)
+    .map(ring => ring.map(([s, y]) => [s, y + 0.025])));
   const courseRange = (course) => moduleCourseRange({
     seed,
     targetWidth: style.targetWidth,
@@ -353,10 +441,14 @@ export function packCurvedWall({
     const [courseStart, courseEnd] = courseRange(course);
     // Split the course around the openings and pack each surviving span
     // separately, so stone edges land flush on the jamb line rather than
-    // wherever the omitted stone happened to end.
+    // wherever the omitted stone happened to end. See `courseSpans`.
     const spans = openings.length > 0
-      ? survivingIntervals([courseStart, courseEnd], openings, y)
-      : [[courseStart, courseEnd]];
+      ? courseSpans({
+        range: [courseStart, courseEnd],
+        openings,
+        band: [y - thisCourseHeight / 2 - bedMargin, y + thisCourseHeight / 2 + bedMargin],
+      })
+      : [{ from: courseStart, to: courseEnd, ceiling: null, floorOpenings: null }];
 
     const packedStones = [];
     const courseJoints = [];
@@ -364,7 +456,8 @@ export function packCurvedWall({
     // an opening cut into this course. Leaning those would put the stone either
     // proud of the wall end or into the void.
     const plumbJoints = [wallStart, wallEnd];
-    for (const [from, to] of spans) {
+    for (const { from, to, ceiling, floorOpenings } of spans) {
+      const constraint = ceiling != null || floorOpenings ? { ceiling, floorOpenings } : null;
       const spanWidth = to - from;
       const midpoint = from + spanWidth / 2;
       const packed = packCourse({
@@ -377,7 +470,7 @@ export function packCurvedWall({
         forbiddenJoints: previousJoints.map((joint) => joint - midpoint),
       });
       for (const stone of packed.stones) {
-        packedStones.push({ ...stone, center: midpoint + stone.center });
+        packedStones.push({ ...stone, center: midpoint + stone.center, constraint });
       }
       for (const joint of packed.joints) courseJoints.push(midpoint + joint);
       // A jamb is a vertical line the course above must not stack a joint on.
@@ -433,11 +526,13 @@ export function packCurvedWall({
       // Resolved as a set rather than one at a time: where the wall-top clamp
       // collapses a leaf, its band goes to the leaf below instead of vanishing
       // and leaving a notch under the coping.
+      const { ceilingAt, floorAt } = stoneLimits(stone, bodyHeightAt);
       const resolved = resolveLeafFaces(leaves, {
         bedOffset,
         courseHeight,
         courseBaseAt: courseTable.baseAt,
-        ceilingAt: bodyHeightAt,
+        ceilingAt,
+        floorAt,
         minHeight: MIN_LEAF_HEIGHT,
         resolveTilt: tiltAt,
       });
@@ -450,10 +545,26 @@ export function packCurvedWall({
 
         const face = resolved.faces[ordinal];
         if (!face) continue;
+        const contour = stone.constraint?.floorOpenings
+          ? fitOpeningContour(face.corners, leafCenter, face.anchorY, openingVoids)
+          : null;
+        if (contour && contour.length === 0) continue;
 
         const verticalValues = face.corners.map(([, yValue]) => face.anchorY + yValue);
         const supportBottom = Math.min(...verticalValues);
         const supportTop = Math.max(...verticalValues);
+        const exposure = {
+          top: !coped && (face.anchorY + face.corners[2][1] >= bodyHeightAt(leaf.s1) - 1e-6
+            || face.anchorY + face.corners[3][1] >= bodyHeightAt(leaf.s0) - 1e-6),
+          start: openings.some(opening => {
+            const half = openingHalfWidthAt(opening, face.anchorY);
+            return half > 0 && Math.abs(leaf.s0 - opening.s - half - OPENING_CLEARANCE) < 1e-5;
+          }),
+          end: openings.some(opening => {
+            const half = openingHalfWidthAt(opening, face.anchorY);
+            return half > 0 && Math.abs(leaf.s1 - opening.s + half + OPENING_CLEARANCE) < 1e-5;
+          }),
+        };
         const role = course === 0
           ? CONSTRUCTION_SUPPORT_ROLE.FOUNDATION
           : CONSTRUCTION_SUPPORT_ROLE.FIELD;
@@ -521,6 +632,11 @@ export function packCurvedWall({
         const scaleY = 1 - jointWidths.bed / face.height;
         const safeScaleX = Math.max(0.01, scaleX);
         const safeScaleY = Math.max(0.01, scaleY);
+        const corners = scaleCorners(face.corners, safeScaleX, safeScaleY);
+        const contourPolygons = contour
+          ? fitOpeningContour(corners, leafCenter, face.anchorY, openingVoids)
+          : null;
+        if (contourPolygons && contourPolygons.length === 0) continue;
 
         stats.jointSamples += 1;
         stats.headJointTotal += jointWidths.head;
@@ -544,6 +660,10 @@ export function packCurvedWall({
         stones.push(Object.freeze({
           category: 'field',
           ...(isFooting ? { footing: true } : {}),
+          // Capped at a sill or resting on an arch: its shape is the opening's,
+          // so coarse LOD keeps it whole instead of stretching over it.
+          ...(stone.constraint ? { openingFit: true } : {}),
+          ...(exposure.top || exposure.start || exposure.end ? { exposure: Object.freeze(exposure) } : {}),
           s: leafCenter,
           y: face.anchorY,
           offsetNormal: straddle + faceOffset,
@@ -552,7 +672,9 @@ export function packCurvedWall({
           // Fraction of the course the leaf occupies, so a cell's leaves can be
           // shown to partition it rather than merely to span it.
           bandHeight: leaf.v1 - leaf.v0,
-          corners: scaleCorners(face.corners, safeScaleX, safeScaleY),
+          corners,
+          ...(contourPolygons ? { contourPolygons,
+            mortarPolygons: fitOpeningContour(face.corners, leafCenter, face.anchorY, mortarVoids) } : {}),
           // Authoritative solved cell footprint for the recessed mortar core.
           mortarCorners: Object.freeze(
             face.corners.map((corner) => Object.freeze([...corner])),
@@ -625,6 +747,9 @@ export function packCurvedWall({
       depth: size.depth,
       yaw: frame.yaw,
       roll: size.roll ?? 0,
+      ...(size.exposure ? { exposure: size.exposure } : {}),
+      ...(size.contourPolygons ? { contourPolygons: size.contourPolygons,
+        mortarPolygons: size.mortarPolygons ?? [] } : {}),
       stableIndex: index,
       heightRatio: Math.min(1, y / heightScale),
       support: Object.freeze({
@@ -726,6 +851,7 @@ export function packCurvedWall({
           width: Math.max(0.1, unit.width - inset),
           height: Math.max(0.1, unit.height - inset * 0.7),
           depth: unit.depth,
+          exposure: unit.exposure,
         }, {
           role: CONSTRUCTION_SUPPORT_ROLE.MERLON,
           groupId: `merlon:${merlon.s.toFixed(3)}`,
@@ -765,6 +891,8 @@ export function packCurvedWall({
         depth: unit.depth,
         roll: unit.roll,
         offsetNormal: unit.offsetNormal,
+        contourPolygons: unit.contourPolygons,
+        mortarPolygons: unit.mortarPolygons,
       }, {
         role: CONSTRUCTION_SUPPORT_ROLE.JAMB,
         groupId: `opening:${openingId}:${side < 0 ? 'left' : 'right'}-jamb`,
@@ -785,6 +913,8 @@ export function packCurvedWall({
         depth: unit.depth,
         roll: unit.roll,
         offsetNormal: unit.offsetNormal,
+        contourPolygons: unit.contourPolygons,
+        mortarPolygons: unit.mortarPolygons,
       }, {
         role: CONSTRUCTION_SUPPORT_ROLE.ARCH,
         groupId: `opening:${openingId}:arch`,
@@ -803,6 +933,8 @@ export function packCurvedWall({
         depth: keystone.depth,
         roll: keystone.roll,
         offsetNormal: keystone.offsetNormal,
+        contourPolygons: keystone.contourPolygons,
+        mortarPolygons: keystone.mortarPolygons,
       }, {
         role: CONSTRUCTION_SUPPORT_ROLE.KEYSTONE,
         groupId: `opening:${openingId}:arch`,

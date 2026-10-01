@@ -1,4 +1,5 @@
 import { CONSTRUCTION_STYLES } from '../masonry/ConstructionStyleCatalog.js';
+import { CONSTRUCTION_GROWTH_PROFILES } from '../config/ConstructionGrowthProfiles.generated.js';
 import { wallMaterialOptionsMarkup, wallMaterialPresets } from './ConstructionWallMaterials.js';
 
 /**
@@ -45,6 +46,12 @@ export class ConstructionInspector {
     this.boundChange = (event) => this.handleChange(event);
     this.element.addEventListener('click', this.boundClick);
     this.element.addEventListener('change', this.boundChange);
+    this.unsubscribeStore = controller.constructionStore?.subscribe(change => {
+      if (!this.isOpen) return;
+      if (change.id !== this.constructionId && !['replace', 'clear'].includes(change.kind)) return;
+      if (!controller.constructionStore.get(this.constructionId)) this.close();
+      else if (['history', 'replace'].includes(change.kind)) this.open(this.constructionId);
+    });
   }
 
   get isOpen() {
@@ -78,6 +85,15 @@ export class ConstructionInspector {
       <label>Material
         <select data-inspector-field="material">${materials}</select>
       </label>
+      ${CONSTRUCTION_GROWTH_PROFILES[record.style.key] ? `<label>Ground growth
+        <select data-inspector-field="growth">
+          <option value="auto"${record.style.growth !== 'none' ? ' selected' : ''}>Natural</option>
+          <option value="none"${record.style.growth === 'none' ? ' selected' : ''}>None</option>
+        </select>
+      </label>` : ''}
+      <button class="construction-inspector-match" type="button" data-inspector-action="match">
+        Draw matching wall
+      </button>
     `;
     this.element.hidden = false;
   }
@@ -90,6 +106,14 @@ export class ConstructionInspector {
   }
 
   handleClick(event) {
+    if (event.target.closest('[data-inspector-action="match"]')) {
+      const id = this.constructionId;
+      if (this.controller.drawMatchingConstruction(id)) {
+        this.close();
+        this.onStatus?.('Draw another wall with this look.');
+      }
+      return;
+    }
     if (event.target.closest('[data-inspector-action="close"]')) this.close();
   }
 
@@ -97,6 +121,12 @@ export class ConstructionInspector {
     if (!this.constructionId) return;
     const field = event.target.dataset.inspectorField;
     if (!field) return;
+    if (field === 'growth') {
+      this.controller.runConstructionCommand({ type: 'set_growth',
+        constructionId: this.constructionId, growth: event.target.value });
+      this.onStatus?.(event.target.value === 'none' ? 'Ground growth removed.' : 'Natural ground growth restored.');
+      return;
+    }
     if (field === 'material') {
       if (!event.target.value) return;
       this.controller.runConstructionCommand({
@@ -115,6 +145,7 @@ export class ConstructionInspector {
         styleKey: event.target.value,
       });
       this.onStatus?.(masonryStyleStatusMessage(event.target.value));
+      this.open(this.constructionId);
       return;
     }
     const value = Number(event.target.value);
@@ -128,6 +159,7 @@ export class ConstructionInspector {
   }
 
   dispose() {
+    this.unsubscribeStore?.();
     this.element.removeEventListener('click', this.boundClick);
     this.element.removeEventListener('change', this.boundChange);
     this.element.remove();

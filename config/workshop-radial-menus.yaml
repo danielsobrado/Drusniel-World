@@ -31,6 +31,8 @@ modes:
           - { value: gatehouse, label: Gatehouse, glyph: '▣' }
           - { value: tower, label: Round tower, glyph: '◉' }
           - { value: square-tower, label: Square keep, glyph: '▰' }
+          - { value: house, label: Village house, glyph: '⌂' }
+          - { value: prop, label: Village prop, glyph: '✦' }
       - id: silhouette
         side: right
         label: Silhouette

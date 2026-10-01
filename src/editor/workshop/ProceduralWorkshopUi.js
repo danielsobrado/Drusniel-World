@@ -9,6 +9,7 @@ import { ProceduralWorkshopMaterialController } from './ProceduralWorkshopMateri
 import { ProceduralWorkshopPlannerClient } from './ProceduralWorkshopPlannerClient.js';
 import { createWorkshopStage } from './ProceduralWorkshopStage.js';
 import { ProceduralWorkshopSurfaceEditor } from './ProceduralWorkshopSurfaceEditor.js';
+import { ProceduralWorkshopVariantFields } from './ProceduralWorkshopVariantFields.js';
 import { WorkshopAmbientOcclusion } from './WorkshopAmbientOcclusion.js';
 
 function randomSeed() {
@@ -112,10 +113,15 @@ export class ProceduralWorkshopUi {
                   <option value="gatehouse">Gatehouse</option>
                   <option value="tower">Round tower</option>
                   <option value="square-tower">Square keep tower</option>
+                  <option value="house">Village house</option>
+                  <option value="prop">Village prop</option>
                 </select>
               </label>
+              <label data-workshop-field="variant" hidden>Design
+                <select name="variant"></select>
+              </label>
               <div class="workshop-field-grid">
-                <label>Wall finish
+                <label data-workshop-field="finish">Wall finish
                   <select name="finish">
                     <option value="masonry">Exposed masonry</option>
                     <option value="ochre" selected>Sun-washed ochre</option>
@@ -123,21 +129,21 @@ export class ProceduralWorkshopUi {
                     <option value="rose">Faded rose plaster</option>
                   </select>
                 </label>
-                <label>Trim stone
+                <label data-workshop-field="style">Trim stone
                   <select name="style">
                     <option value="granite">Grey granite</option>
                     <option value="limestone" selected>Warm limestone</option>
                     <option value="sandstone">Red sandstone</option>
                   </select>
                 </label>
-                <label>Roof / top
+                <label data-workshop-field="topStyle">Roof / top
                   <select name="topStyle">
                     <option value="battlements">Battlements</option>
                     <option value="slate" selected>Mossy slate</option>
                     <option value="terracotta">Terracotta tile</option>
                   </select>
                 </label>
-                <label>Silhouette
+                <label data-workshop-field="shape">Silhouette
                   <select name="shape">
                     <option value="classic">Classic</option>
                     <option value="stepped" selected>Stepped gables</option>
@@ -147,9 +153,9 @@ export class ProceduralWorkshopUi {
               </div>
               <div data-role="workshop-surface-editor"></div>
               <div class="workshop-field-grid">
-                <label>Width (m)<input name="width" type="number" min="2" max="16" step="0.5" value="8" /></label>
-                <label>Depth factor<input name="depth" type="number" min="1" max="12" step="0.5" value="2.5" /></label>
-                <label>Wall height (m)<input name="height" type="number" min="2" max="14" step="0.5" value="5.5" /></label>
+                <label data-workshop-field="width">Width (m)<input name="width" type="number" min="2" max="16" step="0.5" value="8" /></label>
+                <label data-workshop-field="depth"><span data-workshop-label="depth">Depth factor</span><input name="depth" type="number" min="1" max="12" step="0.5" value="2.5" /></label>
+                <label data-workshop-field="height"><span data-workshop-label="height">Wall height (m)</span><input name="height" type="number" min="2" max="14" step="0.5" value="5.5" /></label>
                 <label>Detail
                   <select name="detail">
                     <option value="1">Draft</option>
@@ -159,18 +165,18 @@ export class ProceduralWorkshopUi {
                 </label>
               </div>
               <div class="workshop-field-grid">
-                <label>Tower wing
+                <label data-workshop-field="towerSide">Tower wing
                   <select name="towerSide">
                     <option value="left" selected>Left</option>
                     <option value="right">Right</option>
                     <option value="none">None</option>
                   </select>
                 </label>
-                <span class="workshop-range">
+                <span class="workshop-range" data-workshop-field="roofScale">
                   <label for="workshop-roof-height">Roof height <output data-output-for="roofScale">1.15×</output></label>
                   <input id="workshop-roof-height" name="roofScale" type="range" min="0.55" max="2" step="0.05" value="1.15" />
                 </span>
-                <span class="workshop-range workshop-range--wide">
+                <span class="workshop-range workshop-range--wide" data-workshop-field="roofOverhang">
                   <label for="workshop-roof-overhang">Roof overhang <output data-output-for="roofOverhang">0.45 m</output></label>
                   <input id="workshop-roof-overhang" name="roofOverhang" type="range" min="0.1" max="0.9" step="0.05" value="0.45" />
                 </span>
@@ -190,11 +196,11 @@ export class ProceduralWorkshopUi {
                 <input id="workshop-irregularity" name="irregularity" type="range" min="0" max="1" step="0.05" value="0.45" />
               </span>
               <div class="workshop-option-grid">
-                <label class="workshop-check">
+                <label class="workshop-check" data-workshop-field="windows">
                   <input name="windows" type="checkbox" checked />
                   Doors and windows
                 </label>
-                <label class="workshop-check">
+                <label class="workshop-check" data-workshop-field="ivy">
                   <input name="ivy" type="checkbox" checked />
                   Procedural ivy
                 </label>
@@ -242,6 +248,7 @@ export class ProceduralWorkshopUi {
         this.status.classList.toggle('is-error', isError);
       },
     });
+    this.variantFields = new ProceduralWorkshopVariantFields(this.form);
     this.bind();
   }
 
@@ -271,9 +278,11 @@ export class ProceduralWorkshopUi {
       this.bake();
     });
     this.form.addEventListener('change', (event) => {
-      if (event.target.name === 'archetype') {
+      if (event.target.name === 'archetype' || event.target.name === 'variant') {
         this.componentController?.resetAll();
         this.hasFramedPreview = false;
+        if (event.target.name === 'archetype') this.variantFields.onArchetypeChanged();
+        else this.variantFields.onVariantChanged();
       }
       this.schedulePreview(50);
     });
@@ -379,6 +388,7 @@ export class ProceduralWorkshopUi {
       label: values.get('label'),
       recipe: {
         archetype: values.get('archetype'),
+        ...this.variantFields.readVariant(),
         style: values.get('style'),
         topStyle: values.get('topStyle'),
         finish: values.get('finish'),

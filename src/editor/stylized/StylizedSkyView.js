@@ -22,6 +22,7 @@ import { createHeatShimmerNodes, resolveHeatShimmerConfig } from './ambient/Heat
 import { createMoonDiscNode, createStarFieldNode, STAR_FIELD_DEFAULTS } from './sky/starField.js';
 import { skyAmbientColor } from './sky/skyAmbient.js';
 import { updateSkyLight } from './sky/skyLight.js';
+import { applySceneEnvironment } from './sky/sceneEnvironment.js';
 
 function cloudCoverageNode({
   config,
@@ -288,6 +289,8 @@ export class StylizedSkyView {
     terrainView.scene.add(this.hemisphere, this.directional, this.directional.target);
     terrainView.godRays.setVolumetricLight(this.directional);
     terrainView.scene.fog = new THREE.FogExp2(config.sky.fogColor, config.sky.fogDensity);
+    // The soft outdoor HDR standard materials take their fill and reflections from.
+    this.environment = applySceneEnvironment(terrainView.scene, config.sky.environment);
   }
 
   setCloudShadowStrength(strength) {
@@ -388,6 +391,7 @@ export class StylizedSkyView {
   }
 
   dispose() {
+    this.environment?.dispose();
     this.terrainView.scene.remove(
       this.mesh,
       this.hemisphere,

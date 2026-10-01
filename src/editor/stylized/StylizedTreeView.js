@@ -7,6 +7,7 @@ import {
   extractPrototypeParts,
   extractPrototypePartsFromRoots,
   findPrototypeRoots,
+  pivotOnTrunkBase,
   splitDisconnectedTreeParts,
 } from './StylizedTreePrototypes.js';
 import { resolveAuthoredPrototypeGroups } from './StylizedPrototypeBake.js';
@@ -33,6 +34,7 @@ import {
   disposeInstancedRenderers,
   pruneStateMap,
 } from './lod/StylizedLodRuntime.js';
+import { InstanceAnchor } from './lod/InstanceAnchor.js';
 import {
   createCanopyClusterPart,
   createForestUnderstoryPrototypes,
@@ -200,6 +202,8 @@ export class StylizedTreeView {
     this.pendingLodRebuild = null;
     this.disposed = false;
     this.root = new THREE.Group();
+    // Instances are written relative to this, not in canonical metres (InstanceAnchor).
+    this.instanceAnchor = new InstanceAnchor();
     this.root.name = 'stylized-trees';
     terrainView.scene.add(this.root);
   }
@@ -316,6 +320,7 @@ export class StylizedTreeView {
         authoredBarkScale: definition.barkScale,
         prototypeGroups: definition.prototypeGroups,
         sourceLabel: `Tree variant ${definition.scene}`,
+        pivot: definition.pivot,
       });
       if (count === 0) {
         throw new Error(
@@ -377,6 +382,7 @@ export class StylizedTreeView {
       authoredBarkScale = 0.8,
       prototypeGroups = null,
       sourceLabel = 'Tree prototype',
+      pivot = 'bounds',
     } = {},
   ) {
     scene.updateMatrixWorld(true);
@@ -400,6 +406,7 @@ export class StylizedTreeView {
             part.geometry.computeBoundingSphere();
           }
         }
+        if (pivot === 'trunk') pivotOnTrunkBase(baked);
         const parts = baked.map((part) => {
           const source = firstMaterial(
             part.source,
@@ -424,6 +431,7 @@ export class StylizedTreeView {
               time: this.time,
               config: this.config,
               preserveSourceColor: preserveSourceAppearance,
+              vertexColor: Boolean(part.geometry.getAttribute('color')),
             })
             : (preserveSourceAppearance
               ? createAuthoredTrunkMaterial({
@@ -647,7 +655,7 @@ export class StylizedTreeView {
     if (this.disposed || !this.manifestStore || !this.terrainView.focusChunkKey || !camera) return;
     const focus = this.terrainView.focusChunk;
     const origin = this.terrainView.floatingOrigin.getState();
-    this.root.position.set(-origin.x, 0, -origin.z);
+    this.instanceAnchor.place(this.root, origin);
     const settings = lodSettings(this.config);
     const radius = settings.enabled ? settings.clusterRadius : this.config.trees.residentRadius;
     const viewportHeight = this.terrainView.renderer.domElement.clientHeight
@@ -743,8 +751,11 @@ export class StylizedTreeView {
     this.pendingLodRebuild = null;
     this.lastUpdateKey = job.updateKey;
     this.lastLodRebuildAt = job.timestamp;
+    const anchorOrigin = this.terrainView.floatingOrigin.getState();
+    this.instanceAnchor.follow(anchorOrigin);
     rebuildTreeLod({
       plan: job.plan,
+      anchor: this.instanceAnchor,
       rockSource: job.rockSource,
       manifestStore: this.manifestStore,
       prototypeCount: this.prototypes.length,
@@ -760,6 +771,7 @@ export class StylizedTreeView {
       resolveLeafTint: (record) => this.resolveLeafTint(record),
       resolvePrototypeIndex: (placement) => this.resolvePalettePrototypeIndex(placement),
     });
+    this.instanceAnchor.place(this.root, anchorOrigin);
     // Deliberately no second manifest flush here. `update` already flushed the
     // queue this frame; flushing again put a full chunk manifest build — fractal
     // noise, habitat sampling and boulder blockers — inside the same frame as the

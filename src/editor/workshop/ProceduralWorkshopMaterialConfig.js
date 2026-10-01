@@ -11,7 +11,7 @@ const VALID_COLOR = /^#[0-9a-f]{6}$/i;
 const VALID_MAPPING = new Set(['projected', 'local']);
 const VALID_ROTATION = new Set([0, 90, 180, 270]);
 const VALID_FAMILY = new Set([
-  'walls', 'stone', 'mortar', 'roof', 'wood', 'metal', 'foliage', 'recess',
+  'walls', 'stone', 'mortar', 'roof', 'wood', 'metal', 'foliage', 'recess', 'glow',
 ]);
 const VALID_SOURCE_KIND = new Set(['albedo', 'normal', 'orm', 'height']);
 

@@ -8,8 +8,11 @@ import { ringPoints } from '../../world/sampleTilesAround.js';
  *
  * Tiles are the Azgaar biome ids; water kinds as WaterConstants numbers them.
  */
-const JUNGLE = new Set([5, 7]);
-const MEADOW = new Set([3, 4, 6, 8, 14]);
+// The donor's jungle is closed rainforest: mist, spores and canopy shafts. A
+// tropical seasonal forest (5) is open, dry woodland over grass, so it reads as
+// meadow — the soundscape keeps its jungle calls (soundscape_weights.js).
+const JUNGLE = new Set([7]);
+const MEADOW = new Set([3, 4, 5, 6, 8, 14]);
 const HOT_DESERT = 1;
 const WATER_OCEAN = 1;
 const WATER_LAKE = 2;

@@ -19,6 +19,8 @@ export const MEADOW_GRASS_SHAPES = Object.freeze({
 });
 
 export const DEFAULT_MEADOW_SHAPE = 'slender';
+/** Shapes a look code spans before its palette index: code = shape + count × palette. */
+export const MEADOW_SHAPE_COUNT = Object.keys(MEADOW_GRASS_SHAPES).length;
 
 export function meadowShapeId(name) {
   return (MEADOW_GRASS_SHAPES[name] ?? MEADOW_GRASS_SHAPES[DEFAULT_MEADOW_SHAPE]).id;

@@ -218,8 +218,10 @@ test('authored rocks and bushes bake upright at scenery scale', async () => {
           Math.abs(prototype.geometry.boundingBox.min.y) < 1e-4,
           `${definition.scene} must sit on y=0`,
         );
+        // grass-test's stone pack at its own scale tops out at a 4.24 m boulder.
+        const maxHeight = kind === 'rock' ? 4.5 : 3;
         assert.ok(
-          size.y > 0.2 && size.y < 3,
+          size.y > 0.2 && size.y < maxHeight,
           `${definition.scene} has unexpected ${kind} height ${size.y}`,
         );
       }

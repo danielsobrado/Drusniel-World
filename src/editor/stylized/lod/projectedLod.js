@@ -118,13 +118,29 @@ export function selectProjectedLod({
   const previousIndex = lodIndex(previous);
   if (previousIndex < 0) return next;
   const nextIndex = lodIndex(next);
+  // Hysteresis holds each *boundary*, not the previous band as a whole. The old
+  // rule compared only against the target band's threshold and otherwise kept
+  // `previous`, so a jump across several bands — a zoom, a module streaming in
+  // close — could hold a far representation well past every intermediate
+  // threshold: a wall at 150 px stayed a flat shell while a smaller neighbour
+  // got stone (wall handoff 4B). Each crossed boundary now applies its own
+  // margin, and the result stops at the band those margins allow.
   if (nextIndex > previousIndex) {
-    const threshold = thresholdForBand(previous, thresholds);
-    return pixels >= threshold * (1 - hysteresisRatio) ? previous : next;
+    const demoted = baseBand(pixels / (1 - hysteresisRatio), thresholds);
+    return lodIndex(demoted) > previousIndex ? demoted : previous;
   }
+  const promoted = promotedBand(pixels, thresholds, hysteresisRatio);
+  return lodIndex(promoted) < previousIndex ? promoted : previous;
+}
 
-  const threshold = thresholdForBand(next, thresholds);
-  return pixels <= threshold * (1 + hysteresisRatio) ? previous : next;
+/** The finest band whose threshold `pixels` exceeds by the promotion margin. */
+function promotedBand(pixels, thresholds, hysteresisRatio) {
+  const margin = 1 + hysteresisRatio;
+  if (pixels > thresholds.nearPixels * margin) return 'near';
+  if (pixels > thresholds.proxyPixels * margin) return 'proxy';
+  if (pixels > thresholds.impostorPixels * margin) return 'impostor';
+  if (thresholds.clusterPixels > 0 && pixels > thresholds.clusterPixels * margin) return 'cluster';
+  return 'culled';
 }
 
 /**

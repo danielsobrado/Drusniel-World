@@ -25,7 +25,7 @@ import {
 import { assignGrassMaterialData } from '../../../render/postprocessing/PostProcessingMaterialData.js';
 import { applyJungleMist } from '../ambient/jungleMistOutput.js';
 import { applyCloudShadow } from '../CloudShadow.js';
-import { sampleWorldWindCanonical } from '../../weather/wind/worldWindState.js';
+import { sampleWorldWindCanonical, windWaveCoordinates } from '../../weather/wind/worldWindState.js';
 import { meadowInstance } from './meadowBladeShape.js';
 import { applyHandoff } from './meadowFade.js';
 import { meadowNoise } from './meadowNoise.js';
@@ -73,7 +73,7 @@ export function createMeadowCardMaterial({ uniforms, tuning, config, sunDirectio
       local.y.assign(positionLocal.y.mul(height));
       // The gust leans the clump's top with the blades in front of it.
       const wind = sampleWorldWindCanonical(card.canonical);
-      const along = dot(card.canonical, wind.direction);
+      const along = windWaveCoordinates(card.canonical).along;
       const sway = sin(along.mul(tuning.windFrequency).add(uniforms.time.mul(tuning.windSpeed)).add(card.phase));
       const angle = tuning.windLean.add(sway.mul(tuning.windStrength))
         .mul(wind.envelope.clamp(0.35, 3.5)).mul(2).clamp(-1.2, 1.2).mul(pow(r, 3));

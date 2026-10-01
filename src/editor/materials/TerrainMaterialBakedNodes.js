@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import {
+  Fn,
   clamp,
   dot,
   float,
@@ -13,6 +14,7 @@ import {
   vec3,
 } from 'three/tsl';
 import { createTerrainMaterialFamilyMultiplier } from './TerrainMaterialStochasticNodes.js';
+import { bilinearLoad } from './TerrainSlotBindings.js';
 import { createTerrainMaterialGenome } from './TerrainMaterialGenomeNodes.js';
 import {
   applyTerrainMaterialFeatureColor,
@@ -46,8 +48,13 @@ function sampleBakeTextures(gpuState, terrainUv) {
   const sample = (name) => (gpuState.sampleTexture
     ? gpuState.sampleTexture(name, terrainUv)
     : texture(gpuState.textures[name], terrainUv));
+  // The macro tint is the smoothest bake, so it is read without a sampler: the
+  // terrain's fragment stage has used all 16 (TerrainSlotBindings.loadTexture).
+  const load = (name) => (gpuState.loadTexture
+    ? gpuState.loadTexture(name, terrainUv)
+    : bilinearLoad(gpuState.textures[name], terrainUv));
   return {
-    macroTint: sample('macroTint'),
+    macroTint: load('macroTint'),
     terrainShape: sample('terrainShape'),
     materialWeights: sample('materialWeights'),
     wetnessShoreline: sample('wetnessShoreline'),
@@ -159,16 +166,20 @@ export function createTerrainMaterialBakedSurface({
     0,
     1,
   );
-  const publishedRoughness = select(
-    gpuState.blend.greaterThan(PUBLISHED_BLEND_THRESHOLD),
-    roughness,
-    mix(fallbackRoughness, roughness, gpuState.blend),
-  );
-  const readyRoughness = select(
-    gpuState.ready.greaterThan(0.5),
-    publishedRoughness,
-    fallbackRoughness,
-  );
+  // Taken into a variable before the selects, as the colour is (assembleBakedColor).
+  const readyRoughness = Fn(() => {
+    const surfaceRoughness = roughness.toVar();
+    const publishedRoughness = select(
+      gpuState.blend.greaterThan(PUBLISHED_BLEND_THRESHOLD),
+      surfaceRoughness,
+      mix(fallbackRoughness, surfaceRoughness, gpuState.blend),
+    ).toVar();
+    return select(
+      gpuState.ready.greaterThan(0.5),
+      publishedRoughness,
+      fallbackRoughness,
+    );
+  })();
 
   const requestedDebugColor = debugColor({
     view: materialBake.debug.view,
@@ -273,35 +284,20 @@ export function createTerrainMaterialBakedSurface({
   const farBlend = smoothstep(render.farDistance, farBlendEnd, cameraDistance);
 
   const farColor = samples.farColor.rgb.mul(genome.colorMultiplier);
-  const bakedColor = select(
-    cameraDistance.lessThan(render.nearDistance),
-    nearDetailed,
-    select(
-      cameraDistance.lessThan(nearBlendEnd),
-      mix(nearDetailed, midColor, nearBlend),
-      select(
-        cameraDistance.lessThan(render.farDistance),
-        midColor,
-        select(
-          cameraDistance.lessThan(farBlendEnd),
-          mix(midColor, farColor, farBlend),
-          farColor,
-        ),
-      ),
-    ),
-  );
-  const readyColor = select(
-    gpuState.stale.greaterThan(0.5),
-    mix(bakedColor, proceduralColor, render.staleProceduralBlend),
-    bakedColor,
-  );
-  const publishedColor = select(
-    gpuState.blend.greaterThan(PUBLISHED_BLEND_THRESHOLD),
-    readyColor,
-    mix(proceduralColor, readyColor, gpuState.blend),
-  );
   return {
-    color: select(gpuState.ready.greaterThan(0.5), publishedColor, proceduralColor),
+    color: assembleBakedColor({
+      nearDetailed,
+      midColor,
+      farColor,
+      proceduralColor,
+      cameraDistance,
+      render,
+      gpuState,
+      nearBlend,
+      farBlend,
+      nearBlendEnd,
+      farBlendEnd,
+    }),
     roughness: readyRoughness,
     normal: readyNormal,
     /** 0..1 baked snow cover, for snow-only shading on top. */
@@ -309,6 +305,57 @@ export function createTerrainMaterialBakedSurface({
     /** 0..1 baked canopy over the ground, which shelters it from rain. */
     canopy: select(gpuState.ready.greaterThan(0.5), samples.canopyWater.r, float(0)),
   };
+}
+
+/**
+ * The distance bands and the bake's publish states, as selects over values taken
+ * into variables first, inside one `Fn`.
+ *
+ * TSL emits a select as an if/else and builds each branch's inputs inside it, so
+ * a colour read by several branches is written out once per branch — and these
+ * selects nest four deep, then twice more on the bake state. With the colours
+ * inline, `midColor` (and the family atlas taps inside it) came out about 18
+ * times in the terrain's fragment shader. As variables they are emitted once and
+ * each branch reads a name.
+ */
+function assembleBakedColor(inputs) {
+  const {
+    cameraDistance, render, gpuState, nearBlend, farBlend, nearBlendEnd, farBlendEnd,
+  } = inputs;
+  return Fn(() => {
+    const nearDetailed = inputs.nearDetailed.toVar();
+    const midColor = inputs.midColor.toVar();
+    const farColor = inputs.farColor.toVar();
+    const proceduralColor = inputs.proceduralColor.toVar();
+    const bakedColor = select(
+      cameraDistance.lessThan(render.nearDistance),
+      nearDetailed,
+      select(
+        cameraDistance.lessThan(nearBlendEnd),
+        mix(nearDetailed, midColor, nearBlend),
+        select(
+          cameraDistance.lessThan(render.farDistance),
+          midColor,
+          select(
+            cameraDistance.lessThan(farBlendEnd),
+            mix(midColor, farColor, farBlend),
+            farColor,
+          ),
+        ),
+      ),
+    ).toVar();
+    const readyColor = select(
+      gpuState.stale.greaterThan(0.5),
+      mix(bakedColor, proceduralColor, render.staleProceduralBlend),
+      bakedColor,
+    ).toVar();
+    const publishedColor = select(
+      gpuState.blend.greaterThan(PUBLISHED_BLEND_THRESHOLD),
+      readyColor,
+      mix(proceduralColor, readyColor, gpuState.blend),
+    ).toVar();
+    return select(gpuState.ready.greaterThan(0.5), publishedColor, proceduralColor);
+  })();
 }
 
 export function createTerrainMaterialBakedColor(options) {

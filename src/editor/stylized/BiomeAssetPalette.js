@@ -39,6 +39,13 @@ export const BIOME_ASSET_LAYERS = Object.freeze([
     variantsKey: 'aquaticVariants',
     surfaceKey: 'aquaticPlants',
   }),
+  Object.freeze({
+    id: 'tropicalKit',
+    label: 'Tropical plants',
+    singular: 'Tropical plant',
+    variantsKey: 'tropicalKitVariants',
+    surfaceKey: 'tropicalKit',
+  }),
 ]);
 
 const LAYER_BY_ID = new Map(BIOME_ASSET_LAYERS.map((layer) => [layer.id, layer]));

@@ -169,6 +169,30 @@ terrain:
   smoothFactor: 0.45
 stylizedSurface:
   enabled: true
+  # The trail a walking body cuts through deep snow (grass-test's SnowSurfWake):
+  # a banked trench that widens and deepens with speed and settles flat within
+  # 25 s. Terrain-only and gated on baked snow, on a live trail and on a circle
+  # around it, so anywhere else it costs one compare. false compiles nothing.
+  snowWake:
+    enabled: true
+  # The walking frame's finish, ported from grass-test's cinematic pipeline
+  # (stylized/cinematicFinish.js): bloom, then a filmic grade in linear light ahead
+  # of the tone mapper. The walking view renders through the god-rays pipeline,
+  # which returns before `postProcessing` below, so this is where the grade lives.
+  # Values are the donor's `cinematic.post`.
+  cinematicFinish:
+    enabled: true
+    saturation: 1.04
+    contrast: 1.12
+    lift: [0.004, 0.006, 0.012]
+    gain: [1.02, 1.0, 0.97]
+    highlightDesaturation: 0.35
+    vignette: 0.14
+    grain: 0.012
+    bloom:
+      strength: 0.09
+      radius: 0.3
+      threshold: 2.1
   postProcessing:
     enabled: true
     preset: balanced
@@ -249,33 +273,40 @@ stylizedSurface:
     leafMaterial: 2237f4d60830642a24d65276e7abe1e6
     # Authored scatter prototypes retain their embedded diffuse/normal textures.
     # Per-file scales normalize the source packages into metre-sized scenery.
+    # grass-test's stones (scripts/prepare-donor-rock-assets.mjs): the eleven
+    # `SM_Rocks_NN` of its stylized pack under one painted-stone material, each a
+    # prototype of its own. The donor scales the pack ×7 in its units, 2.8 to the
+    # metre: 2.5 here. They replace the former mixed set, kept below to restore.
     rockVariants:
-      - scene: /assets/rocks/rock.glb
-        scale: 0.02
-      - scene: /assets/rocks/obj_nat_rock_01.glb
-        scale: 0.012
-      - scene: /assets/rocks/a_simple_rock.glb
-        scale: 1
-      - scene: /assets/rocks/ruined-fence/stone-01.glb
-        scale: 1
-      - scene: /assets/rocks/ruined-fence/stone-03.glb
-        scale: 1
-      - scene: /assets/rocks/ruined-fence/stone-06.glb
-        scale: 1
-      - scene: /assets/rocks/ruined-fence/stone-08.glb
-        scale: 1
-      - scene: /assets/rocks/3d_scan_rock.glb
-        scale: 0.045
-      # Four curated stones extracted offline from the forest showroom. The
-      # other five remain individual library assets without entering residency.
-      - scene: /assets/rocks/forest-pack/rock-02.glb
-        scale: 1
-      - scene: /assets/rocks/forest-pack/rock-04.glb
-        scale: 1
-      - scene: /assets/rocks/forest-pack/rock-06.glb
-        scale: 1
-      - scene: /assets/rocks/forest-pack/rock-08.glb
-        scale: 1
+      - scene: /assets/rocks/donor/rocks.glb
+        scale: 2.5
+    # Former set:
+    #   - scene: /assets/rocks/rock.glb
+    #     scale: 0.02
+    #   - scene: /assets/rocks/obj_nat_rock_01.glb
+    #     scale: 0.012
+    #   - scene: /assets/rocks/a_simple_rock.glb
+    #     scale: 1
+    #   - scene: /assets/rocks/ruined-fence/stone-01.glb
+    #     scale: 1
+    #   - scene: /assets/rocks/ruined-fence/stone-03.glb
+    #     scale: 1
+    #   - scene: /assets/rocks/ruined-fence/stone-06.glb
+    #     scale: 1
+    #   - scene: /assets/rocks/ruined-fence/stone-08.glb
+    #     scale: 1
+    #   - scene: /assets/rocks/3d_scan_rock.glb
+    #     scale: 0.045
+    #   # Four curated stones extracted offline from the forest showroom. The
+    #   # other five remain individual library assets without entering residency.
+    #   - scene: /assets/rocks/forest-pack/rock-02.glb
+    #     scale: 1
+    #   - scene: /assets/rocks/forest-pack/rock-04.glb
+    #     scale: 1
+    #   - scene: /assets/rocks/forest-pack/rock-06.glb
+    #     scale: 1
+    #   - scene: /assets/rocks/forest-pack/rock-08.glb
+    #     scale: 1
     bushVariants:
       - scene: /assets/bushes/stylized_bush.glb
         scale: 1
@@ -308,7 +339,8 @@ stylizedSurface:
         # copses — savanna at density 0.24 and grassland at 0.16 — where a hero
         # oak is what the composition wants and where few of them are drawn.
         # Closed forest uses the 4 599- and 1 806-triangle crowns below.
-        tileIds: [3, 4]
+        # Grassland now wears grass-test's meadow trees; the oak keeps the savanna.
+        tileIds: [3]
       - scene: /assets/trees/forest-pack/tree-wide-01.glb
         trunkMaterial: Tree_Trunk_01
         leafMaterial: Tree_Branches_01
@@ -348,6 +380,9 @@ stylizedSurface:
         barkScale: 0.9
         barkSeed: 113
         scale: 1
+        # The meadow biomes wear grass-test's trees (below); this crown keeps the
+        # rainforest, where the donor has nothing of its own.
+        tileIds: [7]
       - scene: /assets/trees/tree-scene/tree-03.glb
         trunkMaterial: Bark
         leafMaterial: Leaves
@@ -356,6 +391,104 @@ stylizedSurface:
         barkScale: 0.72
         barkSeed: 127
         scale: 1
+        tileIds: [7, 8, 12]
+      # grass-test's meadow trees (tree1-tree9), prepared by
+      # scripts/prepare-meadow-tree-assets.mjs: billboards stripped, bark UV
+      # transforms baked, branches and roots decimated to ~3 500 triangles, leaf
+      # cards whole (5 600-14 200 triangles a tree). Donor units are 2.8 to the
+      # metre, so `scale: 0.357` keeps its proportions against the character:
+      # 6-23 m trees, three to five of the player's heights, as in the donor.
+      # Green (7-9): the donor meadow's own trees — curved painted trunks under
+      # full green canopies. Savanna through the tropics, the spawn among them.
+      - scene: /assets/trees/meadow/tree7.glb
+        trunkMaterial: Meadow bark
+        leafMaterial: Meadow leaves
+        species: [broadleaf_round, tropical_tall]
+        scale: 0.357
+        tileIds: [3, 4, 5, 6, 7]
+        pivot: trunk
+      - scene: /assets/trees/meadow/tree8.glb
+        trunkMaterial: Meadow bark
+        leafMaterial: Meadow leaves
+        species: [broadleaf_round, tropical_tall]
+        scale: 0.357
+        tileIds: [3, 4, 5, 6, 7]
+        pivot: trunk
+      - scene: /assets/trees/meadow/tree9.glb
+        trunkMaterial: Meadow bark
+        leafMaterial: Meadow leaves
+        species: [broadleaf_round, tropical_tall]
+        scale: 0.357
+        tileIds: [3, 4, 5, 6, 7]
+        pivot: trunk
+      # Gold (1-3): the donor's yellow-zone crowns, the deciduous forest's colour.
+      - scene: /assets/trees/meadow/tree1.glb
+        trunkMaterial: Meadow bark
+        leafMaterial: Meadow leaves
+        species: [broadleaf_round, broadleaf_tall]
+        scale: 0.357
+        tileIds: [6]
+        pivot: trunk
+      - scene: /assets/trees/meadow/tree2.glb
+        trunkMaterial: Meadow bark
+        leafMaterial: Meadow leaves
+        species: [broadleaf_round, broadleaf_tall]
+        scale: 0.357
+        tileIds: [6]
+        pivot: trunk
+      - scene: /assets/trees/meadow/tree3.glb
+        trunkMaterial: Meadow bark
+        leafMaterial: Meadow leaves
+        species: [broadleaf_round, broadleaf_tall]
+        scale: 0.357
+        tileIds: [6]
+        pivot: trunk
+      # Pale (4-6): the donor's white-zone crowns, silver-green over peeling bark,
+      # for the damp biomes and the odd grassland stand.
+      - scene: /assets/trees/meadow/tree4.glb
+        trunkMaterial: Meadow bark
+        leafMaterial: Meadow leaves
+        species: [broadleaf_tall, wetland_sparse]
+        scale: 0.357
+        tileIds: [4, 8, 12]
+        pivot: trunk
+      - scene: /assets/trees/meadow/tree5.glb
+        trunkMaterial: Meadow bark
+        leafMaterial: Meadow leaves
+        species: [broadleaf_tall, wetland_sparse]
+        scale: 0.357
+        tileIds: [4, 8, 12]
+        pivot: trunk
+      - scene: /assets/trees/meadow/tree6.glb
+        trunkMaterial: Meadow bark
+        leafMaterial: Meadow leaves
+        species: [broadleaf_tall, wetland_sparse]
+        scale: 0.357
+        tileIds: [4, 8, 12]
+        pivot: trunk
+      # grass-test's alpine conifers (§11 item 6), prepared by
+      # scripts/prepare-alpine-tree-assets.mjs: billboards stripped, needles and
+      # settled snow merged into one vertex-coloured leaf part, leaves decimated to
+      # 2 000 triangles (5 666 and 3 596 in all). The crown keeps its painted snow
+      # (COLOR_0), so they stay in the cold biomes: taiga and tundra.
+      - scene: /assets/trees/alpine/tree10.glb
+        trunkMaterial: Alpine bark
+        leafMaterial: Evergreen needles
+        species: conifer_narrow
+        scale: 0.357
+        tileIds: [9, 10]
+        # Its crown sits ~0.5 m off the stem; enough, at a chunk edge, to put the
+        # trunk collider in the neighbouring chunk.
+        pivot: trunk
+      - scene: /assets/trees/alpine/tree11.glb
+        trunkMaterial: Alpine bark
+        leafMaterial: Evergreen needles
+        species: [conifer_narrow, conifer_wide]
+        scale: 0.357
+        tileIds: [9, 10]
+        # Windswept: the crown streams ~3 m downwind of the stem, so a bounds pivot
+        # would stand the trunk (and its collider) that far off the placement.
+        pivot: trunk
     # Sparse recognisable plants layered over the shared procedural blade carpet.
     # Each prototype group becomes one instanced object with all of its authored
     # stem/leaf/flower materials intact.
@@ -502,24 +635,70 @@ stylizedSurface:
         tileIds: [1, 2, 9, 10]
         prototypeGroups:
           - [chunk-06]
-      # The tropical kit does NOT belong here, and this is the place to say so.
-      # Ten members of grass-test's coastal-jungle kit are prepared in
-      # `assets/runtime-sources/ground/tropical/` and five of them publish cleanly
-      # (jungle grass short/tall/broad, jungle groundcover, elephant ear), but
-      # `groundDetailVariants` cannot carry them: the layer is deliberately capped —
-      # `tests/authoredAssetExtraction.test.js` asserts every entry here is a
-      # PUBLISHED EXTRACTION output and streams at most 350 triangles, because this
-      # is the ambient ground-cover layer and its budget was measured (clover at
-      # 10 912 triangles cost ~87 FPS streamed). The jungle grasses are 1 540-1 960
-      # triangles, which is a different job.
-      #
-      # They also cannot go in `bushVariants`, which the same pipeline scans but which
-      # has no per-variant biome gate — tropical grass would scatter through temperate
-      # meadow. So the kit needs a LAYER OF ITS OWN: a new asset key added to
-      # `scripts/lib/runtime-asset-sources.mjs`'s scanned list plus a second scatter
-      # tier, a `stylizedSurface.tropicalKit` layer block with `tileIds: [5, 7]`, and a
-      # `StylizedGroundDetailView` instance beside the ground-detail and aquatic ones.
-      # That is a deliberate piece of work with its own budget, not a config line.
+      # --- Pebbles along paths: grass-test's MeadowDetails path stones. -------
+      # Its rock pack's pebble shapes (SM_Rocks_06/07/10/11, 54-56 triangles,
+      # extracted together as `donor-rock-pebbles`), which the donor keeps at their
+      # native size rather than the ×7 of its boulders: 2.5 / 7 here, 0.1-0.26 m.
+      # Only paths (tile 13) grow them, at `densityByTile` 13 below — the donor's
+      # ~1 stone per 170 m² of path. Like the donor's, which lie only where the
+      # path is strong, they keep off its edge cells, where the meadow still grows
+      # over them (`path-interior`).
+      - scene: /assets/rocks/donor/pebbles.glb
+        scale: 0.357
+        weight: 1
+        tileIds: [13]
+        sway: false
+        placement: { strategy: path-interior, insetCells: 1 }
+        prototypeGroups:
+          - [SM_Rocks_06]
+          - [SM_Rocks_07]
+          - [SM_Rocks_10]
+          - [SM_Rocks_11]
+      # The tropical kit does not belong here: this layer is capped at 350
+      # triangles an entry (tests/authoredAssetExtraction.test.js) and the jungle
+      # grasses are 1 540-1 960. It is a layer of its own — `tropicalKitVariants`
+      # below and `stylizedSurface.tropicalKit` — with its own budget.
+    # grass-test's tropical kit (§11 item 4): the five members of its coastal-jungle
+    # understory that publish cleanly, prepared by scripts/prepare-tropical-assets.mjs.
+    # The other five (banana understory; broad-leaf, fern-frond, palm-frond and
+    # vine-strand modules) are rejected by the optimizer — gltfpack pads their tiny
+    # meshes past the source — and need a per-asset pass. The heavy half of the kit
+    # (canopy tree 44 712, palms 13-26 k, large fern 11 520) stays offline.
+    # The kit is authored 0.4-1 m tall — the height of the meadow blades it
+    # stands in, where it vanished. Scaled up to the donor's jungle floor, where
+    # the broad leaves stand clear of the grass.
+    tropicalKitVariants:
+      - scene: /assets/ground/tropical/jungle-grass-short.glb
+        scale: 1.4
+        weight: 1.4
+        tileIds: [5, 7]
+        prototypeGroups:
+          - [jungle_grass_short]
+      - scene: /assets/ground/tropical/jungle-grass-tall.glb
+        scale: 1.4
+        weight: 1
+        tileIds: [5, 7]
+        prototypeGroups:
+          - [jungle_grass_tall]
+      - scene: /assets/ground/tropical/jungle-grass-broad.glb
+        scale: 1.4
+        weight: 1
+        tileIds: [5, 7]
+        prototypeGroups:
+          - [jungle_grass_broad]
+      - scene: /assets/ground/tropical/jungle-groundcover.glb
+        scale: 1.4
+        weight: 1.2
+        tileIds: [5, 7]
+        prototypeGroups:
+          - [jungle_groundcover]
+      # The rainforest's own: the broad leaves belong under a closed canopy.
+      - scene: /assets/ground/tropical/elephant-ear.glb
+        scale: 1.6
+        weight: 0.8
+        tileIds: [7]
+        prototypeGroups:
+          - [elephant_ear]
     # The same authored wet plants are reused as short submerged silhouettes.
     # The water surface follows terrain at +0.12 m, so these remain visible below
     # it instead of becoming reeds floating at an unrelated sea plane.
@@ -629,10 +808,26 @@ stylizedSurface:
       bladeHeight: 0.54
       bladeWidth: 0.071
       heightScale: [0.88, 1.22]
-      appearance:
-        # Sky fill on the pigment. The donor's 0.06 sat under a far stronger fill
-        # light than ours; 0.6 is what brings the front-lit meadow up to its look.
-        fill: 0.6
+      # The donor's golden-hour blade pigment. The shared grass tuning's darker
+      # bottom/top pair suits the painted terrain and the clump system; the
+      # meadow's lit blades need the paler, yellower field grass.
+      palette:
+        base: '#50852b'
+        tip: '#a6bf65'
+        brightness: 1
+        # Biomes the donor's single meadow never had: its lime field is the base,
+        # and these lean it drier, lusher or colder in the same dark-root/pale-tip
+        # style. Unlisted biomes (grassland, deciduous, tropical seasonal — the
+        # spawn) wear the donor's own. One uniform-array entry per distinct pair.
+        byTileId:
+          3: { base: '#6a7a2c', tip: '#c9bd6a' }   # savanna: dry, golden tips
+          7: { base: '#357a26', tip: '#98c255' }   # tropical rainforest: richer
+          8: { base: '#2f6a2c', tip: '#86b25a' }   # temperate rainforest: deeper
+          9: { base: '#34563a', tip: '#8fa77a' }   # taiga: cool sage
+          12: { base: '#3a6a2e', tip: '#9ab85e' }  # wetland: lush, reedy
+      # appearance: the donor's defaults (meadowGrassConfig.js). The 0.6 sky fill
+      # this once needed only made up for a 10° sun; under the meadow sky preset's
+      # ~57° sun the donor's 0.06 keeps the depth between roots and tips.
       # Which silhouette each biome's grass wears (meadow/meadowGrassShapes.js).
       shapes:
         default: slender
@@ -1067,6 +1262,9 @@ stylizedSurface:
     minScale: 0.9
     maxScale: 1.5
     radius: 1.8
+    # Share of that spacing radius the meadow leaves bare round a stone. The
+    # donor's grass grows up to its stones; the whole 1.8 m left a pale disc.
+    grassClearance: 0.35
     falloff: 0.7
     flatten: 0.85
     bend: 0.25
@@ -1160,7 +1358,8 @@ stylizedSurface:
     perChunk: 240
     # Deserts (1, 2) and tundra (10) join the layer so they stop being bare
     # ground; densityByTile is what keeps them looking like deserts and tundra.
-    tileIds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14]
+    # Paths (13) grow only the donor's pebbles (groundDetailVariants).
+    tileIds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14]
     # Share of the per-chunk candidate budget a biome keeps. Absent means 1.
     # `tileIds` on each variant decides *what* grows; this decides *how much*,
     # which is the other half of a biome reading as itself — a taiga floor is
@@ -1171,11 +1370,28 @@ stylizedSurface:
       3: 0.55
       9: 0.45
       10: 0.2
+      13: 0.4
     minScale: 0.82
     maxScale: 1.24
     radius: 0.34
     heightOffset: 0.015
     colorVariation: 0.14
+    castShadow: false
+  # The tropical kit's understory (assets.tropicalKitVariants): jungle grasses and
+  # groundcover in tropical seasonal forest and rainforest. At 324-1 960 triangles
+  # an instance it is a heavier job than the 350-triangle ground-detail accents, so
+  # it keeps its own, smaller candidate budget, casts no shadow and stays in the
+  # walking ring.
+  tropicalKit:
+    enabled: true
+    residentRadius: 1
+    perChunk: 128
+    tileIds: [5, 7]
+    minScale: 0.8
+    maxScale: 1.25
+    radius: 0.6
+    heightOffset: 0
+    colorVariation: 0.12
     castShadow: false
   aquaticPlants:
     enabled: true
@@ -1347,29 +1563,36 @@ stylizedSurface:
     colorG: '#cbb36a'
     colorB: '#9287ff'
     colorStem: '#648029'
+  # Contact shade: the soft dark patch where trunks and boulders meet the ground,
+  # after grass-test's writeContactShade — ambient occlusion rather than shadow, so
+  # it does not move with the sun and holds past the shadow map. Under it the
+  # ground turns to darker leaf-litter duff, darkest at the contact point. A patch
+  # is `base + radiusPerScale · scale` metres — the donor's `trunk · 3 + 3` round a
+  # tree, `radius · 1.5 + 1` round a stone — on the ground texture's 2 m texels.
+  # Read from `stylizedSurface.contactShade` (contactShade.js, terrainMaterial.js).
+  contactShade:
+    enabled: true
+    treeRadius: 3
+    rockRadius: 1
+    radiusPerScale: 1.2
+    treeStrength: 1
+    rockStrength: 0.8
   trees:
+    # grass-test's canopy grade (stylized/forest/canopyGrade.js): textured authored
+    # crowns are re-coloured by their luminance onto one shade->light green ramp,
+    # the donor's `canopyShadow`/`canopyLight`/`canopyTint`. It is what makes its
+    # gold, silver and green leaf cards read as one lit canopy. Palette-painted and
+    # vertex-painted (alpine snow) crowns are left alone.
+    canopyGrade:
+      enabled: true
+      shadow: '#286746'
+      light: '#8cb75a'
+      tint: 0.9
     enabled: true
     residentRadius: 2
     perChunk: 12
     clearRadius: 3.5
     tileIds: [3, 4, 5, 6, 7, 8, 9, 10, 12]
-    # Contact shade: the soft dark patch where trunks and boulders meet the ground,
-    # after grass-test's writeContactShade. Ambient occlusion rather than shadow —
-    # it does not move with the sun and it holds past the shadow map — which is what
-    # stops a tree looking like it is hovering.
-    #
-    # The radius is canopy-scale, and that is forced by the texture rather than
-    # chosen: the ground texture is 16 texels over a 128 m chunk, so one texel is
-    # eight metres and a trunk-width patch is a fraction of a texel and would paint
-    # nothing at all. A patch the size of the canopy is a texel or two, which is what
-    # a stand of trees actually darkens the ground with.
-    contactShade:
-      enabled: true
-      radiusPerScale: 7
-      treeStrength: 0.8
-      rockStrength: 0.65
-      # How dark the ground goes at the centre of a patch.
-      depth: 0.45
     # Bark weathering, after grass-test's barkWeathering: moss on a trunk's shaded
     # side and its root tops, rain running down it in dark streaks, snow caught on
     # the upward faces up in snow country, and an earthy base where soil splashes.
@@ -1430,7 +1653,9 @@ stylizedSurface:
     # single-species stands; the biome mix only reasserts itself across groves.
     groveMix: 0.16
     # Share of broadleaf groves that turn autumn. Conifer groves stay green.
-    autumnGroves: 0.55
+    # grass-test's meadow is uniformly green; 0.55 turned half the spawn's woods
+    # orange against it. An occasional turned grove keeps the variety.
+    autumnGroves: 0.1
     leafBottom: '#1c3b23'
     leafTop: '#5c8338'
     brightness: 1.05
@@ -1666,6 +1891,12 @@ stylizedSurface:
     # meeting it at a visible colour seam.
     fogColor: '#91bfd9'
     fogDensity: 0.0015
+    # Image-based light, as grass-test ships it (Poly Haven "Zwartkops Straight
+    # Morning", CC0): standard materials take their soft fill and reflections from
+    # it. Without it the hero's armour read black against the light.
+    environment:
+      url: /assets/environment/zwartkops_straight_morning_1k.hdr
+      intensity: 0.3
     # Aerial perspective on the far-terrain backdrop. Distance hazes toward
     # horizonColor; heightFalloff lets peaks stay clearer than valley floors, so
     # ranges layer front-to-back instead of flattening into one silhouette.
@@ -1783,10 +2014,17 @@ character:
   # slope, so the figure stays grounded when the sun throws its real shadow
   # long and sideways. Fades as the body or a foot leaves the ground.
   contactShadow: true
+  # grass-test's cinematic framing, in its character heights for Drusniel's
+  # 1.85 m: boom 2.3 H, look target 0.58 H above the soles, camera 0.22 H above
+  # the target, shoulder 0.18 H. The character stands lower and a little smaller
+  # in frame, and the ground ahead fills the view. (Was 3.4 / 1.45 / 0.42 / 0.)
   thirdPerson:
-    distance: 3.4
-    pivotHeight: 1.45
-    shoulder: 0.42
+    distance: 4.26
+    pivotHeight: 1.07
+    shoulder: 0.33
+    lift: 0.41
+    # grass-test's lens (scene.yaml camera.fov); first person keeps player.fovDegrees.
+    fovDegrees: 45
     minDistance: 0.85
     clearance: 0.38
     damping: 11

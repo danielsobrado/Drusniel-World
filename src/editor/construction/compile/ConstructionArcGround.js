@@ -62,7 +62,8 @@ export function createArcGroundTable({
 
 /**
  * A per-stone drape for `writePillowStone`: maps a module-space point to its
- * arc position through the stone's own frame, then reads the table.
+ * arc position through the stone's own frame, then reads the table. `bend`, if
+ * given, is the stone's `createStoneBend` and rides along for the mesher.
  */
 export function createStoneDrape(ground, {
   s,
@@ -70,10 +71,12 @@ export function createStoneDrape(ground, {
   centerZ,
   tangentX,
   tangentZ,
+  bend = null,
 }) {
   return {
     tangentX,
     tangentZ,
+    bend,
     sample(x, z, out) {
       const along = s + (x - centerX) * tangentX + (z - centerZ) * tangentZ;
       out[0] = ground.heightAt(along);

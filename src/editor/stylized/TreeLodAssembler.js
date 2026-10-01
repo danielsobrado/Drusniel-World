@@ -200,6 +200,8 @@ export function rebuildTreeLod({
   understoryRenderers = [],
   resolveLeafTint = null,
   resolvePrototypeIndex = null,
+  // Canonical point the instance matrices are written relative to (InstanceAnchor).
+  anchor = null,
 }) {
   PerfCounters.inc('treeRebuilds');
   const near = createInstances(prototypeCount);
@@ -345,11 +347,11 @@ export function rebuildTreeLod({
   }
 
   manifestStore.setActive(active);
-  const nearCount = writeInstances(renderers, near);
-  const proxyCount = writeInstances(proxyRenderers, proxy);
-  const fallbackCount = writeInstances(fallbackImpostorRenderers, fallback);
-  const clusterCount = writeInstances(clusterRenderers, clusters);
-  const understoryCount = writeInstances(understoryRenderers, understory);
+  const nearCount = writeInstances(renderers, near, anchor);
+  const proxyCount = writeInstances(proxyRenderers, proxy, anchor);
+  const fallbackCount = writeInstances(fallbackImpostorRenderers, fallback, anchor);
+  const clusterCount = writeInstances(clusterRenderers, clusters, anchor);
+  const understoryCount = writeInstances(understoryRenderers, understory, anchor);
   const requestedGeometryInstances = [near, proxy, fallback, clusters, understory]
     .flat()
     .reduce((total, records) => total + records.length, 0);

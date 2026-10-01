@@ -30,6 +30,11 @@ defaults:
   asymmetry: 0.3
   saddle: 0.1
 
+  # 0 domes the whole face, (1 - rho^2)^2; 1 keeps a broad flat plateau that
+  # only rolls off near the rim, (1 - rho^4)^2, so blocks read as dressed stone
+  # rather than cushions (wall handoff §7.2).
+  faceFlatness: 0
+
   # Share of stoneJitter's out-of-plane protrusion a pillow stone keeps. Through
   # a whole wall's depth it reaches several centimetres, and a pillow stone
   # pushed back that far sinks into its crevice and reads as a flat slab.
@@ -87,4 +92,41 @@ defaults:
   shellShade: 0.82
 
 # Per-style overrides of any of the keys above.
-styles: {}
+styles:
+  # Reference look (docs/reference/tiny-glade): flat faces, small bevels, pale
+  # seams, stones varying in depth. Lower tessellation, since there are about
+  # five times as many stones as the default.
+  glade-sandstone:
+    # Seen head-on, the rim is a band as wide as its radius; the references'
+    # bevels are narrow chamfers that catch the light.
+    edgeRadius:
+      ratioMin: 0.04
+      ratioMax: 0.09
+      minimum: 0.01
+      maximum: 0.028
+    cornerRadius:
+      ratioMin: 0.04
+      ratioMax: 0.14
+    bulge:
+      ratioMin: 0.02
+      ratioMax: 0.04
+      maximum: 0.009
+    faceFlatness: 0.75
+    protrusionScale: 0.8
+    # One segment per corner: a small cut facet rather than a round.
+    lod:
+      near:
+        arcSegments: 1
+        rimRings: 1
+        faceRings: 0
+      coarse:
+        arcSegments: 1
+        rimRings: 1
+        faceRings: 0
+    # Bevels are shaded by the light, bright on top and darker underneath, as
+    # in the references; baked crevice darkening made every rim a dark band.
+    occlusion:
+      crevice: 0
+      creviceReach: 1.0
+      # A thin shaded line under each block, as the references draw.
+      down: 0.12

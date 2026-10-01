@@ -569,6 +569,8 @@ button, input, select { font: inherit; }
 }
 .workshop-controls input:focus,
 .workshop-controls select:focus { border-color: #d4b65e; }
+/* Fields a house or prop design does not read; beats the label grid rule above. */
+.workshop-controls [hidden] { display: none; }
 .workshop-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .workshop-range { display: grid; gap: 6px; min-width: 0; }
 .workshop-range--wide { grid-column: 1 / -1; }

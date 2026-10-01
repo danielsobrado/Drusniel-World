@@ -213,10 +213,16 @@ export function createWallTopProfile(record, arcTable, { style = null } = {}) {
     for (let cell = first; cell <= last; cell += 1) {
       const center = (cell + 0.5) * merlonSpacing;
       if (center + width / 2 <= s0 || center - width / 2 >= s1) continue;
+      // The final tooth must stand on the wall, including a partial spacing at
+      // an endpoint. Every module derives the same clipped footprint.
+      const left = Math.max(0, center - width / 2);
+      const right = Math.min(arcTable.totalLength, center + width / 2);
+      if (right - left < 0.1) continue;
+      const s = (left + right) / 2;
       merlons.push(Object.freeze({
-        s: center,
-        width,
-        base: heightAt(center),
+        s,
+        width: right - left,
+        base: heightAt(s),
         height: merlonHeight,
       }));
     }

@@ -61,6 +61,9 @@ export function createDitheredMaterial(sourceMaterial, {
   morphologyPivotY = 0,
 } = {}) {
   const material = sourceMaterial.clone();
+  // A classic material's clone() drops node properties; keep a position node the
+  // source layer gave it (ground-detail wind).
+  if (sourceMaterial.positionNode && !material.positionNode) material.positionNode = sourceMaterial.positionNode;
   // Packed per-instance scalars; see createGeometry in StylizedLodRuntime for why these
   // share one attribute rather than taking a vertex buffer each.
   const dither = attribute('instanceDither', 'vec3');

@@ -1,3 +1,4 @@
+import { geometrySpansAt as mortarSpansAt } from './helpers/constructionGeometrySlices.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
@@ -132,23 +133,6 @@ function mortarGeometry(built) {
  * geometry so the test sees what renders, not what the builder intended. The
  * wall is straight, so a prism's world `x` is its arc coordinate.
  */
-function mortarSpansAt(geometry, y) {
-  const position = geometry.getAttribute('position');
-  const prisms = geometry.userData.mortarPrisms;
-  const spans = [];
-  for (let prism = 0; prism < prisms; prism += 1) {
-    const base = prism * 24;
-    const xs = [];
-    const ys = [];
-    for (let corner = 0; corner < 4; corner += 1) {
-      xs.push(position.getX(base + corner));
-      ys.push(position.getY(base + corner));
-    }
-    if (y < Math.min(...ys) - 1e-9 || y > Math.max(...ys) + 1e-9) continue;
-    spans.push([Math.min(...xs), Math.max(...xs)]);
-  }
-  return spans.sort((left, right) => left[0] - right[0]);
-}
 
 /** Merge touching spans so the same coverage reads identically either way. */
 function mergedSpans(spans) {
@@ -223,8 +207,35 @@ test('the doorway core never fills the void, packed through the real builder', (
   assert.ok(nearCentre(crown + 0.05), 'expected solid core just above the crown');
 });
 
+/**
+ * A field stone planted across the doorway, as a packer defect would leave it.
+ * The packer now keeps every course clear of the void (handoff §4C), so the
+ * clip's liveness is proven on a stone that needs clipping rather than on one
+ * the packer happens to produce.
+ */
+function withStraddlingStone(placements, opening) {
+  const template = placements.find((placement) => placement.category === 'field' && placement.corners);
+  const { sill, crown } = openingVerticalSpan(opening);
+  const half = 0.6;
+  const height = Math.min(0.5, (crown - sill) * 0.4);
+  const ring = [[-half, -height / 2], [half, -height / 2], [half, height / 2], [-half, height / 2]];
+  return [...placements, {
+    ...template,
+    s: opening.s,
+    y: sill + (crown - sill) * 0.5,
+    corners: ring,
+    mortarCorners: ring,
+    width: half * 2,
+    packedWidth: half * 2,
+    height,
+    stableIndex: 999999,
+  }];
+}
+
 test('the doorway clip is live at the call site, not merely implemented', () => {
-  const { wall, arcTable, opening, placements } = doorwayWall(true);
+  const doorway = doorwayWall(true);
+  const { wall, arcTable, opening } = doorway;
+  const placements = withStraddlingStone(doorway.placements, opening);
   const clipped = buildModule(wall, arcTable, placements, { recordOpenings: true });
   const unclipped = buildModule(wall, arcTable, placements, { recordOpenings: false });
   const clippedGeometry = mortarGeometry(clipped);
@@ -257,7 +268,7 @@ test('the doorway clip is live at the call site, not merely implemented', () => 
     }
   }
   assert.ok(probes > 100);
-  assert.ok(filled > 10, `the unclipped core filled the void at only ${filled} levels`);
+  assert.ok(filled > 5, `the unclipped core filled the void at only ${filled} levels`);
 });
 
 test('an undressed doorway leaves no mortar geometry inside the void', () => {

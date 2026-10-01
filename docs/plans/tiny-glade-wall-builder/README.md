@@ -3,12 +3,18 @@
 Status: **complete** — all nine phases landed 2026-07-27/28. Phase 10, the
 stone look (rounded fieldstone as the new default), landed 2026-09-24.
 
-Next quality pass: [Phase 11 — Wall appearance and building experience](phase-11-look-feel-and-usability.md)
-is **proposed** as of 2026-09-27. It covers the reference images, drawing and
+Current quality pass: [Phase 11 — Wall appearance and building experience](phase-11-look-feel-and-usability.md)
+is **in progress**. It covers the reference images, drawing and
 editing controls, masonry art direction, continuous previews, semantic joins,
 opening cuts, vegetation, workshop parity, and usability/performance gates.
 The completion status above describes the earlier implementation phases;
-Phase 11 has not been implemented.
+Phase 11's status table records the fixes already shipped.
+
+Latest review: [September 30 — fitted openings, sandstone variation and ivy](../../qa/wall-openings-growth-review-2026-09-30.md), with an [independent AI testing prompt](../../qa/wall-openings-growth-test-prompt-2026-09-30.md). The earlier [sandstone defaults, matching walls and battlement review](../../qa/wall-construction-followup-2026-09-30.md) records the preceding slice.
+
+**Next implementation:** [September 28 handoff — appearance and interaction](implementation-handoff-2026-09-28.md).
+It includes fresh visual/performance evidence, reproducible curve and LOD
+defects, and the remaining work in delivery order for the implementing AI.
 
 This folder is the execution plan for turning the live construction tool into a
 Tiny Glade-style procedural wall builder. It extends

@@ -1,4 +1,5 @@
 import { mixSeed } from '../../workshop/ProceduralRandom.js';
+import { resolvePlanarUnitExposure } from './PlanarUnitExposure.js';
 
 /**
  * Shaped stones for a crenellated crown.
@@ -75,7 +76,9 @@ export function layoutMerlon(merlon, {
 
   const bodyHeight = Math.max(0.12, merlon.height - lift);
   const rowHeight = bodyHeight / rows;
-  const footing = merlon.base + lift;
+  // Vary the crown height while keeping its first course on the wall. Lifting
+  // the whole ornament left a floating slit below every raised merlon.
+  const footing = merlon.base;
   const units = [];
 
   const rowWidthAt = (row) => (
@@ -140,7 +143,10 @@ export function layoutMerlon(merlon, {
     });
   }
 
-  return { units, rows, columns, pierced, bridge };
+  return {
+    units: resolvePlanarUnitExposure(units, { groundHeight: merlon.base }),
+    rows, columns, pierced, bridge,
+  };
 }
 
 function cellSize(rowWidth, columns) {

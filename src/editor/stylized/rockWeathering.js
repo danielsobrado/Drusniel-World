@@ -1,4 +1,18 @@
-import { color, dot, float, mix, normalWorld, positionWorld, sin, texture, uniform, uv, vec3 } from 'three/tsl';
+import {
+  attribute,
+  color,
+  dot,
+  float,
+  mix,
+  normalWorld,
+  positionGeometry,
+  positionWorld,
+  sin,
+  texture,
+  uniform,
+  uv,
+  vec3,
+} from 'three/tsl';
 import { stylizedFbm2 } from './StylizedNoiseNodes.js';
 
 /**
@@ -21,6 +35,28 @@ import { stylizedFbm2 } from './StylizedNoiseNodes.js';
  * `CharacterOcclusion` deliberately cuts foliage only — rocks are solid obstacles
  * and cutting them reads as a hole in the world — so the mask is left alone.
  */
+
+/**
+ * The donor's tone and moss frequencies are per unit of its world, 2.8 to the
+ * metre. Read per metre they gave a 2.5 m stone one flat tone and either no moss
+ * or a solid cap; converted, a stone carries the donor's broken patches again.
+ */
+const DONOR_UNITS_PER_METRE = 2.8;
+/** Per-placement shift of the pattern, per unit of the instance seed (0..1). */
+const SEED_SPREAD = Object.freeze([131.7, 71.3, 97.9]);
+
+/**
+ * Where a fragment sits in the weathering pattern: the stone's own (object-space)
+ * position, shifted by its placement's stable seed. Render-space position moved
+ * with every floating-origin rebase, so each stone's tone and moss jumped when the
+ * player walked far enough; object space does not move, and the seed keeps
+ * stones sharing one template from reading as copies. The rock view draws only
+ * instanced meshes, which always carry `instanceDither` (y is the seed).
+ */
+function patternPosition() {
+  const seed = attribute('instanceDither', 'vec3').y;
+  return positionGeometry.add(vec3(...SEED_SPREAD).mul(seed));
+}
 
 const MOSS_LIGHT = '#7d9a3a';
 const MOSS_DARK = '#4d6424';
@@ -73,13 +109,15 @@ export function applyRockWeathering(material, { settings, seaLevel = null }) {
   if (!settings?.enabled) return material;
   const sourceMap = material.map ?? null;
   const world = positionWorld;
-  const worldXZ = world.xz;
+  const pattern = patternPosition();
+  const donor = pattern.mul(DONOR_UNITS_PER_METRE);
+  const donorXZ = donor.xz;
 
-  // Broad tonal breakup from world-space sine products, so stones sharing one
+  // Broad tonal breakup from sine products over the stone, so stones sharing one
   // template stop reading as copies of each other.
-  const tone = sin(world.x.mul(0.83).add(sin(world.y.mul(1.31)).mul(1.6)))
-    .mul(sin(world.z.mul(0.97).add(sin(world.x.mul(0.61)).mul(1.2))))
-    .mul(sin(world.y.mul(0.71).add(world.z.mul(0.37))))
+  const tone = sin(donor.x.mul(0.83).add(sin(donor.y.mul(1.31)).mul(1.6)))
+    .mul(sin(donor.z.mul(0.97).add(sin(donor.x.mul(0.61)).mul(1.2))))
+    .mul(sin(donor.y.mul(0.71).add(donor.z.mul(0.37))))
     .mul(0.5).add(0.5);
   const albedo = (sourceMap ? texture(sourceMap, uv()).rgb : vec3(1))
     .mul(color(material.color.getHex()))
@@ -87,8 +125,8 @@ export function applyRockWeathering(material, { settings, seaLevel = null }) {
     .mul(mix(0.74, 1.06, tone));
 
   // Moss in broken patches on whatever faces up.
-  const patches = sin(worldXZ.x.mul(0.9).add(sin(worldXZ.y.mul(0.7)).mul(1.8)))
-    .mul(sin(worldXZ.y.mul(1.1).add(sin(worldXZ.x.mul(0.5)).mul(1.4))))
+  const patches = sin(donorXZ.x.mul(0.9).add(sin(donorXZ.y.mul(0.7)).mul(1.8)))
+    .mul(sin(donorXZ.y.mul(1.1).add(sin(donorXZ.x.mul(0.5)).mul(1.4))))
     .mul(0.5).add(0.5);
   const up = normalWorld.y;
   const mossMask = up.smoothstep(0.35, 0.85)
@@ -115,7 +153,7 @@ export function applyRockWeathering(material, { settings, seaLevel = null }) {
   // a waterline that makes it read as a tide mark rather than as shadow.
   if (Number.isFinite(seaLevel) && settings.waterline > 0) {
     const level = uniform(seaLevel);
-    const splash = stylizedFbm2(worldXZ.mul(0.7)).mul(0.5).add(0.5)
+    const splash = stylizedFbm2(pattern.xz.mul(0.7)).mul(0.5).add(0.5)
       .mul(settings.waterlineHeight);
     const above = world.y.sub(level);
     const wet = above.smoothstep(splash.mul(0.6), splash.add(0.15)).oneMinus()

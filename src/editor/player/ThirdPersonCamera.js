@@ -23,6 +23,18 @@ const DEFAULTS = Object.freeze({
   pivotHeight: 1.45,
   /** Lateral offset, so the character sits off-centre and the view is clear. */
   shoulder: 0.42,
+  /**
+   * Metres the camera sits above the boom, tilted down to keep aiming at the
+   * pivot: the character stands lower in frame and the ground ahead opens up
+   * (grass-test's `heightInHeights`). 0 is a level boom.
+   */
+  lift: 0,
+  /**
+   * Vertical field of view, degrees. Null follows the first-person camera; a
+   * narrower lens behind the shoulder keeps the character large in frame and
+   * compresses the field behind them (grass-test shoots at 45°).
+   */
+  fovDegrees: null,
   /** Hard floor for the boom when terrain closes in. */
   minDistance: 0.85,
   /** Keep this much air between the camera and the ground. */
@@ -49,6 +61,13 @@ export function createThirdPersonCameraSettings(config = {}) {
   }
   if (!Number.isFinite(settings.shoulder)) {
     throw new Error('Third-person camera shoulder must be finite.');
+  }
+  if (!Number.isFinite(settings.lift) || settings.lift < 0) {
+    throw new Error('Third-person camera lift must be a number ≥ 0.');
+  }
+  if (settings.fovDegrees !== null
+      && (!Number.isFinite(settings.fovDegrees) || settings.fovDegrees <= 0 || settings.fovDegrees >= 180)) {
+    throw new Error('Third-person camera fovDegrees must be between 0 and 180.');
   }
   if (!Number.isInteger(settings.occlusionSamples)
       || settings.occlusionSamples < 1
@@ -78,7 +97,7 @@ export class ThirdPersonCamera {
   constructor({ terrain, fovDegrees, farPlane, config = {} }) {
     this.terrain = terrain;
     this.settings = createThirdPersonCameraSettings(config);
-    this.camera = new THREE.PerspectiveCamera(fovDegrees, 1, 0.12, farPlane);
+    this.camera = new THREE.PerspectiveCamera(this.settings.fovDegrees ?? fovDegrees, 1, 0.12, farPlane);
     this.camera.name = 'third-person';
     this.camera.rotation.order = 'YXZ';
 
@@ -130,6 +149,7 @@ export class ThirdPersonCamera {
     this._desired.copy(this._pivot)
       .addScaledVector(this._forward, -this._boom)
       .addScaledVector(this._right, s.shoulder * (this._boom / s.distance));
+    this._desired.y += s.lift;
 
     const ground = this.terrain.heightAt(this._desired.x, this._desired.z);
     if (Number.isFinite(ground)) {
@@ -138,7 +158,8 @@ export class ThirdPersonCamera {
     }
 
     this.camera.position.copy(this._desired);
-    this.camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    // Tilted down by the lift's angle over the boom, so the pivot stays in aim.
+    this.camera.rotation.set(pitch - Math.atan2(s.lift, Math.max(this._boom, 1e-3)), yaw, 0, 'YXZ');
     this.camera.updateMatrixWorld();
   }
 
@@ -177,7 +198,7 @@ export class ThirdPersonCamera {
     const ratio = distance / s.distance;
     const shoulder = s.shoulder * ratio;
     const x = this._pivot.x - this._forward.x * distance + this._right.x * shoulder;
-    const y = this._pivot.y - this._forward.y * distance;
+    const y = this._pivot.y - this._forward.y * distance + s.lift;
     const z = this._pivot.z - this._forward.z * distance + this._right.z * shoulder;
     const ground = this.terrain.heightAt(x, z);
     return Number.isFinite(ground) && y >= ground + s.clearance;

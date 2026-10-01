@@ -60,7 +60,7 @@ import { audioBus, emitAudio } from './editor/audio/index.js';
 import { WorldSoundscape } from './editor/audio/world_soundscape.js';
 import { SurfaceWetness } from './editor/weather/surfaceWetness.js';
 import { SkyLookController } from './editor/stylized/sky/SkyLookController.js';
-import { SKY_PRESETS } from './editor/stylized/sky/SkyPresets.js';
+import { DEFAULT_SKY_PRESET, SKY_PRESETS } from './editor/stylized/sky/SkyPresets.js';
 import { DayNightCycle } from './editor/stylized/sky/dayNightCycle.js';
 import { SnowCountryWeight } from './editor/stylized/sky/SnowCountryWeight.js';
 import { FallingLeaves } from './editor/stylized/leaves/FallingLeaves.js';
@@ -80,6 +80,8 @@ import {
   stampFootprint,
   updateGroundDeformation,
 } from './editor/stylized/deformation/groundDeformationState.js';
+import { snowWakeRecorder } from './editor/stylized/deformation/SnowWakeRecorder.js';
+import { PLAYER_WATER_DRY } from './editor/player/PlayerWaterState.js';
 import { SwitchableCharacterView } from './editor/character/SwitchableCharacterView.js';
 import {
   resolveHeroPreference,
@@ -378,6 +380,7 @@ async function startEditor() {
       for (const record of constructionStore.list()) constructionSpatialIndex.update(record);
       return;
     }
+    if (change.hint?.decorationOnly) return;
     if (change.after) constructionSpatialIndex.update(change.after);
     else if (change.id) constructionSpatialIndex.remove(change.id);
   });
@@ -725,7 +728,9 @@ async function startEditor() {
   ui.attachWorkshop(proceduralWorkshop);
   const sceneLabel = (preset) => {
     const label = SKY_PRESETS[preset]?.label ?? '';
-    return preset === 'configured' ? 'Drusniel World' : label.replace(/\s*\(.*\)\s*$/, '');
+    return preset === 'configured' || preset === DEFAULT_SKY_PRESET
+      ? 'Drusniel World'
+      : label.replace(/\s*\(.*\)\s*$/, '');
   };
   const viewModeUi = new ViewModeUi({
     root,
@@ -971,6 +976,23 @@ async function startEditor() {
       heightAboveSea: footstep.y - (generator?.seaLevel ?? 0),
       snow,
     });
+  };
+  // The walking body in canonical metres, for the deep-snow wake; null when the
+  // wake is off or nobody is walking, which only ages the trail already laid.
+  const snowWakeEnabled = config.stylizedSurface?.snowWake?.enabled === true;
+  // Read every frame, so both objects are reused rather than rebuilt.
+  const snowWakeFooting = { x: 0, z: 0, footY: 0, grounded: false, waterState: PLAYER_WATER_DRY };
+  const snowWakeBodyScratch = { x: 0, y: 0, z: 0, grounded: false, inWater: false };
+  const snowWakeBody = () => {
+    if (!snowWakeEnabled || viewModeController.mode !== PLAYER_MODE_WALK) return null;
+    const footing = playerController.readFooting(snowWakeFooting);
+    const origin = terrainView.floatingOrigin.getState();
+    snowWakeBodyScratch.x = footing.x + origin.x;
+    snowWakeBodyScratch.y = footing.footY;
+    snowWakeBodyScratch.z = footing.z + origin.z;
+    snowWakeBodyScratch.grounded = footing.grounded;
+    snowWakeBodyScratch.inWater = footing.waterState !== PLAYER_WATER_DRY;
+    return snowWakeBodyScratch;
   };
   const detachFootsteps = characterView?.onFootstep((footstep) => {
     footstepCount += 1;
@@ -1367,6 +1389,7 @@ async function startEditor() {
     worldWind.render(terrainView.renderer);
     waterfallMist.update(frameTimestamp / 1000, viewModeController.camera);
     updateGroundDeformation(frameTimestamp / 1000);
+    snowWakeRecorder.update(frameTimestamp / 1000, snowWakeBody());
     updateSeaState({
       timeSeconds: frameTimestamp / 1000,
       storm: seaStormForWeather(),

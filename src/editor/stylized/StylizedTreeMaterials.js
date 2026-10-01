@@ -27,6 +27,7 @@ import {
 import { authoredTexture } from './AuthoredTextureNode.js';
 import { stylizedFbm } from './StylizedNoiseNodes.js';
 import { registerTreeWindTime } from './forest/TreeWindTime.js';
+import { gradeCanopy, resolveCanopyGrade } from './forest/canopyGrade.js';
 import { sampleWorldWind } from '../weather/wind/worldWindState.js';
 import { assignTreeFoliageMaterialData } from '../../render/postprocessing/PostProcessingMaterialData.js';
 import { applyBarkWeathering } from './barkWeathering.js';
@@ -62,6 +63,7 @@ export function createStylizedLeafMaterial({
   palette = null,
   alphaTest = 0,
   preserveSourceColor = false,
+  vertexColor = false,
 }) {
   registerTreeWindTime(config, time);
   // Height within the crown from the prototype's own geometry: `positionLocal`
@@ -109,9 +111,20 @@ export function createStylizedLeafMaterial({
     colorNode(paletteValue(palette, config, 'leafTop')),
     gradient,
   );
-  const baseColor = preserveSourceColor && map
-    ? authoredTexture(map).rgb.mul(colorNode(source?.color ?? '#ffffff'))
-    : paletteColor;
+  // An authored crown keeps its own colour: from its texture, or — for crowns
+  // painted per vertex, like grass-test's snow-laden alpine conifers, whose needles
+  // and settled snow share one leaf part — from COLOR_0. Only a geometry that
+  // carries the attribute may ask for it.
+  let authoredColor = null;
+  if (preserveSourceColor && map) {
+    authoredColor = gradeCanopy(
+      authoredTexture(map).rgb.mul(colorNode(source?.color ?? '#ffffff')),
+      resolveCanopyGrade(config.trees?.canopyGrade),
+    );
+  } else if (preserveSourceColor && vertexColor) {
+    authoredColor = attribute('color', 'vec3');
+  }
+  const baseColor = authoredColor ?? paletteColor;
   const variation = stylizedFbm(
     positionLocal.xz.add(positionLocal.y).mul(config.trees.variationScale),
   ).sub(0.5);

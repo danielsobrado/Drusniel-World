@@ -4,7 +4,9 @@ import {
   layoutOpening,
   openingCrownHeight,
   openingHalfWidthAt,
+  openingHalfWidthOverBand,
   survivingIntervals,
+  survivingIntervalsOverBand,
 } from '../src/editor/construction/masonry/OpeningLayout.js';
 import { packCurvedWall } from '../src/editor/construction/masonry/CurvedCoursePacker.js';
 import { createCurveArcTable } from '../src/editor/construction/masonry/CurveArcTable.js';
@@ -132,19 +134,22 @@ test('stone edges land flush on the jamb line', () => {
   }
   // The grid the packer solved on: the style's course height flat, from grade up.
   const courseHeight = STYLE.courseHeight;
+  const bedMargin = (STYLE.bedAmplitude ?? 0) * courseHeight;
   let checked = 0;
   for (const [courseIndex, course] of courses) {
-    // Reconstruct the *course* centre, the height the opening was reserved
-    // against. A stone's own `y` is the centre of its face, which the bed ramp
-    // and a horizontal split both move by more than enough to miss the jamb.
+    // The opening is reserved at its widest over the course's whole height
+    // band, bed wave included (handoff §4C), not at the course centre.
     const y = (courseIndex + 0.5) * courseHeight;
-    const half = openingHalfWidthAt(arch, y);
+    const band = [y - courseHeight / 2 - bedMargin, y + courseHeight / 2 + bedMargin];
+    const half = openingHalfWidthOverBand(arch, band[0], band[1]);
     if (half <= 0) continue;
-    const spans = survivingIntervals([0, context.arcTable.totalLength], [arch], y);
-    const left = Math.max(...course
+    const spans = survivingIntervalsOverBand([0, context.arcTable.totalLength], [arch], band);
+    // Stones fitted under or over the opening sit inside its column by design.
+    const solid = course.filter((stone) => !stone.openingFit);
+    const left = Math.max(...solid
       .filter((stone) => stone.s < arch.s)
       .map((stone) => stone.s + stone.packedWidth / 2));
-    const right = Math.min(...course
+    const right = Math.min(...solid
       .filter((stone) => stone.s > arch.s)
       .map((stone) => stone.s - stone.packedWidth / 2));
     assert.ok(Math.abs(left - spans[0][1]) < 1e-9, `left jamb ragged: ${left} vs ${spans[0][1]}`);
@@ -168,11 +173,13 @@ test('dressings are emitted with their own categories, never as field masonry', 
 
 test('the voussoir count follows the ring circumference', () => {
   const arch = opening();
-  const { voussoirs } = layoutOpening(arch, { thickness: 0.8 });
-  const radius = arch.width / 2 + 0.11;
+  const { voussoirs, keystone } = layoutOpening(arch, { thickness: 0.8 });
+  const radius = arch.width / 2;
   const expected = Math.max(9, Math.ceil((Math.PI * radius) / 0.28));
-  // Two faces per ring block.
-  assert.equal(voussoirs.length, expected * 2);
+  // One through-depth wedge per interval, with the central wedge a keystone.
+  assert.ok(Math.abs(voussoirs.length + 1 - expected) <= 1);
+  assert.ok(keystone.contourPolygons.length);
+  assert.ok(voussoirs.every(block => block.depth >= 0.8));
   for (const block of voussoirs) assert.equal(block.category, 'voussoir');
 });
 
@@ -385,9 +392,17 @@ test('soft-limestone-rubble openings stay clear and keep plumb jambs', () => {
   const courseHeight = soft.courseHeight;
   for (const stone of field) {
     if (stone.courseIndex == null) continue;
-    // Openings are reserved against the course centre, not the leaf face centre.
+    // Openings are reserved against the course band; stones fitted under a
+    // sill or over an arch must keep their whole face out of the void.
     const courseY = (stone.courseIndex + 0.5) * courseHeight;
     for (const voidOpening of openings) {
+      if (stone.openingFit) {
+        for (const [cornerS, cornerY] of stone.contourPolygons?.flat(2) ?? stone.corners) {
+          const inside = Math.abs(stone.s + cornerS - voidOpening.s) < openingHalfWidthAt(voidOpening, stone.y + cornerY) - 1e-6;
+          assert.ok(!inside, `fitted stone reaches into ${voidOpening.id} at course ${stone.courseIndex}`);
+        }
+        continue;
+      }
       const half = openingHalfWidthAt(voidOpening, courseY);
       if (!(half > 0)) continue;
       const left = voidOpening.s - half;
@@ -432,7 +447,8 @@ test('a pointed void pinches at the authored crown with leaf dressings', () => {
   assert.ok(openingHalfWidthAt(arch, crown - 0.1) > 0);
   const { keystone, voussoirs } = layoutOpening(arch, { thickness: 0.8 });
   assert.ok(voussoirs.length > 0);
-  assert.ok(Math.abs(keystone.y - crown) < 0.05, `keystone ${keystone.y} vs crown ${crown}`);
+  const bottom = Math.min(...keystone.contourPolygons.flat(2).map(([, y]) => y + keystone.y));
+  assert.ok(bottom > crown - 0.2 && bottom < crown, `keystone bottom ${bottom} vs crown ${crown}`);
   // Dressings stay near the two leaf arcs rather than climbing a full semicircle.
   assert.ok(voussoirs.every((unit) => unit.y <= crown + 0.2));
 });

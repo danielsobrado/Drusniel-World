@@ -10,6 +10,10 @@ const CHANNEL_LAYOUTS = Object.freeze({
     format: THREE.RGBAFormat,
     type: THREE.UnsignedByteType,
     colorSpace: THREE.NoColorSpace,
+    // Read by hand-filtered `textureLoad` (TerrainSlotBindings.bilinearLoad). A
+    // nearest-filtered texture is "unfilterable" to three, which then binds no
+    // sampler for it — the one the terrain's 16-sampler fragment stage lacked.
+    unfiltered: true,
   }),
   terrainShape: Object.freeze({
     components: 2,
@@ -64,8 +68,9 @@ function createTexture(layout, resolution) {
     layout.format,
     layout.type,
   );
-  texture.magFilter = THREE.LinearFilter;
-  texture.minFilter = THREE.LinearFilter;
+  const filter = layout.unfiltered ? THREE.NearestFilter : THREE.LinearFilter;
+  texture.magFilter = filter;
+  texture.minFilter = filter;
   texture.generateMipmaps = false;
   texture.unpackAlignment = 1;
   texture.colorSpace = layout.colorSpace;

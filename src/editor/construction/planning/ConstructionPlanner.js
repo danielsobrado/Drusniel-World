@@ -3,11 +3,12 @@ import { sampleCubicBezierPath } from '../curve/CubicBezierPath.js';
 import { createCurveArcTable } from '../masonry/CurveArcTable.js';
 import { createWallTopProfile } from '../masonry/WallTopProfile.js';
 import { constructionStyle } from '../masonry/ConstructionStyleCatalog.js';
-import { footingCourseHeight } from '../masonry/WallCourseTable.js';
+import { fitWallCourseHeight, footingCourseHeight } from '../masonry/WallCourseTable.js';
 import {
   MAX_CONSTRUCTION_STONES,
   MAX_MODULE_STONES,
   packCurvedWall,
+  usesCopingCourse,
 } from '../masonry/CurvedCoursePacker.js';
 import { constructionRuinProfile } from '../config/ConstructionRuinConfig.generated.js';
 import { resolveRuinSupport } from '../masonry/RuinSupportResolver.js';
@@ -135,6 +136,9 @@ function boundsForPoints(points, margin) {
   return bounds;
 }
 
+/** Arc length below which a segment is a degenerate span, in metres. */
+const MIN_SEGMENT_LENGTH = 1e-4;
+
 export function planConstruction(input, {
   maxModuleLength = DEFAULT_MAX_MODULE_LENGTH,
   terrainSamples = [],
@@ -200,6 +204,7 @@ export function planConstruction(input, {
     hasher.number(record.dimensions.height);
     hasher.number(record.dimensions.thickness);
     hasher.number(courseFootingHeight);
+    hasher.number(wallCourseHeight ?? 0);
     hasher.text(record.top.style);
     hasher.number(record.top.base);
     for (const point of modulePoints) {
@@ -261,7 +266,16 @@ export function planConstruction(input, {
   const style = constructionStyle(record.style.key);
   const arcTable = masonry ? createCurveArcTable(sampled) : null;
   const topProfile = masonry ? createWallTopProfile(record, arcTable, { style }) : null;
-  const wallCourseHeight = masonry ? style.courseHeight : null;
+  // Whole courses from the ground to the capstones; see `fitWallCourseHeight`.
+  const wallCourseHeight = masonry
+    ? fitWallCourseHeight({
+      courseHeight: style.courseHeight,
+      footing: style.footing ?? null,
+      wallHeight: Math.max(0.2, record.top.base),
+      copingHeight: usesCopingCourse(record.top.style) ? (style.coping?.height ?? 0) : 0,
+      fitUncapped: record.top.style === 'crenellated',
+    })
+    : null;
   /**
    * The wall height appearance is normalised against — the authored base
    * height, not the wall-wide tallest point.
@@ -291,9 +305,13 @@ export function planConstruction(input, {
 
   const modules = [];
   for (const segment of record.path.segments) {
-    const segmentPoints = sampled.points.filter(({ segmentId }) => segmentId === segment.id);
-    if (segmentPoints.length < 2) continue;
+    // A segment owns its arc interval, not its samples: the sampler drops each
+    // segment's start sample as the previous segment's end, so a short segment
+    // of a dense curve can carry a single sample and still span real wall.
+    // Counting samples skipped most of a 32-anchor circle (handoff 4A). Only a
+    // genuinely zero-length span is dropped.
     const range = segmentRanges.get(segment.id);
+    if (!range || !(range.end - range.start > MIN_SEGMENT_LENGTH)) continue;
     const startDistance = range.start;
     const endDistance = range.end;
     const length = endDistance - startDistance;
@@ -351,9 +369,11 @@ export function planConstruction(input, {
               return distance + reach > from && distance - reach < to;
             })
             .map(({ feature, distance }) => ({ ...feature, s: distance })),
+          // A small-stone style declares its own budget; every other style
+          // keeps the shared caps.
           budget: Math.max(0, Math.min(
-            MAX_MODULE_STONES,
-            MAX_CONSTRUCTION_STONES - stoneTotal,
+            style.stoneBudget?.module ?? MAX_MODULE_STONES,
+            (style.stoneBudget?.construction ?? MAX_CONSTRUCTION_STONES) - stoneTotal,
           )),
         });
         stoneTotal += packed.stats.stones;

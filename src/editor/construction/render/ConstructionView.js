@@ -24,6 +24,7 @@ import {
   isConstructionRuinDebugEnabled,
 } from './ConstructionRuinDebug.js';
 import { sampleRuinEnvelopeHeight } from '../masonry/RuinEnvelope.js';
+import { refreshConstructionGrowth } from './ConstructionGrowthResidency.js';
 
 const HANDLE_RADIUS = 0.16;
 const TANGENT_HANDLE_RADIUS = 0.09;
@@ -94,6 +95,7 @@ function quantizeOrigin(value) {
  */
 export function residentMaterial(mesh, materials, selected) {
   const slot = mesh.userData.constructionMaterialSlot;
+  if (slot === CONSTRUCTION_MATERIAL_SLOT.GROWTH) return materials.growth;
   if (slot === CONSTRUCTION_MATERIAL_SLOT.MORTAR) {
     return materials.mortar;
   }
@@ -226,6 +228,8 @@ export class ConstructionView {
       appearanceDescriptorMs: 0,
       lodReductionMs: 0,
       lodTransitionsStarted: 0,
+      // Frames a module spent waiting on a transition it had already started.
+      lodTransitionWaitFrames: 0,
       lodTransitionsCompleted: 0,
       duplicateBuildsSuppressed: 0,
       staleBuildsDiscarded: 0,
@@ -374,6 +378,11 @@ export class ConstructionView {
     entry.record = record;
     this.positionGroup(entry);
 
+    if (hint?.decorationOnly && entry.shellMesh) {
+      refreshConstructionGrowth(entry, this.terrainView);
+      this.refreshModuleStats();
+      return;
+    }
     if (hint?.materialOnly && entry.shellMesh) {
       // Geometry is unchanged; only the material assignment can differ.
       this.assignMaterials(entry, record, { force: true });
@@ -739,8 +748,16 @@ export class ConstructionView {
         });
         resident.requestedBand = band;
         if (band !== previousVisible) {
-          this.stats.lodTransitionsStarted += 1;
-          this.stats.lodTransitions += 1;
+          // A transition starts once per requested destination; the frames it
+          // then spends waiting for that band's build are counted separately,
+          // so the counter reports real requests, not queue latency.
+          if (resident.transitionTarget === band) {
+            this.stats.lodTransitionWaitFrames += 1;
+          } else {
+            resident.transitionTarget = band;
+            this.stats.lodTransitionsStarted += 1;
+            this.stats.lodTransitions += 1;
+          }
           // Any band that draws masonry needs a build of that band — including
           // a module that has never been built, which is every module that was
           // in the far band when its plan landed.
@@ -755,8 +772,10 @@ export class ConstructionView {
             resident.visibleBand = band;
             resident.visibleSince = now;
             resident.band = band;
+            resident.transitionTarget = null;
           }
         } else {
+          resident.transitionTarget = null;
           resident.band = band;
           resident.visibleBand = band;
         }
@@ -859,6 +878,7 @@ export class ConstructionView {
         arcTable: entry.arcTable,
         moduleOrigin: entry.origin,
         groundHeightAt: (x, z) => this.terrainView.getCanonicalHeight(x, z) ?? 0,
+        pathInterval: module.pathInterval,
         lodBand,
       })
       : { meshes: [], stats: null };
@@ -883,6 +903,7 @@ export class ConstructionView {
     resident.band = lodBand;
     resident.visibleSince = performance.now();
     resident.pendingBuildKey = null;
+    resident.transitionTarget = null;
     this.stats.lodTransitionsCompleted += 1;
     if (lodBand === 'near') this.stats.nearBuilds += 1;
     else this.stats.coarseBuilds += 1;
@@ -993,7 +1014,7 @@ export class ConstructionView {
     this.stats.lodReductionMs = lodReductionMs;
     this.stats.stoneBuildMs = stoneBuildMs;
     this.stats.mortarBuildMs = mortarBuildMs;
-    for (const key of ROUNDED_STAT_KEYS) {
+    for (const key of [...ROUNDED_STAT_KEYS, 'growthLeaves', 'growthTriangles']) {
       let total = 0;
       for (const entry of this.entries.values()) {
         for (const other of entry.modules.values()) total += other.stats?.[key] ?? 0;

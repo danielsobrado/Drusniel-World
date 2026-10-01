@@ -44,6 +44,16 @@ The images suggest a hierarchy: overall silhouette, individual stone mass, joint
 
 ## 3. Current implementation and concrete gaps
 
+### Update, September 30
+
+The later [fitted-openings and growth review](../../qa/wall-openings-growth-review-2026-09-30.md) adds contour-fitted shoulders, full-depth reveals, more varied sandstone proportions and sparse rooted ivy. Growth has a **Natural / None** control with persistence, matching and synchronized undo/redo. The full suite passed 2,908 tests; the production build passed. Use the [AI testing prompt](../../qa/wall-openings-growth-test-prompt-2026-09-30.md) for independent verification. Simple shape creation, semantic joins, broader contact decoration and release performance gates remain open.
+
+The paragraph below records the earlier September 30 slice and its priorities at that time.
+
+The [September 30 review](../../qa/wall-construction-followup-2026-09-30.md) records the latest completed slice: sandstone defaults for new strokes, **Draw matching wall**, finished battlement surfaces, seated and bounded battlement blocks, and courses fitted up to the crown. New drawings use `glade-sandstone`; existing records and the schema fallback keep their saved appearance. The full suite passed 2,874 tests, and pointer drawing plus undo/redo were checked in the editor. The remaining priorities are exact arch fitting, more varied block proportions, semantic joins and simple shape creation, followed by contact vegetation.
+
+### Original inventory, September 27
+
 This inventory comes from source inspection on September 27. Existing QA reports describe earlier results; this planning task did not run a new interactive or performance baseline.
 
 | Area | Existing foundation | Work this plan adds |
@@ -90,7 +100,7 @@ evidence; no interactive W0 baseline or usability round has run yet.
 | 5 | Ctrl has inconsistent meanings | **Fixed** | One snapping predicate; Shift is fine motion (`ConstructionControlPolicy.test.js`) |
 | 6 | Hidden grid, fixed radius, first candidate wins | **Fixed** | Grid opt-in; nearest centreline with stable-id ties; radii are 12 px acquire / 20 px release converted at the pointer's depth, and a held target yields only to a stronger kind (`ConstructionSnapHysteresis.test.js`). The pixel values are the plan's starting hypothesis, still to calibrate in W0/W7 |
 | 7 | Snapping creates no lasting join | Open | Needs the W1 semantic join relationship |
-| 8 | Openings cut at the course centre | **Partial** | One shared contour (`OpeningLayout`) now drives shell, mortar core, collision and decoration masks (`ConstructionStructuralMasks`, `ConstructionShellOpenings`, `ConstructionMortarVoidWiring`). Near stones are still packed at the course centre and can reach past a sill or into an arch crown: W5 per-stone contour clipping |
+| 8 | Openings cut at the course centre | **Fixed (2026-09-28)** | Courses are packed around the widest void over their whole height band, bed wave included; the column over each opening is refilled with stones capped at the sill or resting flat on the highest contour beneath them (`CurvedCoursePacker.courseSpans`, `OpeningLayout.openingTopOverSpan`, lattice `floorAt`). Those stones stay whole at coarse LOD. The handoff §4C ray grid finds 0 stone hits in round, flat, pointed and segmental voids at near and coarse LOD for all styles. Small wedges beside arch shoulders remain under the voussoirs; exact curved clipping of individual stones is still open |
 | 9 | Seed stability only partial | **Verified for the tested edits** | Distant modules stay bit-identical through inserts, trims, top raises and thickness changes (`ConstructionEditIdentity`, `ConstructionArcDomainStability`, `ConstructionPlannerSeedStability`). Loop-seam repair and cell lineage through splits remain W4 |
 | 10 | World/workshop stones differ | Open | W4 |
 | 11 | Material list truncated | **Fixed** | The ring still shows eight petals; the inspector behind "More…" lists every wall preset, custom ones included (`ConstructionWallMaterials.test.js`) |
@@ -101,6 +111,42 @@ ids stay out of geometry hashes; the shell carries wall-local UVs and a subtle
 stone pattern baked from the authored `rubble-wall-mossy` image
 (`npm run prepare:construction-textures`), so far walls and drafts read as
 stone rather than a plain strip.
+
+**Stage 2 candidate (2026-09-28).** A second rounded style, `glade-sandstone`
+("Glade sandstone"), sits beside the default for side-by-side review. It is
+tuned against the Tiny Glade references in `docs/reference/tiny-glade`.
+
+- **Blocks:** small squarish blocks. Courses are 0.30 m, stones 0.36 m, and
+  bed amplitude is 0.02.
+- **Exact fit:** `exactFit: true` keeps each stone's solved cell face and turn.
+  The jitter's in-plane shrink and roll would open slots between blocks this
+  small.
+- **Joints:** head 4–8 mm, bed 3–6 mm.
+- **Chamfers:** 1–2.8 cm, varying by stone, with `faceFlatness` 0.6 (a plateau
+  face). One arc segment per corner, so each corner is a small cut facet rather
+  than a round.
+  `faceFlatness` is a new rounding key: 1 is a broad plateau and 0 keeps the old
+  dome bit-identical.
+- **Relief:** blocks vary up to 5 cm in depth.
+- **Occlusion:** no baked crevice darkening, since it turned every rim into a
+  dark band. A thin shaded line sits under each block instead.
+- **Core:** a shadowed mortar core (`#7a5438`) 7.5 cm back.
+- **Palette:** peach sandstone, `glade-sandstone`, with a wider per-stone value
+  and warmth grade and 8% redder outliers. Palette colours are linear
+  vertex multipliers, so the base is set brighter than it displays.
+- **Budget:** its own `stoneBudget` (900 per module), since there are about five
+  times as many stones as the default.
+- **Light:** it pairs with the `glade` sky preset, a warm sun with near-neutral
+  ambient so top chamfers read cream rather than grey. That preset is a
+  scene-wide change, so it is not the default either.
+
+Curved walls: rounded stones are now bent along the arc
+(`compile/ConstructionArcBend.js`), so the convex face no longer opens a
+`width × offset / radius` wedge at every head joint.
+
+The default is unchanged until the look is chosen: switch
+`DEFAULT_CONSTRUCTION_STYLE_KEY` (and `DEFAULT_SKY_PRESET` for the light), or
+tune `stone-rounding.yml` and the catalog entry.
 
 **Next, in order:**
 

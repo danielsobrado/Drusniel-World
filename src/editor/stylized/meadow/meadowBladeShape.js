@@ -25,9 +25,10 @@ import {
   vec3,
 } from 'three/tsl';
 
-import { sampleWorldWindCanonical } from '../../weather/wind/worldWindState.js';
+import { sampleWorldWindCanonical, windWaveCoordinates } from '../../weather/wind/worldWindState.js';
 import { groundDeformationNode } from '../deformation/groundDeformationNode.js';
 import { stylizedDirtMask, stylizedPathWearMask } from '../StylizedNoiseNodes.js';
+import { MEADOW_SHAPE_COUNT } from './meadowGrassShapes.js';
 import { meadowNoise } from './meadowNoise.js';
 
 const HALF_PI = Math.PI * 0.5;
@@ -49,6 +50,10 @@ export function meadowInstance(originUniform, { cards = false } = {}) {
   const tile = attribute('instanceTile', 'vec2');
   const data = attribute('instanceData', 'vec4');
   const base = vec3(tile.x.add(position.x), position.y, tile.y.add(position.z));
+  // The look code: shape + MEADOW_SHAPE_COUNT × palette (meadowPalettes.js).
+  const code = cards ? floor(data.x.div(4)) : floor(data.x);
+  const palette = floor(code.div(MEADOW_SHAPE_COUNT));
+  const shape = code.sub(palette.mul(MEADOW_SHAPE_COUNT));
   return {
     base,
     tile,
@@ -56,9 +61,11 @@ export function meadowInstance(originUniform, { cards = false } = {}) {
     canonical: base.xz.add(originUniform),
     strength: position.w,
     rotation: attribute('instanceRotation', 'vec2'),
-    // Blades: shape id + path mask in the fraction. Cards: shape × 4 + variant.
-    shape: cards ? floor(data.x.div(4)) : floor(data.x),
-    cell: cards ? data.x : float(0),
+    // Blades: look code + path mask in the fraction. Cards: look code × 4 +
+    // variant; `cell` is the atlas cell, shape × 4 + variant, palette peeled off.
+    shape,
+    palette,
+    cell: cards ? data.x.sub(palette.mul(MEADOW_SHAPE_COUNT * 4)) : float(0),
     path: cards ? float(0) : fract(data.x),
     rank: data.y,
     phase: data.z,
@@ -248,11 +255,13 @@ export function createMeadowBladePosition({ uniforms, tuning, config, bandCount,
       const direction = wind.direction;
       const gust = wind.envelope.clamp(0.35, 3.5);
       const across = vec2(direction.y.negate(), direction.x);
-      const along = dot(blade.canonical, direction);
+      // Phase against the prevailing wind, not the local field (windWaveCoordinates).
+      const wave = windWaveCoordinates(blade.canonical);
+      const along = wave.along;
       const primary = sin(along.mul(tuning.windFrequency).add(uniforms.time.mul(tuning.windSpeed)).add(blade.phase));
       const secondary = sin(along.mul(tuning.windFrequency.mul(2.6))
         .add(uniforms.time.mul(tuning.windSpeed.mul(1.8))).add(blade.phase.mul(1.7)).add(1.3)).mul(0.35);
-      const turbulence = sin(dot(blade.canonical, across).mul(tuning.windFrequency.mul(1.9))
+      const turbulence = sin(wave.across.mul(tuning.windFrequency.mul(1.9))
         .add(uniforms.time.mul(tuning.windSpeed.mul(0.7))).add(blade.phase.mul(0.6)).add(2.6))
         .mul(tuning.windTurbulence);
       const compliance = oneMinus(blade.variation.mul(tuning.windStiffnessRange));
@@ -265,7 +274,7 @@ export function createMeadowBladePosition({ uniforms, tuning, config, bandCount,
       local.y.subAssign(abs(height.mul(cos(windAngle).sub(1)).mul(r)));
       // Tip flutter across the gust, faded before blades turn sub-pixel.
       const flutterFade = oneMinus(smoothstep(tuning.flutterFadeStart, tuning.flutterFadeEnd, distance));
-      const flutter = sin(dot(blade.canonical, across).mul(1.9).add(uniforms.time.mul(3.4)).add(blade.phase.mul(3.1)))
+      const flutter = sin(wave.across.mul(1.9).add(uniforms.time.mul(3.4)).add(blade.phase.mul(3.1)))
         .mul(tuning.flutterStrength).mul(height).mul(pow(r, 3)).mul(flutterFade).mul(gust.sqrt());
       local.x.addAssign(across.x.mul(flutter));
       local.z.addAssign(across.y.mul(flutter));

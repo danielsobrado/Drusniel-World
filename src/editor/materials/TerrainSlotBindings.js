@@ -1,4 +1,4 @@
-import { texture, uniform } from 'three/tsl';
+import { floor, fract, mix, texture, textureSize, uniform, vec2 } from 'three/tsl';
 
 import { getTerrainMaterialBakeGpuState } from './TerrainMaterialBakeGpu.js';
 
@@ -39,6 +39,35 @@ function perObjectTexture(template, uvNode, read) {
     .onObjectUpdate(({ object }) => read(object) ?? template);
 }
 
+/**
+ * A texture read without a sampler: `textureLoad` at the four texels round
+ * `uvNode`, filtered by hand; with `read`, per drawn object like perObjectTexture. WebGPU gives a fragment stage 16 samplers
+ * however many textures it may bind, and the terrain uses every one; a smooth
+ * bake read this way frees one for the path dirt (stylized/path). The texel
+ * coordinates pass through the node's identity uv matrix as whole numbers, which
+ * is what keeps `onObjectUpdate` alive (see perObjectTexture).
+ */
+export function bilinearLoad(template, uvNode, read = null) {
+  const node = (coords) => {
+    const load = texture(template, coords).setSampler(false);
+    return read
+      ? load.setUpdateMatrix(true).onObjectUpdate(({ object }) => read(object) ?? template)
+      : load;
+  };
+  // Only its size is read; without `setSampler(false)` it would still bind one.
+  const size = vec2(textureSize(node(null)));
+  const texel = uvNode.mul(size).sub(0.5);
+  const base = floor(texel);
+  const weight = fract(texel);
+  const limit = size.sub(1);
+  const load = (dx, dy) => node(base.add(vec2(dx, dy)).clamp(vec2(0), limit));
+  return mix(
+    mix(load(0, 0), load(1, 0), weight.x),
+    mix(load(0, 1), load(1, 1), weight.x),
+    weight.y,
+  );
+}
+
 /** A texture node that samples the drawn slot's own texture `name`. */
 export function slotTexture(name, template, uvNode) {
   return perObjectTexture(template, uvNode, (object) => slotData(object)?.[name]);
@@ -70,6 +99,14 @@ export function createSlotBakeGpuState(template) {
     ready: perObject('ready'),
     stale: perObject('stale'),
     blend: perObject('blend'),
+    /** As `sampleTexture`, without a sampler binding (bilinearLoad). */
+    loadTexture(name, uvNode) {
+      return bilinearLoad(
+        template.textures[name],
+        uvNode,
+        (object) => getTerrainMaterialBakeGpuState(object)?.textures?.[name],
+      );
+    },
     sampleTexture(name, uvNode) {
       return perObjectTexture(
         template.textures[name],

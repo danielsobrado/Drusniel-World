@@ -1409,6 +1409,49 @@
       ]
     },
     {
+      "key": "donor-rock-pebbles",
+      "input": "assets/runtime-sources/rocks/donor/rocks.glb",
+      "sha256": "fa0c0e21399a0af37678c34faa04ac31caf65d0b22674cfc5051bce30b40e567",
+      "bytes": 1047252,
+      "sourceAsset": {
+        "preparedFrom": "F:/Development/grass-test/public/Assets/terrain/fantasy/rocks.glb",
+        "preparer": "scripts/prepare-donor-rock-assets.mjs"
+      },
+      "outputs": [
+        {
+          "name": "pebbles",
+          "roots": [
+            "SM_Rocks_06",
+            "SM_Rocks_07",
+            "SM_Rocks_10",
+            "SM_Rocks_11"
+          ],
+          "scale": 1,
+          "output": "assets/extracted/rocks/donor-pebbles/pebbles.glb",
+          "published": "public/assets/rocks/donor/pebbles.glb",
+          "sha256": "6dff217fb821d7c814ce81fc3bbb8f2757b91ebdda170d971bf7ee314a50d488",
+          "bytes": 29468,
+          "nodes": 9,
+          "meshes": 4,
+          "materials": 1,
+          "textures": 1,
+          "triangles": 220,
+          "bounds": {
+            "min": [
+              -1.105555,
+              0,
+              -0.711298
+            ],
+            "max": [
+              1.105555,
+              0.717164,
+              0.711298
+            ]
+          }
+        }
+      ]
+    },
+    {
       "key": "stylized-grass",
       "input": "assets/grass/stylized_grass.glb",
       "sha256": "613a893f2615116373cd7a45c75c2dff5f921c7cf6ae45ffad577ffd2408ef84",

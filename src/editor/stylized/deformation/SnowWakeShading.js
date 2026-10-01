@@ -72,7 +72,13 @@ export function createSnowWakeState({
     Array.from({ length: capacity }, () => new THREE.Vector4(1, 0, 0, 0)),
     'vec4',
   );
-  const uniforms = { points, axes, count: uniform(0), step: uniform(step) };
+  // (x, z, radius): a circle holding the whole live trail, so a fragment outside
+  // it skips the per-sample loop with one distance test. Its centre is whole
+  // metres and the samples are stored relative to it: canonical coordinates run
+  // to hundreds of kilometres, where float32 steps by centimetres, but a
+  // difference of whole numbers is exact.
+  const bounds = uniform(new THREE.Vector3());
+  const uniforms = { points, axes, count: uniform(0), step: uniform(step), bounds };
 
   return {
     capacity,
@@ -94,15 +100,37 @@ export function createSnowWakeState({
     sync(clock, { life = SNOW_WAKE_LIFETIME } = {}) {
       const count = spine.count;
       uniforms.count.value = count;
+      let minX = Infinity;
+      let minZ = Infinity;
+      let maxX = -Infinity;
+      let maxZ = -Infinity;
+      let widest = 0;
+      if (count === 0) return 0;
+      const newest = spine.indexAt(count - 1);
+      const anchorX = Math.round(spine.x[newest]);
+      const anchorZ = Math.round(spine.z[newest]);
       for (let order = 0; order < count; order += 1) {
         const index = spine.indexAt(order);
         const speed = spine.speed[index];
         const depth = wakeDepthForSpeed(speed) * spine.strength[index];
         const width = wakeWidthForSpeed(speed);
         const fade = wakeFade(Math.max(0, clock - spine.laid[index]), life);
-        points.array[order].set(spine.x[index], spine.z[index], depth, fade);
+        points.array[order].set(spine.x[index] - anchorX, spine.z[index] - anchorZ, depth, fade);
         axes.array[order].set(spine.rightX[index], spine.rightZ[index], width, 0);
+        minX = Math.min(minX, spine.x[index]);
+        maxX = Math.max(maxX, spine.x[index]);
+        minZ = Math.min(minZ, spine.z[index]);
+        maxZ = Math.max(maxZ, spine.z[index]);
+        widest = Math.max(widest, width);
       }
+      // Every sample lies within this reach of the anchor, banks and kernel included.
+      const reach = Math.max(
+        Math.hypot(minX - anchorX, minZ - anchorZ),
+        Math.hypot(maxX - anchorX, minZ - anchorZ),
+        Math.hypot(minX - anchorX, maxZ - anchorZ),
+        Math.hypot(maxX - anchorX, maxZ - anchorZ),
+      );
+      uniforms.bounds.value.set(anchorX, anchorZ, reach + widest + spine.step);
       return count;
     },
     clear() {
@@ -134,16 +162,17 @@ export function createSnowWakeShading({
   // Returning null, not a zero node: "off" must remove the loop from the shader,
   // not run it and multiply by zero.
   if (config?.enabled !== true || !state || !snow) return null;
-  const { points, axes, count, step } = state.uniforms;
+  const { points, axes, count, step, bounds } = state.uniforms;
 
   const localMeters = vec2(terrainUv.x, terrainUv.y).mul(chunkWorldSize);
   const originMeters = vec2(
     chunkCenter.x.sub(chunkWorldSize * 0.5),
     chunkCenter.y.negate().sub(chunkWorldSize * 0.5),
   ).round();
-  // The fragment's canonical XZ, in the axes the shared field is addressed in and
-  // the caller records spine samples in (see groundDeformationNode).
-  const fragment = vec2(originMeters.x, originMeters.y.negate())
+  // The fragment's canonical XZ relative to the trail's whole-metre anchor, in the
+  // axes the shared field is addressed in and the spine is recorded in (see
+  // groundDeformationNode). Whole origin minus whole anchor is exact at any scale.
+  const fragment = vec2(originMeters.x, originMeters.y.negate()).sub(vec2(bounds.x, bounds.y))
     .add(vec2(localMeters.x, localMeters.y.negate()));
 
   // The shared field: press already in the ground here. Gated by the trail's own
@@ -159,7 +188,10 @@ export function createSnowWakeShading({
   // function context.
   const offset = Fn(() => {
     const trail = float(0).toVar();
-    If(snow.greaterThan(SNOW_GATE), () => {
+    // Deep snow, a trail that has moved, and inside its circle: anywhere else
+    // the whole loop is skipped.
+    const nearTrail = fragment.length().lessThan(bounds.z);
+    If(snow.greaterThan(SNOW_GATE).and(count.greaterThan(1)).and(nearTrail), () => {
       const peak = (SNOW_WAKE_CUT_FRACTION + 1) * 0.5;
       for (let slot = 0; slot < state.capacity; slot += 1) {
         const point = points.element(int(slot));
@@ -170,9 +202,10 @@ export function createSnowWakeShading({
         const along = abs(rel.dot(vec2(right.y.negate(), right.x)));
         // A slot past the live count must not stamp: it holds a stale position.
         const live = select(count.greaterThan(slot), float(1), float(0));
-        // The stamp is local to the sample: a triangular kernel of the sample step
-        // makes consecutive samples join into one continuous trail.
-        const near = float(1).sub(clamp(along.div(step), 0, 1));
+        // The stamp is local to the sample: full strength for half a step either
+        // side, so neighbours (one step apart) meet at full strength and the trail
+        // is one trench rather than a dashed row; it rolls off over the next half.
+        const near = float(1).sub(smoothstep(step.mul(0.5), step, along));
         const width = max(axis.z, float(1e-4));
         const depth = max(point.z, float(0));
         const t = clamp(lateral.div(width), 0, 1);

@@ -283,6 +283,9 @@ export function normalizeConstructionRecord(input) {
   if (!isConstructionStyleKey(styleKey)) {
     throw new Error(`Unknown construction style ${styleKey}.`);
   }
+  if (style.growth != null && !['auto', 'none'].includes(style.growth)) {
+    throw new Error('Construction growth must be auto or none.');
+  }
   const kind = source.kind === 'building' ? 'building' : 'wall';
   return Object.freeze({
     version: CONSTRUCTION_RECORD_VERSION,
@@ -297,6 +300,7 @@ export function normalizeConstructionRecord(input) {
       key: styleKey,
       version: integer(style.version ?? 1, 'Construction style version', 1),
       materials: normalizeMaterials(style.materials),
+      ...(style.growth != null ? { growth: style.growth } : {}),
     }),
     dimensions: Object.freeze({
       height: dimensionHeight,

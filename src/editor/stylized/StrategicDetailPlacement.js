@@ -52,8 +52,30 @@ export function isNearOpenWaterShoreline(x, z, rule, { tileSize, tileAt }) {
   return false;
 }
 
+/**
+ * Whether every cell within `insetCells` (Manhattan) of the candidate carries
+ * its own tile — the interior of a run of that tile, not its edge. grass-test
+ * strews its pebbles only where the path is strong; on a path's edge cells the
+ * meadow still grows and hides a 10 cm stone.
+ */
+export function isInsideTileRun(x, z, rule, { tileSize, tileAt }) {
+  const origin = worldToCell(x, z, tileSize);
+  const tileId = tileAt(origin.x, origin.z);
+  const inset = rule.insetCells;
+  for (let offsetZ = -inset; offsetZ <= inset; offsetZ += 1) {
+    const reach = inset - Math.abs(offsetZ);
+    for (let offsetX = -reach; offsetX <= reach; offsetX += 1) {
+      if (tileAt(origin.x + offsetX, origin.z + offsetZ) !== tileId) return false;
+    }
+  }
+  return true;
+}
+
 export function acceptsStrategicDetailPlacement(candidate, rule, context) {
   if (!rule) return true;
+  if (rule.strategy === 'path-interior') {
+    return isInsideTileRun(candidate.x, candidate.z, rule, context);
+  }
   if (rule.strategy !== 'shoreline-colonies') return false;
   return isInsideDetailColony(candidate.x, candidate.z, rule)
     && isNearOpenWaterShoreline(candidate.x, candidate.z, rule, context);

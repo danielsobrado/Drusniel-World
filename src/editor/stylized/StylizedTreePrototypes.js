@@ -134,6 +134,46 @@ function recenterPrototypeParts(parts) {
 }
 
 /**
+ * Stand a prototype on the foot of its trunk rather than the middle of its
+ * bounds. For a windswept or leaning tree whose crown hangs metres to one side
+ * the two are far apart, and a bounds pivot puts the trunk — and the collider
+ * built from its lowest slice — that far off the placement, across a chunk
+ * border for trees near one. The foot is the centroid of the trunk vertices in
+ * the lowest `share` of its height, the same slice the collision profile reads.
+ */
+export function pivotOnTrunkBase(parts, share = 0.1) {
+  const trunks = parts.filter((part) => part.kind === 'trunk');
+  if (trunks.length === 0) return parts;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const part of trunks) {
+    part.geometry.computeBoundingBox();
+    minY = Math.min(minY, part.geometry.boundingBox.min.y);
+    maxY = Math.max(maxY, part.geometry.boundingBox.max.y);
+  }
+  const limit = minY + (maxY - minY) * share;
+  let sumX = 0;
+  let sumZ = 0;
+  let count = 0;
+  for (const part of trunks) {
+    const position = part.geometry.getAttribute('position');
+    for (let index = 0; index < position.count; index += 1) {
+      if (position.getY(index) > limit) continue;
+      sumX += position.getX(index);
+      sumZ += position.getZ(index);
+      count += 1;
+    }
+  }
+  if (count === 0) return parts;
+  for (const part of parts) {
+    part.geometry.translate(-sumX / count, 0, -sumZ / count);
+    part.geometry.computeBoundingBox();
+    part.geometry.computeBoundingSphere();
+  }
+  return parts;
+}
+
+/**
  * Some source packs put several complete showroom trees under one hierarchy
  * node. Keeping that node as one scatter prototype makes the near LOD draw a
  * grove per placement, while the generated proxy collapses the grove into one

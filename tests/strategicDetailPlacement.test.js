@@ -69,3 +69,18 @@ test('strategic placement requires both a selected colony and nearby shore', () 
     tileAt: () => 0,
   }), true);
 });
+
+test('path-interior keeps a detail off the edge cells of its tile run', () => {
+  // A path three cells wide (cellX 10..12) through grassland; cell z grows north.
+  const PATH = 13;
+  const GRASS = 4;
+  const tileAt = (cellX) => (cellX >= 10 && cellX <= 12 ? PATH : GRASS);
+  const context = { tileSize: 2, tileAt };
+  const rule = { strategy: 'path-interior', insetCells: 1 };
+  const at = (cellX) => ({ x: cellX * 2 + 1, z: -41 });
+  assert.equal(acceptsStrategicDetailPlacement(at(11), rule, context), true, 'the middle row');
+  assert.equal(acceptsStrategicDetailPlacement(at(10), rule, context), false, 'the west edge');
+  assert.equal(acceptsStrategicDetailPlacement(at(12), rule, context), false, 'the east edge');
+  // Two cells in from each edge there is no interior at all on a three-cell path.
+  assert.equal(acceptsStrategicDetailPlacement(at(11), { ...rule, insetCells: 2 }, context), false);
+});

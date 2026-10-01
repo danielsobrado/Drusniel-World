@@ -32,7 +32,7 @@ import {
   stylizedPathWearMask,
 } from './StylizedNoiseNodes.js';
 import { createSurfaceClassNodes } from './SurfaceMaskNodes.js';
-import { sampleWorldWindCanonical } from '../weather/wind/worldWindState.js';
+import { sampleWorldWindCanonical, windWaveCoordinates } from '../weather/wind/worldWindState.js';
 import { groundDeformationNode } from './deformation/groundDeformationNode.js';
 import { assignGrassMaterialData } from '../../render/postprocessing/PostProcessingMaterialData.js';
 import {
@@ -276,19 +276,23 @@ export function createStylizedGrassMaterial({
   const windDirection = worldWind.direction;
   const gustScale = worldWind.envelope.clamp(0.35, 3.5);
   const windPerpendicular = vec2(windDirection.y.negate(), windDirection.x);
+  // Wave phase against the prevailing wind, not the local field: on a planet-scale
+  // map the latter scatters neighbouring patches onto unrelated phases
+  // (windWaveCoordinates).
+  const windWave = windWaveCoordinates(worldXZ);
   // The gust is a world-space travelling wave, and at the configured frequency its
   // wavelength is on the order of ten metres — so every blade of a sub-metre clump
   // sits on effectively one point of it. Offsetting each blade around the cycle is
   // what stops the field from moving as a single surface.
   const bladePhase = bladeWind.x.mul(TWO_PI);
-  const primary = sin(dot(worldXZ, windDirection).mul(tuned.windFrequency)
+  const primary = sin(windWave.along.mul(tuned.windFrequency)
     .add(time.mul(tuned.windSpeed))
     .add(bladePhase));
-  const secondary = sin(dot(worldXZ, windDirection).mul(tuned.windFrequency.mul(2.6))
+  const secondary = sin(windWave.along.mul(tuned.windFrequency.mul(2.6))
     .add(time.mul(tuned.windSpeed.mul(1.8)))
     .add(bladePhase.mul(1.7))
     .add(1.3)).mul(0.35);
-  const turbulence = sin(dot(worldXZ, windPerpendicular).mul(tuned.windFrequency.mul(1.9))
+  const turbulence = sin(windWave.across.mul(tuned.windFrequency.mul(1.9))
     .add(time.mul(tuned.windSpeed.mul(0.7)))
     .add(bladePhase.mul(0.6))
     .add(2.6)).mul(tuned.windTurbulence);
@@ -318,7 +322,7 @@ export function createStylizedGrassMaterial({
     tuned.flutterFadeEnd,
     cameraDistance,
   ));
-  const flutterWave = sin(dot(worldXZ, windPerpendicular).mul(flutter.frequency ?? 1.9)
+  const flutterWave = sin(windWave.across.mul(flutter.frequency ?? 1.9)
     .add(time.mul(flutter.speed ?? 3.4))
     .add(bladePhase.mul(3.1)));
   const flutterOffset = windPerpendicular.mul(

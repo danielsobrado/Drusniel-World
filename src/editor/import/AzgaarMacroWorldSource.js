@@ -5,6 +5,7 @@ import { createLakeCellOverrides, createLakeData } from './AzgaarLakes.js';
 import { resolveMountainRidges } from '../world/MountainRidges.js';
 import { resolveTrailGrading } from '../world/TrailGrading.js';
 import { createRouteData } from './AzgaarRoutes.js';
+import { createSettlementData } from '../world/settlements/SettlementData.js';
 
 const MACRO_SOURCE_KIND = 'azgaar-macro-v2';
 const MACRO_SOURCE_VERSION = 2;
@@ -549,6 +550,12 @@ export function createAzgaarMacroWorldSource(document, config, options = {}) {
     rivers,
     lakes: createLakeData(document, summary.atlasWidth, summary.atlasHeight),
     routes: createRouteData(document, summary.atlasWidth, summary.atlasHeight),
+    settlements: createSettlementData(document, {
+      minCellX: -Math.floor(widthCells / 2),
+      minCellZ: -Math.floor(heightCells / 2),
+      widthCells,
+      heightCells,
+    }),
   };
 }
 

@@ -80,6 +80,13 @@ export const CONSTRUCTION_MORTAR_PROFILES = Object.freeze({
     roughness: 1,
     metalness: 0,
   }),
+  // Hairline seams in the references read as thin shadowed lines of the stone's
+  // own hue, not as grey cement.
+  'glade-sandstone': Object.freeze({
+    color: '#7a5438',
+    roughness: 1,
+    metalness: 0,
+  }),
 });
 
 const DEFAULT_MORTAR_PROFILE = CONSTRUCTION_MORTAR_PROFILES['coursed-rubble'];
@@ -97,6 +104,9 @@ export function mortarProfile(styleKey) {
  */
 const FACE_RECESS_BY_STYLE = Object.freeze({
   'rounded-fieldstone': 0.07,
+  // Behind the deepest recessed block (face relief reaches ~5 cm), so the
+  // core never shows in front of a stone; the 3–7 mm seams hide its depth.
+  'glade-sandstone': 0.075,
 });
 
 const styleConfigCache = new Map();

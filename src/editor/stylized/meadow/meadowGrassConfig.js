@@ -1,5 +1,6 @@
 import { validateLodBands } from './meadowGrassLayout.js';
 import { resolveShapeTable } from './meadowGrassShapes.js';
+import { encodeLookTable, resolveMeadowPalettes } from './meadowPalettes.js';
 
 /**
  * Meadow grass settings (`stylizedSurface.grass.meadow`), resolved.
@@ -80,6 +81,12 @@ export const MEADOW_GRASS_DEFAULTS = Object.freeze({
     strength: 1,
     bodyRadius: 0.26,
   }),
+  /**
+   * The meadow's own pigment (grass-test's `grass.blade` base and tip), with
+   * optional per-biome overrides (meadowPalettes.js). Null paints it with the
+   * shared grass tuning's bottom and top colours instead.
+   */
+  palette: null,
   /** Milliseconds a frame may spend compacting tiles: the streaming budget. */
   buildBudgetMs: 2,
   shapes: Object.freeze({ default: 'slender', byTileId: Object.freeze({}) }),
@@ -127,6 +134,7 @@ export function resolveMeadowGrassConfig(source) {
     transitionStart: finite(farSource.transitionStart, d.far.transitionStart, `${path}.far.transitionStart`, { min: 0, max: 1 }),
     fadeStart: finite(farSource.fadeStart, d.far.fadeStart, `${path}.far.fadeStart`, { min: 0, max: 1 }),
   };
+  const palette = resolveMeadowPalettes(source.palette ?? d.palette, `${path}.palette`);
   const interactionSource = { ...d.interaction, ...(source.interaction ?? {}) };
   const interaction = interactionSource.enabled === false ? null : {
     enabled: true,
@@ -158,7 +166,9 @@ export function resolveMeadowGrassConfig(source) {
     appearance,
     far,
     interaction,
+    palette: palette ? { palettes: palette.palettes, brightness: palette.brightness } : null,
     buildBudgetMs: finite(source.buildBudgetMs, d.buildBudgetMs, `${path}.buildBudgetMs`, { min: 0.1, max: 50 }),
-    shapeTable: resolveShapeTable(shapes.byTileId, shapes.default),
+    // Shape and palette per tile id, as one look code (meadowPalettes.js).
+    shapeTable: encodeLookTable(resolveShapeTable(shapes.byTileId, shapes.default), palette?.table ?? null),
   };
 }

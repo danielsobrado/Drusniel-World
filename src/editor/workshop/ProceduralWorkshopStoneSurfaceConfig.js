@@ -131,6 +131,41 @@ export const STONE_SURFACE_PROFILES = Object.freeze({
       mortarColor: '#6b655b',
     }),
   }),
+
+  // Same calm response as warm-fieldstone: the candidate reads through shape.
+  'glade-sandstone': Object.freeze({
+    unitShading: Object.freeze({
+      brightnessMin: 0.93,
+      brightnessMax: 1.06,
+      weatheringStrength: 0.05,
+    }),
+
+    proceduralAlbedo: Object.freeze({
+      broadCellSize: 32,
+      broadVariation: 4,
+      grainVariation: 1.5,
+      dampDarkening: 6,
+      dampGreenLift: 2,
+    }),
+
+    material: Object.freeze({
+      bumpTextureScale: 0.36,
+      bumpScale: 0.012,
+
+      roughnessBase: 240,
+      roughnessVariation: 8,
+      roughnessBroadScale: 18,
+
+      normalKind: 'granite',
+      workshopNormalScale: 0.1,
+      constructionNormalScale: 0.1,
+
+      workshopEnvMapIntensity: 0.52,
+      constructionEnvMapIntensity: 0.52,
+
+      mortarColor: '#6b655b',
+    }),
+  }),
 });
 
 function finiteInRange(value, label, minimum, maximum) {

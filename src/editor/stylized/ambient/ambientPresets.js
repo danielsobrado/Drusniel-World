@@ -5,6 +5,8 @@
  */
 const BY_SKY_PRESET = Object.freeze({
   configured: 'sunny',
+  // The donor's own look, which it ships under goldenHour.
+  meadow: 'goldenHour',
   highfield: 'sunny',
   emberfall: 'goldenHour',
   stillmeadow: 'calm',

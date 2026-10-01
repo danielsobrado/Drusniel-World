@@ -5,6 +5,7 @@ import {
   overlapForCategory,
 } from '../render/ConstructionMortarConfig.js';
 import { expandCorners, mortarCoreDepth } from './ConstructionMortarCoreBuilder.js';
+import { recessExposedMortar } from './ConstructionStoneExposure.js';
 
 /**
  * Stone shape resolution shared by every masonry mesher.
@@ -101,13 +102,20 @@ export function resolveStoneShape({
   detail,
   relief = null,
   edgeWear = null,
+  // Tightly fitted styles keep the solved cell face and turn: the jitter's
+  // in-plane shrink and roll open visible channels between small blocks.
+  exactFit = false,
 }) {
   const lattice = Boolean(placement.corners);
   const corners = lattice
-    ? dampedCorners(placement, shaped)
+    ? (exactFit ? placement.corners : dampedCorners(placement, shaped))
     : rectangleCorners(shaped.width, shaped.height);
+  // Exact fit keeps the out-of-plane tilt (it cannot open a joint) and drops
+  // only the in-plane roll.
   const rotation = lattice
-    ? dampedRotation(params.rotation, shaped.rotation)
+    ? (exactFit
+      ? [shaped.rotation[0], shaped.rotation[1], params.rotation[2]]
+      : dampedRotation(params.rotation, shaped.rotation))
     : shaped.rotation;
   return {
     corners,
@@ -176,8 +184,12 @@ export function createMortarDescriptor({
   nominalPosition = null,
   nominalRotation = null,
   config = CONSTRUCTION_MORTAR_CONFIG,
+  exposure = null,
 }) {
   if (!shouldBuildMortarBacking(placement)) return null;
+  // Non-quad cores are emitted alongside their fitted stones into the same
+  // mortar batch. Rebuilding them from the bounding quad would seal the arch.
+  if (placement.contourPolygons) return null;
 
   const sourceCorners = placement.mortarCorners ?? stoneShape.corners;
   let minX = Infinity;
@@ -199,13 +211,26 @@ export function createMortarDescriptor({
     stoneShape,
     config,
   });
-  const depth = mortarCoreDepth(stoneShape.depth, config);
+  // The core stays on the nominal wall plane. A stone displaced toward one
+  // face also retreats from the other, so reserve that displacement on both
+  // sides or the fixed core can cover an entire recessed stone face. Distance
+  // bounds the shift along the normal for rotated as well as straight walls.
+  const displacement = nominalPosition ? Math.hypot(
+    stoneShape.position[0] - nominalPosition[0],
+    stoneShape.position[1] - nominalPosition[1],
+    stoneShape.position[2] - nominalPosition[2],
+  ) : 0;
+  const depth = mortarCoreDepth(stoneShape.depth - 2 * displacement, config);
 
   return {
-    corners: mortarCorners,
+    corners: recessExposedMortar(mortarCorners, exposure, config.faceRecess),
     depth,
     position: nominalPosition ?? stoneShape.position,
     rotation: nominalRotation ?? stoneShape.rotation,
     uvDensity: config.uvDensity,
+    // Exempt from the opening clip: field stones the packer already fitted to
+    // the contour (`CurvedCoursePacker.courseSpans`), and voussoirs rotated
+    // along an arch, whose ring an axis-aligned band cut cannot read.
+    ...(placement.openingFit || Math.abs(placement.roll ?? 0) > 1e-6 ? { openingFit: true } : {}),
   };
 }

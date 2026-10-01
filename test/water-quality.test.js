@@ -102,6 +102,15 @@ const base = Object.freeze({
     foamStrength: 0.85,
   }),
   rainRipples: Object.freeze({ enabled: true, strength: 0.45 }),
+  riverSurface: Object.freeze({
+    enabled: true,
+    normalStrength: 1,
+    cycleSeconds: 3,
+    stillDrift: 0.07,
+    currentDrift: 1.2,
+    fullCurrentSpeed: 3,
+    bankFoamWidth: 1.15,
+  }),
   caustics: Object.freeze({
     intensity: 0.2,
     scale: 0.4,

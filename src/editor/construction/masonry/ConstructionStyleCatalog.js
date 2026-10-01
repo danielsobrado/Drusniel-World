@@ -86,6 +86,7 @@ const STONE_PALETTE_KEYS = new Set([
   'sandstone',
   'soft-limestone',
   'warm-fieldstone',
+  'glade-sandstone',
 ]);
 
 const GEOMETRY_KINDS = new Set(['soft', 'rounded']);
@@ -353,6 +354,60 @@ export const CONSTRUCTION_STYLES = Object.freeze({
       height: 0.24,
       oversail: 1.2,
       widthRatio: 1.35,
+    },
+  }),
+  /**
+   * The reference look (docs/reference/tiny-glade): small, near-square blocks,
+   * 0.15–0.35 m, laid in rough courses with the odd larger block; flat faces
+   * with small bevels; a few stones proud of the face; hairline pale seams
+   * rather than dark mortar; one warm sandstone hue. Blocks are upright, so
+   * joints barely lean. New wall strokes use this style.
+   */
+  'glade-sandstone': defineConstructionStyle({
+    key: 'glade-sandstone',
+    label: 'Glade sandstone',
+    courseHeight: 0.34,
+    targetWidth: 0.43,
+    minWidth: 0.14,
+    // Neat, aligned blocks: jitter's shrink, skew and turn opened visible
+    // slots between these small stones.
+    irregularity: 0.12,
+    detail: 2,
+    merlonSpacing: 0.9,
+    stonePalette: 'glade-sandstone',
+    bedAmplitude: 0.12,
+    jointTilt: 0.065,
+    // Mix full-height blocks with paired smaller ones, without adding courses.
+    splitChance: 0.38,
+    splitMaxDepth: 1,
+    splitMinHeight: 0.13,
+    depthScaleMin: 0.96,
+    depthScaleMax: 1.0,
+    // Some blocks stand proud of the face, a few sit back.
+    faceOffsetAmplitude: 0.032,
+    // Blocks meet at the joint width: no in-plane shrink or turn.
+    exactFit: true,
+    // Painted chips and cracks inside each block (ConstructionShellDetail).
+    faceDetail: { strength: 0.35, metres: 2.2 },
+    geometry: 'rounded',
+    defaultTop: 'flat',
+    footing: {
+      heightRatio: 1.2,
+      widthRatio: 1.3,
+      splitChance: 0.1,
+      plinth: 0.02,
+      burialMargin: 0.06,
+      burialMax: 0.4,
+    },
+    // About five times the default's stones per square metre: a 12 m, 4 m
+    // module needs ~650, over the shared 280 cap. At 96 near triangles a
+    // stone a full module stays near a default module's triangle count.
+    stoneBudget: { module: 900, construction: 12000 },
+    // Caps are blocks of the wall's own scale, barely overhanging.
+    coping: {
+      height: 0.24,
+      oversail: 1.04,
+      widthRatio: 1.1,
     },
   }),
 });

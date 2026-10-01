@@ -24,7 +24,8 @@ function sourcePart(kind) {
 }
 
 function vertexBufferCount(mesh) {
-  // One buffer per attribute, plus the instance matrix that InstancedMesh binds separately.
+  // One buffer per attribute. The instance matrix is a storage binding now, not a
+  // vertex buffer, but it is still counted so the budget keeps a slot in reserve.
   return Object.keys(mesh.geometry.attributes).length + 1;
 }
 
@@ -85,4 +86,74 @@ test('packed dither attribute carries fade, seed and colour variation', () => {
   assert.equal(dither.array[0], -0.5, 'x carries the signed LOD fade');
   assert.equal(dither.array[1], 0.25, 'y carries the stable dither seed');
   assert.equal(dither.array[2], 0.75, 'z carries the colour variation');
+});
+
+test('instance matrices are a storage buffer, so a material rebuild cannot strand a write', () => {
+  // Past the uniform limit three used to wrap the matrices in an interleaved vertex
+  // buffer with one view per material build; a view built after a partial write took
+  // the buffer as current, and the donor rocks kept their creation-time matrices.
+  const root = new THREE.Group();
+  const [[mesh]] = createInstancedRenderers({
+    root,
+    partsByPrototype: [[sourcePart('trunk')]],
+    capacity: 2000,
+    name: 'storage',
+    castShadow: false,
+  });
+  assert.equal(mesh.instanceMatrix.isStorageInstancedBufferAttribute, true);
+  assert.equal(mesh.instanceMatrix.count, 2000);
+  assert.equal(mesh.instanceMatrix.itemSize, 16);
+
+  const version = mesh.instanceMatrix.version;
+  writeInstances([[mesh]], [[{
+    matrix: new THREE.Matrix4().makeTranslation(-4189764.5, 21.2, 700110.3),
+    fade: 1,
+    seed: 0.5,
+  }]]);
+  assert.equal(mesh.count, 1);
+  assert.ok(mesh.instanceMatrix.version > version, 'the write must bump the storage buffer');
+  assert.deepEqual(mesh.instanceMatrix.updateRanges, [{ start: 0, count: 16 }]);
+  const written = new THREE.Matrix4();
+  mesh.getMatrixAt(0, written);
+  assert.equal(written.elements[12], Math.fround(-4189764.5));
+});
+
+test('instances are written relative to the anchor, exact at planet scale', async () => {
+  const { InstanceAnchor } = await import('../src/editor/stylized/lod/InstanceAnchor.js');
+  const root = new THREE.Group();
+  const [[mesh]] = createInstancedRenderers({
+    root,
+    partsByPrototype: [[sourcePart('trunk')]],
+    capacity: 8,
+    name: 'anchor',
+    castShadow: false,
+  });
+  // A pebble on Eldara: float32 steps by 0.25 m at x = −4 188 269.
+  const pebble = { x: -4188269.4079, z: 701997.9749 };
+  const instance = () => ({
+    matrix: new THREE.Matrix4().makeTranslation(pebble.x, 22.2, pebble.z),
+    fade: 1,
+    seed: 0.5,
+  });
+  const origin = { x: -4188200, z: 702030 };
+  const anchor = new InstanceAnchor().follow(origin);
+  writeInstances([[mesh]], [[instance()]], anchor);
+  anchor.place(root, origin);
+  const stored = new THREE.Matrix4();
+  mesh.getMatrixAt(0, stored);
+  // Stored relative to the anchor, to a hundredth of a millimetre...
+  assert.ok(Math.abs(stored.elements[12] - (pebble.x - origin.x)) < 1e-5);
+  assert.ok(Math.abs(stored.elements[14] - (pebble.z - origin.z)) < 1e-5);
+  // ...and the root puts it back where it belongs in render space.
+  assert.ok(Math.abs(stored.elements[12] + root.position.x - (pebble.x - origin.x)) < 1e-5);
+
+  // The same instance again uploads nothing: compared as float32, not float64.
+  mesh.instanceMatrix.clearUpdateRanges();
+  const version = mesh.instanceMatrix.version;
+  writeInstances([[mesh]], [[instance()]], anchor);
+  assert.equal(mesh.instanceMatrix.version, version);
+
+  // A small drift of the origin keeps the anchor; a far one moves it.
+  assert.equal(anchor.follow({ x: origin.x + 500, z: origin.z }).x, origin.x);
+  assert.equal(anchor.follow({ x: origin.x + 5000, z: origin.z }).x, origin.x + 5000);
 });

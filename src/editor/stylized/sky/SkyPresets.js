@@ -11,6 +11,44 @@
  */
 export const SKY_PRESETS = Object.freeze({
   configured: Object.freeze({ label: 'Configured' }),
+  // grass-test's shipped look (`presets.goldenHour` in cinematic-look.yaml): a
+  // warm sun high enough (~57°) to light the meadow from above, a pale mint
+  // horizon under a clear blue zenith, and a green-bounced ground light. The
+  // donor's hemisphere light (0.95) and ambient fill (0.32) sum to the fill here.
+  meadow: Object.freeze({
+    label: 'Meadow (bright day)',
+    sunElevation: 57,
+    sunAzimuth: 235,
+    lowColor: '#c5e7df',
+    highColor: '#438ec5',
+    sunGlowColor: '#ffe8ad',
+    sunColor: '#fff0c9',
+    directionalColor: '#fff0c9',
+    directionalIntensity: 2.8,
+    ambientIntensity: 1.3,
+    groundLightColor: '#78945d',
+    fogColor: '#a5ced3',
+  }),
+  // Building light after the Tiny Glade references (docs/reference/tiny-glade):
+  // a warm, fairly high sun, bright warm bounce off the ground and a pale,
+  // near-neutral sky light, so shaded stone stays light and warm and contrast
+  // stays low.
+  glade: Object.freeze({
+    label: 'Glade (warm building light)',
+    sunElevation: 38,
+    sunAzimuth: 200,
+    lowColor: '#f3dcbc',
+    highColor: '#8ab4dc',
+    sunGlowColor: '#ffd9a0',
+    sunColor: '#fff3dc',
+    sunGlowIntensity: 0.35,
+    directionalColor: '#ffd29a',
+    directionalIntensity: 3.9,
+    ambientIntensity: 3.3,
+    ambientSaturation: 0.04,
+    groundLightColor: '#d3a86a',
+    fogColor: '#e9d8bf',
+  }),
   highfield: Object.freeze({
     label: 'Highfield (day)',
     sunElevation: 42,
@@ -112,4 +150,6 @@ export const SKY_PRESETS = Object.freeze({
   }),
 });
 
-export const DEFAULT_SKY_PRESET = 'configured';
+/** The sky exactly as editor.config.yaml tunes it; applying it changes nothing. */
+export const CONFIGURED_SKY_PRESET = 'configured';
+export const DEFAULT_SKY_PRESET = 'meadow';

@@ -43,6 +43,18 @@ styles:
 
   # Rounded stones nearly touch at their widest: the rolled rims open each
   # joint into a much wider shadowed crevice, so the solved gap stays narrow.
+  # Hairline seams between tightly abutting blocks (docs/reference/tiny-glade).
+  glade-sandstone:
+    headJoint:
+      min: 0.004
+      max: 0.008
+
+    bedJoint:
+      min: 0.003
+      max: 0.006
+
+    coarseLodMultiplier: 1.10
+
   rounded-fieldstone:
     headJoint:
       min: 0.008

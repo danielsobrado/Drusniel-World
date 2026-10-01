@@ -654,38 +654,46 @@ function doorwayRecord() {
 
 /** Covered vertical spans of the masonry at arc `s`, joints up to `jt` closed. */
 function coveredColumn(placements, s, jt) {
-  const rings = [];
+  const polygons = [];
   for (const placement of placements) {
+    if (placement.contourPolygons) {
+      polygons.push(...placement.contourPolygons.map(polygon => polygon.map(ring =>
+        ring.map(([a, b]) => [placement.s + a, placement.y + b]))));
+      continue;
+    }
     const ring = placement.mortarCorners ?? placement.corners;
     if (ring) {
-      rings.push(ring.map(([a, b]) => [placement.s + a, placement.y + b]));
+      polygons.push([ring.map(([a, b]) => [placement.s + a, placement.y + b])]);
       continue;
     }
     const halfWidth = (placement.packedWidth ?? placement.width ?? 0) / 2;
     const halfHeight = (placement.height ?? 0) / 2;
     if (halfWidth > 0 && halfHeight > 0) {
-      rings.push([
+      polygons.push([[
         [placement.s - halfWidth, placement.y - halfHeight],
         [placement.s + halfWidth, placement.y - halfHeight],
         [placement.s + halfWidth, placement.y + halfHeight],
         [placement.s - halfWidth, placement.y + halfHeight],
-      ]);
+      ]]);
     }
   }
   const spans = [];
-  for (const ring of rings) {
+  for (const polygon of polygons) {
     const ys = [];
-    for (let index = 0; index < ring.length; index += 1) {
-      const [s0, y0] = ring[index];
-      const [s1, y1] = ring[(index + 1) % ring.length];
-      if (s < Math.min(s0, s1) - 1e-12 || s > Math.max(s0, s1) + 1e-12) continue;
-      if (Math.abs(s1 - s0) < 1e-9) {
-        ys.push(y0, y1);
-        continue;
+    // Even/odd crossings preserve concavities and holes in fitted stones.
+    for (const ring of polygon) {
+      for (let index = 0; index < ring.length; index += 1) {
+        const [s0, y0] = ring[index];
+        const [s1, y1] = ring[(index + 1) % ring.length];
+        if ((s0 <= s && s < s1) || (s1 <= s && s < s0)) {
+          ys.push(y0 + (y1 - y0) * ((s - s0) / (s1 - s0)));
+        }
       }
-      ys.push(y0 + (y1 - y0) * ((s - s0) / (s1 - s0)));
     }
-    if (ys.length) spans.push([Math.min(...ys), Math.max(...ys)]);
+    ys.sort((a, b) => a - b);
+    for (let index = 0; index + 1 < ys.length; index += 2) {
+      spans.push([ys[index], ys[index + 1]]);
+    }
   }
   spans.sort((a, b) => a[0] - b[0]);
   const merged = [];

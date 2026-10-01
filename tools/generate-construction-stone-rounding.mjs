@@ -58,6 +58,7 @@ const SCHEMA = {
   },
   asymmetry: range(0, 1),
   saddle: range(0, 0.5),
+  faceFlatness: range(0, 1),
   protrusionScale: range(0, 1),
   categories: {
     field: range(0, 1),

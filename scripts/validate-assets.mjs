@@ -91,6 +91,7 @@ async function validateStylizedAssets(editorConfig, collisionConfig) {
     ...(assets.treeVariants ?? []),
     ...(assets.groundDetailVariants ?? []),
     ...(assets.aquaticVariants ?? []),
+    ...(assets.tropicalKitVariants ?? []),
     ...(assets.wildlifeVariants ?? []),
   ];
   const documents = new Map();

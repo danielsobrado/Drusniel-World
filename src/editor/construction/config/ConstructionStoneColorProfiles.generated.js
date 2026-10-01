@@ -67,6 +67,20 @@ export const CONSTRUCTION_STONE_COLOR_PROFILES = Object.freeze({
     }),
     categories: DEFAULT_CATEGORIES,
   }),
+  "glade-sandstone": Object.freeze({
+    enabled: true,
+    strength: 0.8,
+    warmChance: 0.6,
+    neutralChance: 0.4,
+    value: Object.freeze({ min: 0.9, max: 1.06 }),
+    warm: Object.freeze([1.05, 0.97, 0.9]),
+    cool: Object.freeze([1.0, 0.99, 0.975]),
+    outlier: Object.freeze({
+      chance: 0.08,
+      multiplier: Object.freeze([0.98, 0.84, 0.74]),
+    }),
+    categories: DEFAULT_CATEGORIES,
+  }),
 });
 
 export function constructionStoneColorProfile(styleKey) {

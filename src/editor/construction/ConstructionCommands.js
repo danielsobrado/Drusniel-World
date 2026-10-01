@@ -86,13 +86,14 @@ function remapAnchorsAfterInsert(record, beforePath, afterPath) {
  * An empty `dirtySegmentIds` means "every module"; `materialOnly` means the
  * geometry is unchanged and the view need only swap materials.
  */
-function change(before, after, { dirtySegmentIds = [], materialOnly = false, dropped = 0 } = {}) {
+function change(before, after, { dirtySegmentIds = [], materialOnly = false, decorationOnly = false, dropped = 0 } = {}) {
   return Object.freeze({
     kind: 'construction',
     before,
     after,
     dirtySegmentIds: Object.freeze([...dirtySegmentIds]),
     materialOnly,
+    ...(decorationOnly ? { decorationOnly: true } : {}),
     /** Top points and features discarded because their segment went away. */
     dropped,
   });
@@ -213,6 +214,15 @@ export function executeConstructionCommand(store, command) {
     // a 200 m wall must not re-pack a single stone.
     return change(before, after, hint);
   }
+  if (command.type === 'set_growth') {
+    const before = store.get(command.constructionId);
+    if (!before) throw new Error(`Unknown construction ${command.constructionId}.`);
+    const hint = { decorationOnly: true };
+    const after = store.update(before.id, {
+      ...before, style: { ...before.style, growth: command.growth },
+    }, hint);
+    return change(before, after, hint);
+  }
   if (command.type === 'set_style' || command.type === 'set_dimensions') {
     const before = store.get(command.constructionId);
     if (!before) throw new Error(`Unknown construction ${command.constructionId}.`);
@@ -262,4 +272,3 @@ export function executeConstructionCommand(store, command) {
   }
   throw new Error(`Unsupported construction command ${command.type}.`);
 }
-

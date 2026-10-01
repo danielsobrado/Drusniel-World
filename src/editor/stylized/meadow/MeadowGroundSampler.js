@@ -126,8 +126,12 @@ export class MeadowGroundSampler {
       falloff: this.rocks.falloff,
     });
     const near = [];
+    // A placement's radius is its spacing from other boulders, wider than the
+    // stone. grass-test's grass grows up to its stones, so only this share of
+    // it is bare (1 keeps the whole spacing radius clear).
+    const clearance = this.rocks.grassClearance ?? 1;
     for (const rock of local) {
-      const radius = rock.radius ?? this.rocks.radius;
+      const radius = (rock.radius ?? this.rocks.radius) * clearance;
       const reach = radius + this.rocks.falloff;
       if (Math.abs(rock.x - centerX) > tileHalf + reach || Math.abs(rock.z - centerZ) > tileHalf + reach) continue;
       near.push({ x: rock.x, z: rock.z, radius, reach });

@@ -5,6 +5,7 @@ import { normalizeProceduralRecipe } from './ProceduralAssetStore.js';
 import { createProceduralMedievalParts } from './ProceduralMedievalGenerator.js';
 import { harmonizeVertexColors } from './ProceduralWorkshopGeometry.js';
 import { estimateConeShingles, shinglesEnabled } from './ProceduralWorkshopShingles.js';
+import { estimateArchetypeParts, hasArchetypeGenerator } from './ProceduralWorkshopArchetypes.js';
 
 const MAX_SOURCE_PARTS = 7_500;
 const MAX_STONE_PARTS = 6_500;
@@ -111,7 +112,9 @@ function estimatedRoofTileParts(recipe) {
 }
 
 function preflightComplexity(recipe) {
-  const estimate = estimatedStoneParts(recipe) + estimatedRoofTileParts(recipe);
+  const estimate = hasArchetypeGenerator(recipe.archetype)
+    ? estimateArchetypeParts(recipe)
+    : estimatedStoneParts(recipe) + estimatedRoofTileParts(recipe);
   if (estimate > MAX_STONE_PARTS) {
     throw new Error(
       `This medieval object would require about ${estimate} masonry parts; reduce its width, depth, height, or detail.`,

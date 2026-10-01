@@ -51,6 +51,7 @@ function writeStone({
   position = [0, 0, 0],
   rotation = [0, 0, 0],
   drape = null,
+  exposure = null,
   pillow = pillowFor(corners, depth),
 } = {}) {
   const writer = new MasonryVertexWriter();
@@ -59,6 +60,7 @@ function writeStone({
     shade: shader(),
     creviceReach: PROFILE.occlusion.creviceReach,
     drape,
+    exposure,
   });
   return { writer, result, arrays: writer.toArrays(), pillow };
 }
@@ -204,6 +206,32 @@ test('a drape shears vertices by the ground and keeps normals unit length', () =
   }
 });
 
+test('open tops and ends lose contact shading without changing geometry or buried edges', () => {
+  const base = writeStone().arrays;
+  for (const edge of ['top', 'start', 'end']) {
+    const open = writeStone({ exposure: { [edge]: true } }).arrays;
+    for (const key of ['positions', 'normals', 'indices', 'uvs']) {
+      assert.deepEqual(open[key], base[key], `${edge} changed ${key}`);
+    }
+    let lightened = 0;
+    let unchanged = 0;
+    for (let vertex = 0; vertex < base.vertexCount; vertex += 1) {
+      const offset = vertex * 3;
+      const outward = edge === 'top' ? base.normals[offset + 1]
+        : base.normals[offset] * (edge === 'start' ? -1 : 1);
+      const gain = open.colors[offset] - base.colors[offset];
+      if (outward > 0.9) {
+        assert.ok(gain > 0.03, `${edge} retains contact shadow`);
+        lightened += 1;
+      } else if (outward <= 0) {
+        assert.equal(gain, 0, `${edge} lightened a buried edge`);
+        unchanged += 1;
+      }
+    }
+    assert.ok(lightened > 0 && unchanged > 0);
+  }
+});
+
 test('a quad that cannot be rounded reports null and writes nothing', () => {
   const writer = new MasonryVertexWriter();
   const folded = [[0, 0], [1, 1], [1, 0], [0, 1]];
@@ -255,4 +283,24 @@ test('the writer narrows indices and appends plain blocks', () => {
   assert.equal(arrays.triangleCount, 2);
   assert.ok(arrays.indices instanceof Uint16Array);
   assert.deepEqual([...arrays.indices], [0, 1, 2, 3, 4, 5]);
+});
+
+test('a flat face profile keeps the default dome exact and flattens the plateau', async () => {
+  const { faceProfile } = await import('../src/editor/construction/compile/ConstructionPillowStoneMesher.js');
+  for (const rho of [0, 0.25, 0.5, 0.75, 1]) {
+    const dome = faceProfile(rho, 0);
+    const falloff = 1 - rho * rho;
+    assert.equal(dome.profile, falloff * falloff, 'flatness 0 is bit-identical');
+    assert.equal(dome.slopeProfile, -4 * rho * falloff);
+  }
+  // A plateau stays near full height further out, and meets the rim flat.
+  assert.ok(faceProfile(0.5, 1).profile > faceProfile(0.5, 0).profile);
+  assert.equal(faceProfile(1, 1).profile, 0);
+  assert.ok(Math.abs(faceProfile(1, 1).slopeProfile) === 0);
+  // The derivative matches the profile numerically.
+  const h = 1e-6;
+  for (const rho of [0.3, 0.6, 0.9]) {
+    const numeric = (faceProfile(rho + h, 1).profile - faceProfile(rho - h, 1).profile) / (2 * h);
+    assert.ok(Math.abs(numeric - faceProfile(rho, 1).slopeProfile) < 1e-5);
+  }
 });

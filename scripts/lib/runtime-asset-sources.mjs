@@ -23,6 +23,7 @@ export function configuredRuntimeScenes(editorConfig) {
     ...(assets.treeVariants ?? []),
     ...(assets.groundDetailVariants ?? []),
     ...(assets.aquaticVariants ?? []),
+    ...(assets.tropicalKitVariants ?? []),
     ...(assets.wildlifeVariants ?? []),
     ...configuredCharacterDefinitions(editorConfig),
   ];
@@ -57,6 +58,7 @@ export function runtimeAssetTextureTiers(editorConfig) {
   assign(assets.bushVariants, 'scatter');
   assign(assets.groundDetailVariants, 'scatter');
   assign(assets.aquaticVariants, 'scatter');
+  assign(assets.tropicalKitVariants, 'scatter');
   assign(assets.wildlifeVariants, 'scatter');
   assign(assets.treeVariants, 'hero');
   // The player's character is the one model the camera never leaves.

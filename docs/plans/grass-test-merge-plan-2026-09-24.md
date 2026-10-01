@@ -1729,3 +1729,371 @@ fold's visual weight (and the `bladeHeight × width` transfer factor) is reasone
     Note: this session overwrote an earlier, untracked port of these three files by
     another session (not recoverable); the rewrite was fitted to that session's
     tests (tests/gpuOcclusion.test.js), which pass.
+
+- **2026-09-28 — minimap relief; the meadow trail confirmed on screen.**
+  - The minimap was shaded by absolute altitude (1 + height × 0.025, clamped at
+    1.25), so on Eldara — land hundreds of metres up — every pixel saturated to one
+    brightness and the dial read as a flat biome disc. It now takes grass-test's
+    relief (map/minimapRelief.js): land lit from the north-west by its slope (0.62
+    shadowed … 1.12 lit), faint contours every 20 m, biome colours settled 18%
+    toward their luminance, water flat. One height grid per redraw (192² plus a
+    ring) replaces a height lookup per pixel.
+  - Walking the meadow on harness keys stamped a trail into the interaction map and
+    the grass behind the player lies folded as a lane. The fold recovers within a
+    fraction of a second; the footprint flattening (groundDeformation) lasts the
+    print's lifetime, so the lane fades rather than snapping back.
+  - Full suite 2857/2857 after these changes.
+
+- **2026-09-29 — look parity with the donor: sun, lens, meadow pigment, finish.**
+  - *The sun was the gap.* Measured against the donor's meadow capture, our lit
+    grass read (48,108,34) to its (136,169,93). The cause was not the grass: the
+    configured sky stands the sun at 10°, so up-facing blades caught about a sixth
+    of its light, and a 0.6 sky fill had been propping the field up. The donor's
+    shipped look (`presets.goldenHour`) has its sun at ~57°. It is now the sky
+    preset `meadow` (SkyPresets.js) and the default; `configured` is still in the
+    Time menu, and a stored choice still wins. With it the field reads
+    (128,169,50)/(141,175,69). A/B on chunk-cross (warmup 8, same session):
+    78.2 fps / 26 hitches against 76.0 / 29 under `configured` — no cost.
+  - *Meadow palette* (`grass.meadow.palette`): the donor's blade base `#50852b` and
+    tip `#a6bf65`, live uniforms, falling back to the shared grass tuning when
+    unset — the tuning's darker pair still paints the terrain and the clumps. The
+    sky fill is back to the donor's 0.06.
+  - *Lens*: `character.thirdPerson.fovDegrees: 45`, the donor's effective
+    `camera.fov` (scene.yaml overrides config.yaml's 52); first person keeps 68. With
+    the donor framing (distance, target, lift, shoulder in character heights) the
+    hero now stands as large in frame as the donor's.
+  - *Finish*: the donor's grade (saturation, contrast about 0.18, lift/gain,
+    highlight desaturation, vignette, grain) and its bloom run on the walking view's
+    god-rays pipeline (stylized/cinematicFinish.js), and the scene takes the donor's
+    morning HDR as `scene.environment` (0.3) so armour and metals have something to
+    reflect.
+  - Note for measurement: the no-HMR dev server (watch off) serves cached
+    transforms, so it must be restarted after every edit.
+  - Full suite 2862/2862.
+
+- **2026-09-29 — §11 item 8 wired: the deep-snow wake.** The staged
+  `SnowWakeShading` now draws. `deformation/SnowWakeRecorder` lays the walking
+  body's canonical position into the spine once a frame, with its heading (from
+  the motion, so the banks lie across the path) and a smoothed ground speed; off
+  the ground or in water a sample carries no profile, so a jump leaves a gap. The
+  terrain applies it after the footprints (`stylizedSurface.snowWake.enabled`).
+  - Two fixes on first sight, both in the shader. The triangular per-sample
+    kernel dipped to half strength between samples and drew a dashed row; it is
+    now full strength for half a step either side. And Eldara's canonical
+    coordinates reach ~800 km, where float32 steps by 6 cm — the trench edges
+    would stair-step — so samples are stored relative to a whole-metre anchor and
+    the fragment is taken against it as whole-minus-whole, which is exact.
+  - The 24-sample loop runs only on baked snow, with a trail that has moved, and
+    inside a circle around the trail; everywhere else it is one compare. Verified
+    on an Eldara glacier (a continuous banked trench behind a sprint, gone with the
+    wake zeroed). chunk-cross A/B, warmup 8: 77.9 fps on, 74.4 off — noise.
+  - Item 5 (trampling) is met by the meadow's interaction map for the default
+    grass system; `stylized/trample/` stays staged for the clump system, which is
+    no longer the default.
+
+- **2026-09-29 — §11 items 6 and 4 landed; the meadow's palette per biome.**
+  - *Item 6, the alpine conifers.* `prepare-alpine-tree-assets.mjs` had been fixed
+    since it last failed, and only wanted the Draco decoder: `draco3dgltf` was
+    copied from grass-test's own `node_modules` into ours (gitignored, not a
+    declared dependency, as the script's header asks). tree10 (snow spruce) and
+    tree11 (windswept pine) publish at 5 666 and 3 596 triangles (137 and 116 KiB)
+    as `treeVariants` for taiga and tundra. Their crowns are painted per vertex —
+    needles and settled snow in one leaf part — so the leaf material now takes
+    COLOR_0 for an authored crown with no texture whose geometry carries it; every
+    other authored crown has a map and is unchanged.
+  - *A tree's pivot.* The windswept pine's crown streams ~3 m off its stem, and
+    prototypes stand on the centre of their bounds, so its trunk capsule (read from
+    the lowest trunk slice) sat metres off the placement — across a chunk border
+    for a tree near one, which failed that chunk's whole collision build ("does not
+    overlap its canonical owner chunk", 4 per taiga walk). A variant may now say
+    `pivot: trunk` (StylizedTreePrototypes `pivotOnTrunkBase`: the centroid of the
+    trunk's lowest tenth). Both alpine trees use it; 0 errors after. The default
+    stays `bounds`, so no baked impostor or existing placement moves.
+  - *Item 4, the tropical kit.* A layer of its own, as the config note said it
+    had to be: `assets.tropicalKitVariants` (published and tiered like the other
+    scatter keys, validated by the shared variant rules) and
+    `stylizedSurface.tropicalKit`, a `StylizedGroundDetailView` streamed through
+    residency with its own palette layer. The five members that publish cleanly
+    (jungle grass short/tall/broad, groundcover, elephant ear) grow in tropical
+    seasonal forest and rainforest, elephant ear in rainforest only. Authored
+    0.4–1 m tall they vanished into the meadow blades, so they stand at ×1.4
+    (×1.6 for the elephant ear). 128 candidates a chunk; chunk-cross A/B at the
+    tropical spawn, warmup 8: 73.4 fps / 32 hitches on, 75.2 / 33 off. The other
+    five members still need the per-asset optimizer pass; the heavy half (canopy
+    tree, palms, large fern) stays offline.
+  - *Meadow palette per biome* (`grass.meadow.palette.byTileId`). The donor's lime
+    field was reaching the taiga. Each biome's palette index rides in the stem's
+    look code beside its silhouette (`shape + 3 × palette`, meadowPalettes.js) and
+    the pigment reads base and tip from a uniform array — no attribute, still one
+    draw per band. Savanna dry, rainforests richer, taiga cool sage, wetland lush;
+    the spawn's biome keeps the donor's own.
+  - Full suite 2866/2866.
+
+- **2026-09-29 — the donor's trees, its canopy grade, and the wind by chunk.**
+  - *Trees.* grass-test's meadow trees (tree1–9: curved painted trunks, root
+    flares, gold/pale/green leaf cards) are `treeVariants` now, prepared by
+    `scripts/prepare-meadow-tree-assets.mjs` on helpers shared with the alpine
+    preparer (`scripts/lib/donor-tree-prepare.mjs`; the alpine outputs are
+    byte-identical after the split). Billboards stripped, bark UV transforms baked
+    into TEXCOORD_0, branches decimated to 2 000 triangles, leaf cards thinned to
+    3 000 by dropping whole cards and growing the survivors ×≤1.6 about their
+    centres (simplifying alpha cards collapses them). ~5 k triangles a tree, from
+    12–22 k. Donor units convert at 2.8/m (`scale: 0.357`, alpine pair too), which
+    keeps the donor's tree-to-character proportions. Green for savanna→tropics,
+    gold for deciduous, pale for grassland/temperate rainforest/wetland; the oak
+    keeps the savanna and the tree-scene crowns the rainforests and wetland.
+    `pivot: trunk` on all of them. Impostors rebaked (29 prototypes).
+  - *Canopy grade* (`trees.canopyGrade`, forest/canopyGrade.js): the donor's
+    `adventureCanopyColor` — textured authored crowns re-coloured by luminance onto
+    one shade→light green ramp (`#286746`→`#8cb75a`, 0.9). It is why every donor
+    crown reads as the same lit green. `autumnGroves` 0.55 → 0.1: half the spawn's
+    woods were orange against it.
+  - *Jungle region.* Tropical seasonal forest (5) is open woodland, not the donor's
+    rainforest; it was taking full jungle mist and spores and washing the spawn's
+    distance milky. The ambient jungle region is rainforest (7) only; 5 is meadow.
+  - *Cost.* chunk-cross A/B at the spawn: 59.5 fps with the trees, 69.4 without
+    (−14%; hitches 39 vs 38). Whole cards had cost −34% (40 vs 60). A further cut to
+    3.4 k triangles changed nothing (60.4), so the remainder is not triangles —
+    candidates are the extra prototypes' draws and the near ring's shadow pass.
+  - *Wind by chunk — two causes.* (1) Every wind wave took its phase as
+    `dot(canonical, localFieldDirection)`. On a planet-scale map canonical
+    positions are hundreds of km, so a milliradian of field curl moves the phase by
+    hundreds of metres and neighbouring patches fall onto unrelated waves. Phases
+    now run along the prevailing direction (`windWaveCoordinates`, worldWindState):
+    meadow blades, gust sheen, far cards, flowers, clump grass, blown streaks. The
+    local field still sets bend direction and gust strength. (2) The authored ground
+    tufts (and the tropical kit) had no wind at all; their density is weighted per
+    chunk and district, so whole patches stood rigid in a swaying sward. They now
+    bend with the meadow's own wave, clock and field (groundDetailWind.js); water
+    plants keep their current-driven sway.
+  - Boot note: shader compile on this machine is ~95–120 s today, over qa:perf's
+    108 s default budget. Pass `--timeoutMs 400000`.
+  - Full suite 2869/2869.
+
+- **2026-09-29 — why the shaders took so much longer than the donor's.**
+  - Measured cold (fresh Playwright profile, same GPU): the donor boots in 60 s,
+    41 s of it pipeline warmup. Ours took ~74–140 s. Split by step, it was the
+    world scene, not spells (3.6 s) or the hero (0.3 s): 62 s.
+  - Pipeline inventory: we compile *fewer* pipelines than the donor (300 vs 1394),
+    but 12.5 MB of fragment WGSL against 3.2 MB, and our largest shader was
+    3.2 MB (three terrain variants) against the donor's 146 KB — with 484 texture
+    samples, where the design has 8 family-atlas taps.
+  - Cause: TSL emits `select()` as an if/else and builds each branch's inputs
+    inside it. Nested selects — the stochastic sampler's rotation/mirror, the
+    top/side projection, then the baked colour's four distance bands and three
+    publish-state selects — re-emitted the family multiplier ~36× and `midColor`
+    ~18×. Operands are now taken into variables inside an `Fn` before the selects
+    (TerrainMaterialStochasticNodes, TerrainMaterialBakedNodes
+    `assembleBakedColor`); the selects, and their runtime branching, are unchanged.
+  - Result: terrain fragment shader 3.2 MB → 252 KB, 484 → 32 texture samples;
+    world compile 62 s → 9 s; first frame 74 s → 17 s. And at runtime, chunk-cross
+    with the donor trees: 59.5 → 68.4 fps, hitches 39 → 28.
+  - Still open: a value-noise helper inlined ~72× in the terrain — an
+    `Fn(...).setLayout()` would emit it once.
+
+- **2026-09-29 — the donor's paths, stones and river water.**
+  - *Paths* (stylized/path/terrainPathPaint.js, `stylizedSurface.path.paint`):
+    the donor's `GroundMaterial` path look over the baked terrain — its
+    `ground_0109` dirt with the donor's two-tap anti-tiling, pulled 48% toward
+    `groundPath` `#b7a476`, the contour broken by its turf fibres and macro wave,
+    the verge painted as worn turf, soil roughness. The dirt tiles a whole number of
+    times per chunk and the noise runs on chunk-local metres wrapped every 1 km, so
+    both stay exact at planet scale. It runs only where the path mask or verge
+    exceeds 0.03: unbranched it cost 53 vs 77 fps on chunk-cross. Branched, runs
+    scattered 54–78 fps on the same code today (no-paint runs 71–77), so the
+    remaining cost is below this machine's noise.
+  - *Samplers.* The terrain's fragment stage already used all 16 samplers WebGPU
+    allows, and three binds one for every filterable texture however it is read.
+    The dirt's roughness is packed into its colour texture's alpha (one texture),
+    and the macro-tint bake is now read by hand-filtered `textureLoad` from a
+    nearest-filtered texture (TerrainSlotBindings.bilinearLoad), which frees one.
+  - *Stones.* grass-test's eleven `SM_Rocks` stones (fantasy/rocks.glb, prepared by
+    scripts/prepare-donor-rock-assets.mjs: Draco decoded, painted-stone texture
+    embedded) replace the mixed rock set at the donor's ×7 pack scale (2.5 m here);
+    the former entries are kept commented in `rockVariants`. The meadow now leaves
+    only `rocks.grassClearance` (0.35) of a stone's spacing radius bare, so grass
+    grows up to the stone as in the donor instead of round a pale 1.8 m disc.
+  - *River water.* config/water-visual.yaml takes the donor's inland constants:
+    teal `#246d70`/`#164e52`, its absorption (0.62/0.24/0.17 per metre), its foam
+    colour `#d6e7db`, no cell pattern and no caustics. Still open: its flow-mapped
+    detail normals, sun glint and shore/bank foam placement. Eldara has no brook at
+    the donor's scale (every river ≥ 6 m deep), and long teleports in walk mode stall
+    on "Preparing the ground… 1 chunk left" at 0 fps, so a river close-up could not
+    yet be verified on screen.
+  - Full suite 2869/2869.
+
+- **2026-09-30 — the donor's river surface.**
+  - *Port* (stylized/RiverSurfaceShading.js, `stylizedSurface.water.riverSurface`):
+    grass-test's `WaterMaterial` inland branch on our water sheet — its
+    `createWaterDetailTexture` verbatim; two detail phases half a cycle apart,
+    cross-faded (`|2·phase − 1|`) plus its micro layer; slopes 0.15 lake / 0.16
+    river / 0.025 micro turned into the across/downstream frame of the current;
+    its Fresnel `(1 − n·v)^5 · 0.98 + 0.02`, weighted 0.85 and damped on a fall
+    face; its glint `pow(spec, 170) · 1.8 + pow(spec, 20) · 0.08`, added after the
+    sky dimming in the sun's own colour (`skyLightUniforms.sunColor`, new); and its
+    foam — noise foam in the 0.02–0.75 m shallows, a bank fringe over
+    `bankFoamWidth`, turbulence streaks `(speed − 0.7) · 0.34` once the current runs.
+    It replaces our shore and flow-band foam on inland water; the sea keeps its
+    own swell shading (`SeaSurfaceShading` now exposes its `mask`).
+  - *What had to change.* The donor's rivers are ribbons with metres along and
+    across their course, and scroll the detail down that course. Our sheet is the
+    terrain grid with a flow texture and no course coordinates, so the phases are
+    advected along the local current instead (a flow map: `cycleSeconds` 3,
+    `stillDrift` 0.07 m/s — the donor's lake — and `currentDrift` 1.2 m/s at full
+    current). The detail is isotropic at 4 m a tile (donor lake 5.5 m, river
+    1.6 × 8 m), micro ×4 (donor ×3.7) and streaks ×1.5, all whole numbers of a
+    320 m period, and the chunk centre is wrapped to that period in double
+    precision (`riverDetailPatternOrigin`), so the coordinates stay exact at
+    planet scale and the wrap never shows. The donor's world is 2.8 units to the
+    metre: spatial scales are converted, its shading constants are not, and its
+    foam depth band is read in metres. The donor reflects a cube probe of its own
+    banks; we have none, so the Fresnel mixes toward its own fallback sky
+    (`#81a8b4` → `#38658a`). Against a bright sky rather than a tree line its
+    slopes read about twice as strong, so `normalStrength` is 0.5.
+  - *Budget.* Water fragment shaders are 44–56 KB with 5–6 samplers (one more:
+    the shared detail texture). No viewport-texture nodes were added. The largest
+    shader is still the terrain's, 268 KB and 16 samplers.
+  - *Verified on screen* on an Eldara river (cell −2094883, −350032, temperate
+    rainforest), from its bank: fine glitter on the current, foam along the
+    shallows. Still visible and not from this change: the carved valley walls
+    between grass and river render as a flat blue-grey band (also in the
+    2026-09-29 capture).
+
+- **2026-09-30 — the "Preparing the ground… 1 chunk left" stall.** Not a hang: after
+  a long teleport into forest the page ran at 0.2–0.8 fps for 165 s, then
+  recovered, and collision readiness only waited on it. A CPU profile of those
+  frames put 95% of the main thread in `MacroFarTerrainView.sampleRing` →
+  `ForestHabitatField.sample` → `waterDistanceAt` → `TileDistanceField.chunkField`:
+  every far-ring sample (160 × 256 of them, hundreds of metres apart) lands in a
+  different chunk and built that chunk's whole water chamfer field through
+  `tileAt`. The far backdrop now takes `ForestHabitatField.sampleCoarse`, the same
+  habitat without the water terms (neutral water weight, no riparian belt — a belt
+  tens of metres wide that its ring spacing cannot resolve anyway) and without
+  touching the near field's sample cache. Same teleport: 165 s → 18 s to 45 fps,
+  the rest ordinary streaming. chunk-cross (warmup 8, two runs each) barely moves,
+  as expected for a scenario that never rebuilds the far ring over forest:
+  88.6 / 94.2 fps and 10 / 9 hitches with the fix, 88.7 / 88.9 fps and 13 / 12
+  without. Both are well above the 68 fps recorded on 2026-09-29, a difference
+  this change does not explain.
+
+- **2026-09-30 — pebbles, duff and contact shade, stones.**
+  - *Path pebbles.* grass-test strews its rock pack's pebble shapes (`SM_Rocks_06/07/
+    10/11`) along its paths from `MeadowDetails`, at their native size — only its
+    boulders take the ×7 pack scale. They are extracted as `donor-rock-pebbles`
+    (pebble-01..04, 54–56 triangles, 64 KB each after the runtime optimizer) and
+    placed as ground detail on paths only: tile 13 joined `groundDetails.tileIds`
+    at `densityByTile` 0.4, the donor's ~1 stone per 170 m² of path; scale 2.5 / 7,
+    so 6–26 cm stones. A new variant flag `sway: false` keeps them out of the wind.
+    `extract-authored-assets.mjs --only <key>` now merges into the manifest instead
+    of replacing it with that one source. Measured in place: 11 pebbles on the 314
+    path cells of the test chunk. At walking distance they barely register — as
+    small and sparse as the donor's — and on path-edge cells the meadow hides them.
+  - *Contact shade and duff.* The forest-floor texture is 64² (2 m texels, was 16²
+    at 8 m), so the donor's footprints fit at trunk scale: `3 + 1.2·scale` m round
+    a trunk (its `trunk·3 + 3`), `1 + 1.2·scale` round a stone (`radius·1.5 + 1`),
+    strengths 1 / 0.8. The canopy keeps its 16 × 16 habitat samples, upsampled
+    bilinearly (stylized/forestFloorTexture.js), so the main-thread cost is
+    unchanged. The ground under a patch takes the donor's duff — `mix(dull·0.45,
+    pathPaint·(0.42, 0.35, 0.26), 0.5)`, then `×(1 − 0.4·smoothstep(0.1, 0.6))` —
+    in place of the flat 0.45 darkening (`contactShade.depth` is gone). Visible as
+    a brown litter patch on bare ground; under the meadow it is hidden, because our
+    grass grows to the trunk where the donor's clears round it.
+  - *Stones.* River-bank stones already draw from the rock view's own prototypes
+    (`buildRiverbankRocks` → `prototypeIndexForRoll`), so they took the donor pack
+    with yesterday's swap. `rockWeathering` had read the donor's tone and moss
+    frequencies per metre, where they are per donor unit: a 2.5 m stone got one flat
+    tone and either no moss or a solid cap. Now converted (×2.8).
+  - *Open: donor-pack stones do not appear on screen.* Close-up comparison was
+    blocked. A placed boulder (`SM_Rocks_04`, 6 m at scale 1.32) is in the manifest,
+    its instance matrix is correct (0.11 m from the placement, root offset
+    current), its instanced mesh is submitted ~230 times a second, and it is not
+    frustum-culled, dithered out (fade 1) or hidden by GPU occlusion (switched off
+    at runtime: no change). With its material swapped for a plain red one it is
+    still invisible — while a plain `Mesh` of the same geometry and material placed
+    6 m away draws. So the geometry and material are fine and the instanced draw
+    is not; last session's river captures never showed a donor stone either (they
+    stalled), so this may date from the pack swap. Next: compare the GPU-side
+    instance buffer with the CPU array, and try a rock instance near the origin.
+  - *Flaky tests.* ConstructionMortarVoidWiring, ConstructionOpenings and
+    ConstructionLodTransitionAccounting: 0 failures in 25 isolated runs each and in
+    5 full-suite runs. Nothing in their build path is time-gated — `budget` is a
+    stone count and the `performance.now()` calls only fill stats. Most likely the
+    single failures came from files being rewritten mid-run by another session
+    (the construction `*.generated.js` configs are modified in this tree); not
+    proven.
+  - *Perf* (chunk-cross, warmup 8, final code): 93.9 / 93.3 fps, hitches 6 / 10,
+    against 88.6 / 94.2 and 10 / 9 this morning. Full suite 2906/2906.
+
+- **2026-09-30 — review of the paths/stones/rivers round.**
+  - *The "donor stones don't draw" blocker was a false negative.* At the spawn all
+    eleven `SM_Rocks` prototypes have valid geometry (57–860 vertices, position,
+    normal and uv only — well under the vertex-buffer ceiling) and draw 38–68
+    instances each; the tall slab is on screen beside the spawn. The Eldara spot
+    where it looked invisible most likely showed a buried or proxy-band stone.
+  - *Ground-detail wind:* the tuft height is now a uniform. Baked in as a
+    constant, every prototype's shader text differed and each compiled its own
+    pipeline (4 fewer vertex programs at the spawn, more as variants stream).
+  - Reviewed and kept: RiverSurfaceShading (phase cross-fade weights hit zero on
+    each wrap; the 320 m pattern period divides every tile), the far-terrain
+    `sampleCoarse` (water weight is neutral at infinite distance), the `--only`
+    manifest merge, the 2 m forest-floor texels on the 128 m chunk, the duff.
+  - Full suite 2907/2907.
+  - *Follow-ups from the review:*
+    - Rock weathering reads the stone's own geometry shifted by its placement
+      seed (`instanceDither.y`) instead of render-space position, so tone, moss
+      and the splash line no longer jump on a floating-origin rebase.
+    - River foam has its own `riverSurface.foamStrength` (1); `foam.intensity`
+      stays the sea bands' knob.
+    - The snow wake reads the body through `PlayerController.readFooting` into
+      reused objects instead of a `getStatus()` copy every frame.
+    - A water config without `riverSurface` loads with the surface off.
+    - Checked and left alone: pebbles do reach imported worlds (the generator
+      returns the path tile wherever a graded trail covers a cell), and the river
+      sky already follows the look through `reflectionTint`.
+    - Full suite 2907/2907; the stone renders with no shader errors.
+
+- **2026-09-30 — review pass over the day's port.**
+  - *The donor stones were never drawn.* A placed boulder's matrices were right on
+    the CPU, and a fresh `InstancedMesh` with the same geometry, material,
+    matrices and capacity drew — only the scatter's own mesh stayed empty until
+    its buffer was forced to re-upload. Past the uniform limit (~1000 matrices)
+    three wraps `instanceMatrix` in an interleaved vertex buffer with one set of
+    views per material build; a view created after a partial write records the
+    buffer as current and never uploads it, so a material rebuild landing
+    between our write and the next draw strands the instances on their creation
+    values. `createInstancedRenderers` now gives every scatter mesh a
+    `StorageInstancedBufferAttribute`: one binding, one version, every tracked
+    range uploaded. It covers rocks, bushes, trees and ground detail alike.
+  - *Small scatter collapsed at planet scale.* Instance matrices held canonical
+    positions (x ≈ −4 188 269, where float32 steps by 0.25 m), and the GPU applies
+    them before the root's offset, so a 10 cm pebble drew as a sliver and every
+    trunk and boulder was snapped to that grid. Rocks, bushes, trees and ground
+    detail now write instances relative to an `InstanceAnchor` (the floating
+    origin at a rewrite, moved only after 2 km of drift) with the root at
+    anchor − origin. The same change compares matrices as float32: against the
+    float64 source nearly every element differed, so each rebuild re-uploaded
+    every instance. chunk-cross (warmup 8, four runs): 98.1 / 87.8 / 96.5 /
+    95.6 fps against 93.9 / 93.3, hitches 10 / 14 / 12 / 9 against 6 / 10 (today's
+    runs span 6–14), attribute uploads 12 MB against 36 MB a run.
+  - *Far ring.* The backdrop's forest signal moved into its shading pass and now
+    reads the ring's own macro tile, height and slope
+    (`ForestHabitatField.sampleCoarse(x, z, terrain)`), where each sample had cost
+    five fine-terrain height queries through the water-terrain model: 11.1 s →
+    5.3 s of main thread over the same 40 s after a long teleport. What remains is
+    mostly `GeneratorWaterAdapter.sampleMacroColumn` carving lakes and rivers into
+    the macro heights through a second water model.
+  - *Pebbles.* One `pebbles.glb` of four prototype groups with a 256 px texture
+    (27 KB, was four files of 64 KB), placed by a new `path-interior` rule
+    (StrategicDetailPlacement) that keeps them off a path's edge cells, where the
+    meadow hid them.
+  - *Water.* River foam follows the tier's `foamStrength`; the sea keeps its own
+    shading when its swell is off (`seaWaterMask`, which the swell now uses too);
+    the river detail origin is a `riverDetail` frame of the water's
+    PatternOrigins (committed alongside by the planet-scale water work) instead of
+    a uniform and wrap of its own.
+  - *Config.* `contactShade` sat under `stylizedSurface.trees`, where nothing read
+    it; it is now `stylizedSurface.contactShade`.
+  - Still open: `rockWeathering` reads `positionWorld`, so its tone and moss
+    pattern jumps on every floating-origin rebase (left to the planet-scale
+    pattern work); `ForestHabitatField` and the far ring still hold other
+    per-sample costs worth profiling. Full suite 2920/2920.

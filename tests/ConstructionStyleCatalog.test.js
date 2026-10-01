@@ -37,7 +37,23 @@ test('new walls default to rounded fieldstone; older styles keep their order', (
     'coursed-rubble',
   );
   assert.equal(Object.keys(CONSTRUCTION_STYLES)[1], 'soft-limestone-rubble');
-  assert.equal(Object.keys(CONSTRUCTION_STYLES).at(-1), 'rounded-fieldstone');
+  assert.deepEqual(Object.keys(CONSTRUCTION_STYLES).slice(-2), ['rounded-fieldstone', 'glade-sandstone']);
+});
+
+test('glade-sandstone matches the reference scale: small near-square blocks, restrained caps', () => {
+  const candidate = constructionStyle('glade-sandstone');
+  assert.equal(candidate.geometry, 'rounded');
+  assert.equal(candidate.stonePalette, 'glade-sandstone');
+  // docs/reference/tiny-glade: blocks of roughly 0.15–0.35 m, near square.
+  assert.ok(candidate.courseHeight >= 0.2 && candidate.courseHeight <= 0.36);
+  assert.ok(candidate.targetWidth >= 0.25 && candidate.targetWidth <= 0.45);
+  assert.ok(candidate.targetWidth / candidate.courseHeight < 1.6, 'near square, not brick');
+  assert.ok(candidate.coping.oversail >= 1.0 && candidate.coping.oversail <= 1.12);
+  assert.ok(candidate.footing.heightRatio >= 1.0 && candidate.footing.heightRatio <= 1.25);
+  // Its own stone budget, so small blocks do not truncate a wall; other styles
+  // keep the shared caps.
+  assert.ok(candidate.stoneBudget.module > 280);
+  assert.equal(constructionStyle('rounded-fieldstone').stoneBudget ?? null, null);
 });
 
 test('rounded fieldstone declares its mesher, top, footing and coping', () => {

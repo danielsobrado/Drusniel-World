@@ -1,6 +1,8 @@
 import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
 import { renderOutput } from 'three/tsl';
 
+import { finishFrame } from './cinematicFinish.js';
+
 /**
  * Finishes a post pipeline's output, with FXAA when asked.
  *
@@ -15,16 +17,21 @@ import { renderOutput } from 'three/tsl';
  * FXAA works on display-space colour, so the pipeline's automatic tone mapping and
  * output transform are turned off and applied explicitly first.
  *
+ * With a `finish` (cinematicFinish.js), the linear frame first takes the donor's
+ * bloom and grade, ahead of the tone mapper, as grass-test's pipeline does.
+ *
  * @param {import('three/webgpu').RenderPipeline} pipeline
  * @param {object} composite the scene-referred output node
- * @param {{ fxaa?: boolean }} [options]
+ * @param {{ fxaa?: boolean, finish?: { beauty: object, settings: object, uniforms: object } | null }} [options]
+ * @returns {{ pipeline: object, bloom: object | null }}
  */
-export function setPipelineOutput(pipeline, composite, { fxaa: antialias = true } = {}) {
+export function setPipelineOutput(pipeline, composite, { fxaa: antialias = true, finish = null } = {}) {
+  const finished = finish ? finishFrame(composite, finish) : { node: composite, bloom: null };
   if (!antialias) {
-    pipeline.outputNode = composite;
-    return pipeline;
+    pipeline.outputNode = finished.node;
+    return { pipeline, bloom: finished.bloom };
   }
   pipeline.outputColorTransform = false;
-  pipeline.outputNode = fxaa(renderOutput(composite));
-  return pipeline;
+  pipeline.outputNode = fxaa(renderOutput(finished.node));
+  return { pipeline, bloom: finished.bloom };
 }

@@ -166,3 +166,38 @@ test('the enabled shading assembles against a live spine', () => {
   assert.ok(shading.height, 'it exposes a height offset');
   assert.ok(shading.apply(vec3(1, 1, 1)), 'it tints the snow colour');
 });
+
+test('the recorder lays a trail along the walk, banked across its heading', async () => {
+  const { SnowWakeRecorder } = await import('../src/editor/stylized/deformation/SnowWakeRecorder.js');
+  const recorder = new SnowWakeRecorder();
+  for (let frame = 0; frame <= 60; frame += 1) {
+    // Walking +x at 3 m/s.
+    recorder.update(frame / 60, { x: frame * 0.05, y: 0, z: 10, grounded: true, inWater: false });
+  }
+  const { spine, uniforms } = recorder.state;
+  assert.ok(spine.count >= 8, `samples ${spine.count}`);
+  const newest = spine.indexAt(spine.count - 1);
+  // Right of +x is -z in these axes; the banks lie across the path.
+  assert.ok(Math.abs(spine.rightX[newest]) < 1e-6);
+  assert.equal(Math.abs(spine.rightZ[newest]), 1);
+  assert.ok(Math.abs(spine.speed[newest] - 3) < 0.3, `speed ${spine.speed[newest]}`);
+  assert.equal(uniforms.count.value, spine.count);
+  // The circle holds the whole trail and its banks.
+  const b = uniforms.bounds.value;
+  for (let order = 0; order < spine.count; order += 1) {
+    const i = spine.indexAt(order);
+    assert.ok(Math.hypot(spine.x[i] - b.x, spine.z[i] - b.y) + 0.5 < b.z);
+  }
+});
+
+test('an airborne or swimming body leaves no profile, and nobody walking only ages it', async () => {
+  const { SnowWakeRecorder } = await import('../src/editor/stylized/deformation/SnowWakeRecorder.js');
+  const recorder = new SnowWakeRecorder();
+  recorder.update(0, { x: 0, y: 0, z: 0, grounded: false, inWater: false });
+  recorder.update(0.5, { x: 1, y: 0, z: 0, grounded: true, inWater: true });
+  const { spine } = recorder.state;
+  for (let order = 0; order < spine.count; order += 1) assert.equal(spine.strength[spine.indexAt(order)], 0);
+  const before = spine.count;
+  recorder.update(1, null);
+  assert.equal(spine.count, before);
+});

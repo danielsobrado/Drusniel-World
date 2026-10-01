@@ -41,6 +41,9 @@ import { createFrostShading } from './stylized/ambient/FrostShading.js';
 import { applyJungleMist } from './stylized/ambient/jungleMistOutput.js';
 import { createValleyFogNodes } from './stylized/mist/ValleyFogShading.js';
 import { createFootprintShading } from './stylized/deformation/FootprintShading.js';
+import { acquirePathTextures, createTerrainPathPaint, resolvePathPaint } from './stylized/path/terrainPathPaint.js';
+import { createSnowWakeShading } from './stylized/deformation/SnowWakeShading.js';
+import { snowWakeRecorder } from './stylized/deformation/SnowWakeRecorder.js';
 import { applyCloudShadow } from './stylized/CloudShadow.js';
 import { createRainWetnessShading } from './stylized/RainWetnessShading.js';
 import { resolveSurfaceWetnessConfig } from './weather/surfaceWetnessConfig.js';
@@ -52,8 +55,6 @@ import {
 } from './materials/TerrainSlotBindings.js';
 
 const HEIGHT_SHADE_SCALE = 0.018;
-/** How dark the ground goes under a trunk or boulder at full contact shade. */
-const DEFAULT_CONTACT_SHADE_DEPTH = 0.45;
 const MINIMUM_HEIGHT_SHADE = 0.72;
 const MAXIMUM_HEIGHT_SHADE = 1.22;
 
@@ -238,11 +239,22 @@ export function createTerrainMaterial({
     );
   }
 
-  // The contact shade darkens the ground where something solid is standing on it,
-  // last, so nothing painted after it can lift the patch back off the ground.
+  // grass-test's duff under trunks and stones (GroundMaterial): the ground there
+  // turns to darker leaf-litter duff, then darkens toward the contact point.
+  // Last, so nothing painted after it can lift the patch back off the ground.
   // `contactShade` is 0 on bare ground and 1 under a trunk's centre.
-  const contactShadeStrength = Number(stylizedConfig.contactShade?.depth ?? DEFAULT_CONTACT_SHADE_DEPTH);
-  groundColor = groundColor.mul(oneMinus(contactShade.mul(contactShadeStrength)));
+  const pathPaintSettings = resolvePathPaint(pathConfig.paint);
+  if (stylizedConfig.contactShade?.enabled !== false) {
+    const dull = mix(vec3(dot(groundColor, vec3(0.3, 0.59, 0.11))), groundColor, 0.5)
+      .mul(vec3(1, 0.94, 0.76));
+    const duff = mix(
+      dull.mul(0.45),
+      colorNode(pathPaintSettings?.color ?? '#b7a476').mul(vec3(0.42, 0.35, 0.26)),
+      0.5,
+    );
+    groundColor = mix(groundColor, duff, smoothstep(0.02, 0.35, contactShade));
+    groundColor = groundColor.mul(oneMinus(smoothstep(0.1, 0.6, contactShade).mul(0.4)));
+  }
   groundColor = max(groundColor, vec3(0));
   const proceduralColor = groundColor.mul(heightShade);
   const ownBakeGpu = bakeGpuState ? null : createTerrainMaterialBakeGpuState(stylizedConfig.materialBake);
@@ -270,6 +282,22 @@ export function createTerrainMaterial({
       gpuState: materialBakeGpu,
       stylizedConfig,
     });
+    // grass-test's path surface over the baked ground: textured dirt with a
+    // broken contour and a worn verge (stylized/path/terrainPathPaint.js).
+    const bakedRoughness = bakedSurface.roughness
+      ?? float(stylizedConfig.materialBake.render.fallbackRoughness);
+    const pathPaint = createTerrainPathPaint({
+      terrainUv,
+      chunkWorldSize,
+      chunkCenter,
+      pathMask,
+      verge: pathWear.verge,
+      settings: pathPaintSettings,
+      textures: pathPaintSettings ? acquirePathTextures() : null,
+    });
+    const paintedSurface = pathPaint
+      ? { ...bakedSurface, ...pathPaint.apply(bakedSurface.color, bakedRoughness) }
+      : { ...bakedSurface, roughness: bakedRoughness };
     // Swash, foam and wet sand where the ground meets the sea.
     const swash = coastPatternsTemplate && createCoastSwashNodes({
       localXZ,
@@ -278,11 +306,8 @@ export function createTerrainMaterial({
       config: { ...DEFAULT_COAST_SWASH, ...(stylizedConfig.water?.coast ?? {}) },
     });
     const shoreSurface = swash
-      ? swash.apply(
-        bakedSurface.color,
-        bakedSurface.roughness ?? float(stylizedConfig.materialBake.render.fallbackRoughness),
-      )
-      : bakedSurface;
+      ? swash.apply(paintedSurface.color, paintedSurface.roughness)
+      : paintedSurface;
     // Rain darkens and slicks exposed ground; snow and canopy shelter it.
     const surface = createRainWetnessShading({
       snow: bakedSurface.snow ?? float(0),
@@ -310,7 +335,18 @@ export function createTerrainMaterial({
       snow: bakedSurface.snow ?? float(0),
     });
     const snowColor = snowSurface ? snowSurface.apply(surface.color) : surface.color;
-    material.colorNode = footprints.apply(snowColor);
+    // The trail a body cuts through deep snow, over the prints it leaves there.
+    // Disabled or snowless, it compiles to nothing.
+    const wake = createSnowWakeShading({
+      terrainUv,
+      chunkWorldSize,
+      chunkCenter,
+      snow: bakedSurface.snow,
+      state: snowWakeRecorder.state,
+      config: stylizedConfig.snowWake,
+    });
+    const printed = footprints.apply(snowColor);
+    material.colorNode = wake ? wake.apply(printed) : printed;
     material.roughnessNode = surface.roughness;
     if (snowSurface) material.emissiveNode = snowSurface.emissive;
     if (bakedSurface.normal) material.normalNode = bakedSurface.normal;

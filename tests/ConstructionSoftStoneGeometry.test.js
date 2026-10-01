@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import * as THREE from 'three/webgpu';
 import { constructionStoneEdgeWearProfile } from '../src/editor/construction/config/ConstructionStoneEdgeWearProfiles.generated.js';
 import { constructionStoneReliefProfile } from '../src/editor/construction/config/ConstructionStoneReliefProfiles.generated.js';
 import { buildSoftStoneGeometry } from '../src/editor/construction/compile/ConstructionSoftStoneGeometry.js';
@@ -135,4 +136,31 @@ test('worn-edge geometry differs from relief-only while keeping XY footprint', (
   );
   soft.geometry.dispose();
   reliefOnly.geometry.dispose();
+});
+
+test('all six stone surfaces face outward in near and coarse geometry', () => {
+  const { stoneShape, topology } = buildPair();
+  const material = new THREE.MeshBasicMaterial({ side: THREE.FrontSide });
+  try {
+    for (const geometryTier of ['near', 'coarse']) {
+      const { geometry } = buildSoftStoneGeometry({
+        topology, geometryTier,
+        stoneShape: { ...stoneShape, position: [0, 0, 0], rotation: [0, 0, 0] },
+      });
+      try {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.updateMatrixWorld(true);
+        for (const axis of ['x', 'y', 'z']) {
+          for (const sign of [-1, 1]) {
+            const origin = new THREE.Vector3();
+            origin[axis] = sign * 2;
+            const hit = new THREE.Raycaster(origin, origin.clone().negate().normalize())
+              .intersectObject(mesh, false)[0];
+            assert.ok(hit && hit.point[axis] * sign > 0,
+              `${geometryTier}: ${axis} ${sign} surface faces inward`);
+          }
+        }
+      } finally { geometry.dispose(); }
+    }
+  } finally { material.dispose(); }
 });

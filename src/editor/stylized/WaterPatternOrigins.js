@@ -1,4 +1,5 @@
 import { PatternOrigins } from './PatternOrigins.js';
+import { RIVER_DETAIL_PATTERN_PERIOD_METERS } from './RiverSurfaceShading.js';
 
 /**
  * Metres between the reference points that the river foam bands are measured
@@ -24,5 +25,7 @@ export function createWaterPatternOrigins(water) {
     refractionFine: { scale: water.refraction?.fineScale ?? 1 },
     caustics: { scale: water.caustics?.scale ?? 1 },
     flowReference: { scale: 1, period: WATER_FLOW_REFERENCE_METERS },
+    // Metres, wrapped by a whole number of every river detail tile.
+    riverDetail: { scale: 1, period: RIVER_DETAIL_PATTERN_PERIOD_METERS },
   });
 }

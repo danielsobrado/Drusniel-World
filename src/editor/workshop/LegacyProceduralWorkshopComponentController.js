@@ -53,8 +53,29 @@ function normalizeAngle(value) {
   return Math.atan2(Math.sin(value), Math.cos(value));
 }
 
+/**
+ * A component's rotation relative to its rest frame. Facade hosts on the sides
+ * and back of a building rest turned by their frame yaw; stored transforms never
+ * include it. Identity for every component without a frame yaw.
+ */
+function relativeRotation(group) {
+  const base = group.userData.workshopBaseQuaternion;
+  if (!base) return group.rotation.clone();
+  return new THREE.Euler().setFromQuaternion(base.clone().invert().multiply(group.quaternion));
+}
+
+function setRelativeRotation(group, euler) {
+  const base = group.userData.workshopBaseQuaternion;
+  if (!base) {
+    group.rotation.set(euler.x, euler.y, euler.z);
+    return;
+  }
+  group.quaternion.copy(base).multiply(new THREE.Quaternion().setFromEuler(euler));
+}
+
 function componentTransformFromGroup(group) {
   const basePosition = group.userData.workshopBasePosition;
+  const rotation = relativeRotation(group);
   return normalizeComponentTransform({
     position: [
       group.position.x - basePosition.x,
@@ -62,9 +83,9 @@ function componentTransformFromGroup(group) {
       group.position.z - basePosition.z,
     ],
     rotation: [
-      normalizeAngle(group.rotation.x),
-      normalizeAngle(group.rotation.y),
-      normalizeAngle(group.rotation.z),
+      normalizeAngle(rotation.x),
+      normalizeAngle(rotation.y),
+      normalizeAngle(rotation.z),
     ],
     scale: group.scale.toArray(),
   });
@@ -93,7 +114,7 @@ function applyTransform(group, transform) {
     basePosition.y + transform.position[1],
     basePosition.z + transform.position[2],
   );
-  group.rotation.set(...transform.rotation);
+  setRelativeRotation(group, new THREE.Euler(...transform.rotation));
   group.scale.set(...transform.scale);
   group.updateMatrixWorld(true);
 }
@@ -1142,7 +1163,15 @@ export class ProceduralWorkshopComponentController {
       const group = this.groups.get(component.id);
       const parent = component.parentId ? this.groups.get(component.parentId) : null;
       const parentPivot = parent?.userData.workshopPivot ?? new THREE.Vector3();
-      group.userData.workshopBasePosition = group.userData.workshopPivot.clone().sub(parentPivot);
+      const parentYaw = parent?.userData.workshopComponent.frameYaw ?? 0;
+      const relativeYaw = (component.frameYaw ?? 0) - parentYaw;
+      // Rest pose in the parent's frame; see componentLocalMatrix.
+      group.userData.workshopBasePosition = group.userData.workshopPivot.clone()
+        .sub(parentPivot)
+        .applyAxisAngle(new THREE.Vector3(0, 1, 0), -parentYaw);
+      group.userData.workshopBaseQuaternion = relativeYaw === 0
+        ? null
+        : new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), relativeYaw);
       if (parent) parent.add(group);
       else this.previewRoot.add(group);
 
@@ -1621,11 +1650,13 @@ export class ProceduralWorkshopComponentController {
       WORKSHOP_COMPONENT_TRANSFORM_LIMITS.scaleMax,
     );
 
+    const rotation = relativeRotation(group);
     for (const axis of ['x', 'y', 'z']) {
       if (!policy.translateAxes.includes(axis)) group.position[axis] = basePosition[axis];
-      if (!policy.rotateAxes.includes(axis)) group.rotation[axis] = 0;
+      if (!policy.rotateAxes.includes(axis)) rotation[axis] = 0;
       if (!policy.scaleAxes.includes(axis)) group.scale[axis] = 1;
     }
+    setRelativeRotation(group, rotation);
     const architectural = this.snapSelectedArchitecturally(group, policy);
     const snappedAxes = architectural
       ? new Set(architectural.guides.map((guide) => guide.axis))

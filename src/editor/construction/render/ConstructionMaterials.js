@@ -103,6 +103,7 @@ function createStoneMaterial(record, style) {
     roughness: 1,
     metalness: 0,
     vertexColors: true,
+    flatShading: config.flatShading,
   });
   material.bumpMap = surfaceBumpTexture(seed, config.bumpTextureScale);
   material.bumpScale = config.bumpScale;

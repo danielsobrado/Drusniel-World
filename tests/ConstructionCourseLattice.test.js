@@ -14,6 +14,28 @@ const SEED = 3141;
 const COURSE_HEIGHT = 0.56;
 const SEEDS = [1, 7, 3141, 88_017, 525_600];
 
+test('stacked-insert bias preserves the cell partition, dimensions and deterministic splits', () => {
+  let horizontal = 0;
+  for (let seed = 0; seed < 300; seed += 1) {
+    const cell = { courseIndex: 3, s0: 1, s1: 1.46, v0: 0, v1: 1 };
+    const options = { seed, chance: 1, maxDepth: 1, minWidth: 0.14, minHeight: 0.13,
+      courseHeight: 0.4, horizontalChance: 0.7 };
+    const leaves = splitCell(cell, options);
+    assert.deepEqual(leaves, splitCell(cell, options));
+    const area = leaves.reduce((total, leaf) => total + (leaf.s1 - leaf.s0) * (leaf.v1 - leaf.v0), 0);
+    assert.ok(Math.abs(area - 0.46) < 1e-12);
+    if (leaves.length === 2 && leaves[0].v1 !== 1) horizontal += 1;
+    for (const leaf of leaves) {
+      assert.ok(leaf.s1 - leaf.s0 >= 0.14);
+      assert.ok((leaf.v1 - leaf.v0) * 0.4 >= 0.13);
+    }
+    assert.equal(splitCell(cell, { ...options, horizontalChance: 1 })[0].s1, cell.s1);
+    assert.equal(splitCell(cell, { ...options, horizontalChance: 0 })[0].v1, cell.v1);
+    assert.equal(splitCell(cell, { ...options, minHeight: 0.3, horizontalChance: 1 }).length, 1);
+  }
+  assert.ok(horizontal > 180 && horizontal < 240, `${horizontal}/300 stacked inserts`);
+});
+
 test('the ground line never waves', () => {
   // Course 0's bed line is where the wall meets the terrain. A wave there would
   // lift the bottom course off the ground or bury it.

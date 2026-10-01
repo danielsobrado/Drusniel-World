@@ -56,6 +56,7 @@ test('resolved profiles are deeply frozen and stable', () => {
 });
 
 test('invalid surface profiles are rejected', () => {
+  assert.throws(() => defineStoneSurfaceProfileForTest({ material: { flatShading: 1 } }), /flatShading/);
   assert.throws(
     () => defineStoneSurfaceProfileForTest({
       key: 'bad-brightness',

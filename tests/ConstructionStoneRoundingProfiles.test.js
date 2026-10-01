@@ -58,8 +58,8 @@ test('the shipped profile keeps its rounding budget', () => {
   // meet in the middle of a course stone and the wall reads as stacked sausages.
   assert.ok(profile.edgeRadius.ratioMin >= 0.1 && profile.edgeRadius.ratioMax <= 0.25);
   assert.ok(profile.cornerRadius.ratioMin >= profile.edgeRadius.ratioMin);
-  assert.deepEqual({ ...profile.lod.near }, { arcSegments: 3, rimRings: 2, faceRings: 1 });
-  assert.deepEqual({ ...profile.lod.coarse }, { arcSegments: 1, rimRings: 1, faceRings: 0 });
+  assert.deepEqual({ ...profile.lod.near }, { arcSegments: 3, edgeSegments: 1, rimRings: 2, faceRings: 1 });
+  assert.deepEqual({ ...profile.lod.coarse }, { arcSegments: 1, edgeSegments: 1, rimRings: 1, faceRings: 0 });
   assert.ok(profile.categories.voussoir < profile.categories.field);
 });
 

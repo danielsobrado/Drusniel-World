@@ -89,9 +89,9 @@ function insetQuad(ring, normals, radii) {
   return core;
 }
 
-/** Points per ring for a given arc resolution: four corner arcs. */
-export function outlinePointCount(arcSegments) {
-  return 4 * (arcSegments + 1);
+/** Four corner arcs, optionally with a midpoint on each connecting edge. */
+export function outlinePointCount(arcSegments, edgeSegments = 1) {
+  return 4 * (arcSegments + edgeSegments);
 }
 
 /**
@@ -101,9 +101,10 @@ export function outlinePointCount(arcSegments) {
  * @param cornerRadius default in-plane corner radius
  * @param arcSegments segments per quarter-ish corner arc
  * @param cornerRadii optional four radii; their minimum is the deepest valid inset
+ * @param edgeSegments 1 for straight edges, 2 to sample wear at their midpoints
  * @returns null when the corner radius does not fit the quad
  */
-export function createRoundedOutline(ring, cornerRadius, arcSegments, cornerRadii = null) {
+export function createRoundedOutline(ring, cornerRadius, arcSegments, cornerRadii = null, edgeSegments = 1) {
   if (!(cornerRadius > 0) || !(arcSegments >= 1)) return null;
   const radii = cornerRadii ?? [cornerRadius, cornerRadius, cornerRadius, cornerRadius];
   if (radii.length !== 4 || !radii.every(radius => Number.isFinite(radius) && radius > 0)) return null;
@@ -112,12 +113,13 @@ export function createRoundedOutline(ring, cornerRadius, arcSegments, cornerRadi
   const core = insetQuad(ring, normals, radii);
   if (!core) return null;
 
-  const pointCount = outlinePointCount(arcSegments);
+  const pointCount = outlinePointCount(arcSegments, edgeSegments);
   const directionX = new Float64Array(pointCount);
   const directionY = new Float64Array(pointCount);
   const coreX = new Float64Array(pointCount);
   const coreY = new Float64Array(pointCount);
   const radiusAt = new Float64Array(pointCount);
+  const wearIndex = new Uint8Array(pointCount);
   let point = 0;
   for (let corner = 0; corner < 4; corner += 1) {
     const before = normals[(corner + 3) % 4];
@@ -132,6 +134,20 @@ export function createRoundedOutline(ring, cornerRadius, arcSegments, cornerRadi
       coreX[point] = core[corner][0];
       coreY[point] = core[corner][1];
       radiusAt[point] = radii[corner];
+      wearIndex[point] = corner * 2;
+      point += 1;
+    }
+    // The midpoint is collinear on the packed silhouette. Its independently
+    // inset bevel makes the face edge uneven without opening the bed joint.
+    const next = (corner + 1) % 4;
+    for (let step = 1; step < edgeSegments; step += 1) {
+      const t = step / edgeSegments;
+      directionX[point] = after[0];
+      directionY[point] = after[1];
+      coreX[point] = core[corner][0] * (1 - t) + core[next][0] * t;
+      coreY[point] = core[corner][1] * (1 - t) + core[next][1] * t;
+      radiusAt[point] = radii[corner] * (1 - t) + radii[next] * t;
+      wearIndex[point] = corner * 2 + 1;
       point += 1;
     }
   }
@@ -146,6 +162,8 @@ export function createRoundedOutline(ring, cornerRadius, arcSegments, cornerRadi
   return Object.freeze({
     pointCount,
     cornerRadius: Math.min(...radii),
+    insetLimit: (index) => radiusAt[index],
+    wearIndex: (index) => wearIndex[index],
     centroid: Object.freeze([centroidX, centroidY]),
     /** Outward unit normal of ring point `index` (the same at every inset). */
     normalX: (index) => directionX[index],

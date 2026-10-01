@@ -159,6 +159,7 @@ export function splitCell(cell, {
   minWidth = 0.2,
   minHeight = MIN_SPLIT_HEIGHT,
   courseHeight = 1,
+  horizontalChance = null,
 }) {
   const leaves = [];
 
@@ -184,8 +185,12 @@ export function splitCell(cell, {
       return;
     }
 
-    // Prefer splitting the long axis, or repeated splits produce splinters.
-    const vertical = lane(hash, 16) < (width >= height ? 0.66 : 0.34);
+    // The default prefers the long axis. Styles may favour stacked inserts;
+    // the minimum dimensions below still reject slivers in either direction.
+    const verticalChance = horizontalChance == null ? (width >= height ? 0.66 : 0.34) : 1 - horizontalChance;
+    // Hash lanes include 1, so handle probability endpoints explicitly.
+    const vertical = horizontalChance === 0
+      || (horizontalChance !== 1 && lane(hash, 16) < verticalChance);
     if (vertical) {
       const mid = node.s0 + width * (0.35 + lane(hash, 24) * 0.3);
       if (mid - node.s0 < minWidth || node.s1 - mid < minWidth) {

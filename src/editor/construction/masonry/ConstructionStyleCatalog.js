@@ -52,6 +52,8 @@ export const DEFAULT_COPING = Object.freeze({
 /** Shared defaults that reproduce the former hard-coded packer behaviour. */
 const DEFAULT_STYLE_TUNING = Object.freeze({
   splitMaxDepth: 2,
+  // Null prefers the longer axis. A style can favour stacked thin inserts.
+  splitHorizontalChance: null,
 
   jointInsetMin: 0.012,
   jointInsetMax: 0.03,
@@ -168,6 +170,9 @@ export function defineConstructionStyle(input) {
   finiteInRange(style.bedAmplitude, `${style.key} bedAmplitude`, 0, 0.2);
   finiteInRange(style.jointTilt, `${style.key} jointTilt`, 0, 0.5);
   finiteInRange(style.splitChance, `${style.key} splitChance`, 0, 1);
+  if (style.splitHorizontalChance != null) {
+    finiteInRange(style.splitHorizontalChance, `${style.key} splitHorizontalChance`, 0, 1);
+  }
   finiteInRange(style.splitMaxDepth, `${style.key} splitMaxDepth`, 0, 2);
   finiteInRange(style.splitMinHeight, `${style.key} splitMinHeight`, 0.05, 1);
 
@@ -366,8 +371,8 @@ export const CONSTRUCTION_STYLES = Object.freeze({
   'glade-sandstone': defineConstructionStyle({
     key: 'glade-sandstone',
     label: 'Glade sandstone',
-    courseHeight: 0.34,
-    targetWidth: 0.43,
+    courseHeight: 0.4,
+    targetWidth: 0.46,
     minWidth: 0.14,
     // Neat, aligned blocks: jitter's shrink, skew and turn opened visible
     // slots between these small stones.
@@ -378,7 +383,8 @@ export const CONSTRUCTION_STYLES = Object.freeze({
     bedAmplitude: 0.12,
     jointTilt: 0.065,
     // Mix full-height blocks with paired smaller ones, without adding courses.
-    splitChance: 0.38,
+    splitChance: 0.48,
+    splitHorizontalChance: 0.7,
     splitMaxDepth: 1,
     splitMinHeight: 0.13,
     depthScaleMin: 0.96,
@@ -387,8 +393,7 @@ export const CONSTRUCTION_STYLES = Object.freeze({
     faceOffsetAmplitude: 0.032,
     // Blocks meet at the joint width: no in-plane shrink or turn.
     exactFit: true,
-    // Real units already supply the joints. Keep the material's fine stone
-    // grain, without projecting the shell's masonry pattern over each face.
+    // Real units supply the joints and worn bevels; broad faces stay calm.
     geometry: 'rounded',
     defaultTop: 'flat',
     footing: {

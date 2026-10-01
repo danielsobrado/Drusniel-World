@@ -516,6 +516,7 @@ export function packCurvedWall({
           minWidth: style.minWidth,
           minHeight: style.splitMinHeight ?? MIN_SPLIT_HEIGHT,
           courseHeight: thisCourseHeight,
+          horizontalChance: style.splitHorizontalChance,
         },
       );
 

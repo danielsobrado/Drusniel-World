@@ -44,9 +44,9 @@ test('glade-sandstone matches the reference scale: small near-square blocks, res
   const candidate = constructionStyle('glade-sandstone');
   assert.equal(candidate.geometry, 'rounded');
   assert.equal(candidate.stonePalette, 'glade-sandstone');
-  // docs/reference/tiny-glade: blocks of roughly 0.15–0.35 m, near square.
-  assert.ok(candidate.courseHeight >= 0.2 && candidate.courseHeight <= 0.36);
-  assert.ok(candidate.targetWidth >= 0.25 && candidate.targetWidth <= 0.45);
+  // Taller whole blocks interleave with thin horizontal pairs in each course.
+  assert.ok(candidate.courseHeight >= 0.35 && candidate.courseHeight <= 0.45);
+  assert.ok(candidate.targetWidth >= 0.35 && candidate.targetWidth <= 0.5);
   assert.ok(candidate.targetWidth / candidate.courseHeight < 1.6, 'near square, not brick');
   assert.ok(candidate.coping.oversail >= 1.0 && candidate.coping.oversail <= 1.12);
   assert.ok(candidate.footing.heightRatio >= 1.0 && candidate.footing.heightRatio <= 1.25);
@@ -54,6 +54,7 @@ test('glade-sandstone matches the reference scale: small near-square blocks, res
   // keep the shared caps.
   assert.ok(candidate.stoneBudget.module > 280);
   assert.equal(constructionStyle('rounded-fieldstone').stoneBudget ?? null, null);
+  assert.throws(() => defineConstructionStyle({ ...candidate, splitHorizontalChance: 1.1 }), /splitHorizontalChance/);
 });
 
 test('rounded fieldstone declares its mesher, top, footing and coping', () => {

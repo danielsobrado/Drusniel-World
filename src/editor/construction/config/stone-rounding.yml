@@ -14,6 +14,10 @@ defaults:
     minimum: 0.03
     maximum: 0.09
 
+  # Independent width/depth changes around each face's bevel. Zero preserves
+  # the uniformly rounded fieldstone rim; dressings attenuate this by category.
+  rimVariation: 0
+
   # In-plane rounding of the face outline's four corners. Never smaller than
   # the edge radius, so the rim always has room to roll.
   cornerRadius:
@@ -61,10 +65,12 @@ defaults:
   lod:
     near:
       arcSegments: 3
+      edgeSegments: 1
       rimRings: 2
       faceRings: 1
     coarse:
       arcSegments: 1
+      edgeSegments: 1
       rimRings: 1
       faceRings: 0
 
@@ -101,25 +107,29 @@ styles:
     # Seen head-on, the rim is a band as wide as its radius; the references'
     # bevels are narrow chamfers that catch the light.
     edgeRadius:
-      ratioMin: 0.04
-      ratioMax: 0.09
-      minimum: 0.01
-      maximum: 0.028
+      ratioMin: 0.06
+      ratioMax: 0.11
+      minimum: 0.009
+      maximum: 0.033
+    rimVariation: 0.65
+    minimumEdgeRadius: 0.006
     cornerRadius:
       ratioMin: 0.06
-      ratioMax: 0.14
+      ratioMax: 0.12
       # Each corner wears differently; dressings inherit their calmer scale.
-      variation: 0.6
+      variation: 0.4
     bulge:
-      ratioMin: 0.02
-      ratioMax: 0.04
-      maximum: 0.009
-    faceFlatness: 0.75
+      ratioMin: 0.004
+      ratioMax: 0.014
+      maximum: 0.003
+    faceFlatness: 0.95
     protrusionScale: 0.8
-    # Close views soften the worn corners; coarse keeps the cheaper chamfer.
+    # Trade a corner subdivision for an edge midpoint: the same near triangle
+    # budget describes uneven bevels and angular worn corners at close range.
     lod:
       near:
-        arcSegments: 2
+        arcSegments: 1
+        edgeSegments: 2
         rimRings: 1
         faceRings: 0
       coarse:

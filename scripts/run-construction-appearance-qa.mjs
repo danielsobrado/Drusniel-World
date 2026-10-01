@@ -25,7 +25,8 @@ try {
     const { createConstructionAppearanceFixture } = await import('/scripts/fixtures/ConstructionAppearanceFixture.js');
     window.fixture = await createConstructionAppearanceFixture(options);
   }, { styleKey: arg('style', 'glade-sandstone'), lodBand: arg('lod', 'near'),
-    growth: arg('growth', 'auto'), view: arg('view', 'front'), closeup: process.argv.includes('--closeup') });
+    growth: arg('growth', 'auto'), view: arg('view', 'front'), closeup: process.argv.includes('--closeup'),
+    zoom: Number(arg('zoom', NaN)) });
   const results = [];
   for (const id of arg('scenes', 'straight,curve,tower,arches,arch-profiles,curved-arch,low,growth,standard').split(',')) {
     for (const light of ['neutral', 'warm']) {

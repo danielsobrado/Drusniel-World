@@ -8,6 +8,7 @@ export const CONSTRUCTION_STONE_ROUNDING_PROFILES = Object.freeze({
       minimum: 0.03,
       maximum: 0.09,
     }),
+    rimVariation: 0,
     cornerRadius: Object.freeze({
       ratioMin: 0.2,
       ratioMax: 0.3,
@@ -36,11 +37,13 @@ export const CONSTRUCTION_STONE_ROUNDING_PROFILES = Object.freeze({
     lod: Object.freeze({
       near: Object.freeze({
         arcSegments: 3,
+        edgeSegments: 1,
         rimRings: 2,
         faceRings: 1,
       }),
       coarse: Object.freeze({
         arcSegments: 1,
+        edgeSegments: 1,
         rimRings: 1,
         faceRings: 0,
       }),
@@ -60,24 +63,25 @@ export const CONSTRUCTION_STONE_ROUNDING_PROFILES = Object.freeze({
   }),
   "glade-sandstone": Object.freeze({
     edgeRadius: Object.freeze({
-      ratioMin: 0.04,
-      ratioMax: 0.09,
-      minimum: 0.01,
-      maximum: 0.028,
+      ratioMin: 0.06,
+      ratioMax: 0.11,
+      minimum: 0.009,
+      maximum: 0.033,
     }),
+    rimVariation: 0.65,
     cornerRadius: Object.freeze({
       ratioMin: 0.06,
-      ratioMax: 0.14,
-      variation: 0.6,
+      ratioMax: 0.12,
+      variation: 0.4,
     }),
     bulge: Object.freeze({
-      ratioMin: 0.02,
-      ratioMax: 0.04,
-      maximum: 0.009,
+      ratioMin: 0.004,
+      ratioMax: 0.014,
+      maximum: 0.003,
     }),
     asymmetry: 0.3,
     saddle: 0.1,
-    faceFlatness: 0.75,
+    faceFlatness: 0.95,
     protrusionScale: 0.8,
     categories: Object.freeze({
       field: 1,
@@ -89,15 +93,17 @@ export const CONSTRUCTION_STONE_ROUNDING_PROFILES = Object.freeze({
       recess: 0,
     }),
     footingScale: 1.1,
-    minimumEdgeRadius: 0.012,
+    minimumEdgeRadius: 0.006,
     lod: Object.freeze({
       near: Object.freeze({
-        arcSegments: 2,
+        arcSegments: 1,
+        edgeSegments: 2,
         rimRings: 1,
         faceRings: 0,
       }),
       coarse: Object.freeze({
         arcSegments: 1,
+        edgeSegments: 1,
         rimRings: 1,
         faceRings: 0,
       }),

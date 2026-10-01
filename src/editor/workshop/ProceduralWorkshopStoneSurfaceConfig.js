@@ -21,6 +21,7 @@ const DEFAULT_PROCEDURAL_ALBEDO = Object.freeze({
 });
 
 const DEFAULT_MATERIAL_SURFACE = Object.freeze({
+  flatShading: false,
   bumpTextureScale: 1,
   bumpScale: 0.055,
 
@@ -132,7 +133,7 @@ export const STONE_SURFACE_PROFILES = Object.freeze({
     }),
   }),
 
-  // Same calm response as warm-fieldstone: the candidate reads through shape.
+  // Reference close-ups have broad quiet faces; worn geometry catches light.
   'glade-sandstone': Object.freeze({
     unitShading: Object.freeze({
       brightnessMin: 0.93,
@@ -143,27 +144,28 @@ export const STONE_SURFACE_PROFILES = Object.freeze({
     proceduralAlbedo: Object.freeze({
       broadCellSize: 32,
       broadVariation: 4,
-      grainVariation: 1.5,
+      grainVariation: 0.5,
       dampDarkening: 6,
       dampGreenLift: 2,
     }),
 
     material: Object.freeze({
+      flatShading: true,
       bumpTextureScale: 0.36,
-      bumpScale: 0.012,
+      bumpScale: 0.002,
 
       roughnessBase: 240,
       roughnessVariation: 8,
       roughnessBroadScale: 18,
 
       normalKind: 'granite',
-      workshopNormalScale: 0.1,
-      constructionNormalScale: 0.1,
+      workshopNormalScale: 0.018,
+      constructionNormalScale: 0.018,
 
       workshopEnvMapIntensity: 0.52,
       constructionEnvMapIntensity: 0.52,
 
-      mortarColor: '#6b655b',
+      mortarColor: '#bd935f',
     }),
   }),
 });
@@ -205,6 +207,9 @@ function validateProceduralAlbedo(albedo, label) {
 }
 
 function validateMaterialSurface(material, label) {
+  if (typeof material.flatShading !== 'boolean') {
+    throw new Error(`${label} flatShading must be a boolean.`);
+  }
   finiteInRange(material.bumpTextureScale, `${label} bumpTextureScale`, 0, 4);
   finiteInRange(material.bumpScale, `${label} bumpScale`, 0, 1);
   finiteInRange(material.roughnessBase, `${label} roughnessBase`, 0, 255);

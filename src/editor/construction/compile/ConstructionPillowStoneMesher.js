@@ -1,5 +1,6 @@
 import { projectedUvAt, WORKSHOP_UV_DENSITY } from '../../workshop/WorkshopProjectedUv.js';
 import { domeFactor } from '../masonry/StonePillowField.js';
+import { createPillowRim } from './PillowStoneRim.js';
 import {
   createRoundedOutline,
   normalizeConvexQuad,
@@ -12,15 +13,16 @@ import {
  * The stone is the face quad the packer solved, extruded through the wall and
  * rounded three ways: its outline's corners are arcs in the face plane
  * (`PillowStoneOutline`), each face rolls back into the joint along a quarter
- * circle of the face's own rim radius, and each face domes outward, peaking at
+ * ellipse with sampled width and depth, and each face domes outward, peaking at
  * its centre. Rim rings come first, outermost (the silhouette) to innermost (the
  * edge of the dome); dome rings follow, then a centre vertex. The front and back
  * faces share their outermost ring's footprint, so the side band between them
  * is a straight extrusion that reuses those rings' vertices.
  *
- * Normals are analytic — the rim's are exact, the dome's come from its radial
- * slope — so there is no `computeVertexNormals` pass and no crease anywhere on
- * a stone. Colour is baked per vertex by the caller's shader, and every vertex
+ * Normals are analytic for uniform rims and approximate for uneven rims; the
+ * dome uses its radial slope. Faceted styles use the material's geometric
+ * normals, while rounded styles keep smooth shading. There is no mesh-wide
+ * `computeVertexNormals` pass. Colour is baked by the caller, and every vertex
  * gets one, which is what a `vertexColors` material requires (CLAUDE.md).
  *
  * Three.js-free.
@@ -50,8 +52,8 @@ export function faceProfile(rho, flatness = 0) {
   };
 }
 
-export function estimatePillowStone({ arcSegments, rimRings, faceRings }) {
-  const pointCount = outlinePointCount(arcSegments);
+export function estimatePillowStone({ arcSegments, edgeSegments = 1, rimRings, faceRings }) {
+  const pointCount = outlinePointCount(arcSegments, edgeSegments);
   const faceVertices = (rimRings + 1 + faceRings) * pointCount + 1;
   const faceTriangles = (rimRings + faceRings) * pointCount * 2 + pointCount;
   return {
@@ -81,11 +83,11 @@ function scaleFace(face, scale) {
 }
 
 /** Fit the outline, shrinking the whole pillow if its corners do not fit. */
-function fitOutline(ring, pillow, arcSegments) {
+function fitOutline(ring, pillow, arcSegments, edgeSegments) {
   let scale = 1;
   for (let attempt = 0; attempt < FIT_ATTEMPTS; attempt += 1) {
     const outline = createRoundedOutline(ring, pillow.cornerRadius * scale, arcSegments,
-      pillow.cornerRadii?.map(radius => radius * scale));
+      pillow.cornerRadii?.map(radius => radius * scale), edgeSegments);
     if (outline) {
       return {
         outline,
@@ -200,7 +202,7 @@ function writeFace(writer, emit, {
   creviceScale,
 }) {
   const pointCount = outline.pointCount;
-  const edgeRadius = Math.min(face.edgeRadius, outline.cornerRadius);
+  const rim = createPillowRim(outline, face, halfDepth);
   const bulge = face.bulge;
   const summit = halfDepth + bulge;
   const rings = [];
@@ -209,18 +211,25 @@ function writeFace(writer, emit, {
     const angle = (HALF_PI * ring) / rimRings;
     const cosine = Math.cos(angle);
     const sine = Math.sin(angle);
-    const inset = edgeRadius * (1 - cosine);
-    const height = halfDepth - edgeRadius + edgeRadius * sine;
-    const crevice = Math.min(1, (summit - height) / creviceScale);
     const indices = new Array(pointCount);
     for (let point = 0; point < pointCount; point += 1) {
+      const width = rim.widths[point];
+      const depth = rim.depths[point];
+      const inset = width * (1 - cosine);
+      const height = halfDepth - depth + depth * sine;
+      const crevice = Math.min(1, (summit - height) / creviceScale);
+      // Elliptic bevels: width and depth need not agree. At either end the
+      // normal still meets the side band and broad face without a seam.
+      const nx = cosine * depth;
+      const nz = sine * width;
+      const normalLength = Math.hypot(nx, nz);
       indices[point] = emit(
         outline.pointX(point, inset),
         outline.pointY(point, inset),
         sign * height,
-        cosine * outline.normalX(point),
-        cosine * outline.normalY(point),
-        sign * sine,
+        nx / normalLength * outline.normalX(point),
+        nx / normalLength * outline.normalY(point),
+        sign * nz / normalLength,
         crevice,
       );
     }
@@ -238,8 +247,8 @@ function writeFace(writer, emit, {
     const { profile, slopeProfile } = faceProfile(rho, flatness);
     const indices = new Array(pointCount);
     for (let point = 0; point < pointCount; point += 1) {
-      const edgeX = outline.pointX(point, edgeRadius);
-      const edgeY = outline.pointY(point, edgeRadius);
+      const edgeX = outline.pointX(point, rim.widths[point]);
+      const edgeY = outline.pointY(point, rim.widths[point]);
       const radialX = edgeX - cx;
       const radialY = edgeY - cy;
       const radius = Math.hypot(radialX, radialY) || 1e-6;
@@ -292,7 +301,7 @@ function writeFace(writer, emit, {
  * @param writer `MasonryVertexWriter`
  * @param stone `{ corners, depth, position, rotation, pillow }` — `corners` in
  *   the stone's face plane, `position` in module space with `y` above grade.
- * @param options.lod `{ arcSegments, rimRings, faceRings }`
+ * @param options.lod `{ arcSegments, edgeSegments, rimRings, faceRings }`
  * @param options.shade from `createRoundedStoneShader`
  * @param options.creviceReach crevice saturation depth in (edge radius + bulge)
  * @param options.exposure optional `{ top, start, end }` open face-plane edges
@@ -312,7 +321,7 @@ export function writePillowStone(writer, stone, {
 }) {
   const ring = normalizeConvexQuad(stone.corners);
   if (!ring || !(stone.depth > 0)) return null;
-  const fitted = fitOutline(ring, stone.pillow, lod.arcSegments);
+  const fitted = fitOutline(ring, stone.pillow, lod.arcSegments, lod.edgeSegments);
   if (!fitted) return null;
 
   const { outline } = fitted;

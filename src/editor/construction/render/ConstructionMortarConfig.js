@@ -83,7 +83,7 @@ export const CONSTRUCTION_MORTAR_PROFILES = Object.freeze({
   // Hairline seams in the references read as thin shadowed lines of the stone's
   // own hue, not as grey cement.
   'glade-sandstone': Object.freeze({
-    color: '#7a5438',
+    color: '#bd935f',
     roughness: 1,
     metalness: 0,
   }),

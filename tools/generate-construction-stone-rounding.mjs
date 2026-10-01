@@ -35,6 +35,7 @@ const triple = (minimum, maximum) => ({ kind: 'triple', minimum, maximum });
 
 const LOD_BAND = {
   arcSegments: integer(1, 6),
+  edgeSegments: integer(1, 2),
   rimRings: integer(1, 4),
   faceRings: integer(0, 3),
 };
@@ -47,6 +48,7 @@ const SCHEMA = {
     minimum: range(0, 0.3),
     maximum: range(0, 0.3),
   },
+  rimVariation: range(0, 0.8),
   cornerRadius: {
     ratioMin: range(0, 0.5),
     ratioMax: range(0, 0.5),

@@ -695,6 +695,7 @@ export function createWorkshopMaterials(recipe) {
     )
     : null;
   const stone = tagWorkshopMaterial(new THREE.MeshStandardNodeMaterial({
+    flatShading: stoneConfig.flatShading,
     color: stoneAlbedo?.tint ?? (recipe.albedo ? '#ffffff' : STONE_PALETTES[recipe.style].color),
     map: stoneAlbedo?.texture ?? (recipe.albedo ? stoneTexture(recipe) : null),
     bumpMap: stoneBump,

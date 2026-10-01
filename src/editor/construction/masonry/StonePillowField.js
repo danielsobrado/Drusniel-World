@@ -75,11 +75,22 @@ function sampleFace(profile, hash, { shortSide, depth, scale }) {
   return Object.freeze({
     edgeRadius,
     bulge,
+    // Alternating corners and edge midpoints, independent of LOD point count.
+    // Front/back hashes differ; shrinking a fitted stone keeps these ratios.
+    rimWidths: sampleRimScales(hash, 11, profile.rimVariation, scale),
+    rimDepths: sampleRimScales(hash, 29, profile.rimVariation, scale),
     tiltU: signedLane(hash, 16) * profile.asymmetry,
     tiltV: signedLane(hash, 24) * profile.asymmetry,
     saddle: signedLane(mixSeed(hash, 1), 0) * profile.saddle,
     flatness: profile.faceFlatness ?? 0,
   });
+}
+
+function sampleRimScales(hash, domain, variation = 0, scale) {
+  if (!(variation > 0)) return null;
+  const amount = variation * Math.min(1, scale);
+  return Object.freeze(Array.from({ length: 8 }, (_, index) =>
+    1 + signedLane(mixSeed(hash ^ domain, index + 1), 8) * amount));
 }
 
 /**

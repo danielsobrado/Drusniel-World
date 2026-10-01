@@ -52,6 +52,28 @@ test('front and back faces roll and dome independently', () => {
   assert.ok(differing > 30, `only ${differing} of 40 stones had distinct faces`);
 });
 
+test('sandstone bevel wear is stable, face-specific and restrained on dressings', () => {
+  const profile = constructionStoneRoundingProfile('glade-sandstone');
+  for (let stableIndex = 0; stableIndex < 80; stableIndex += 1) {
+    const stone = sample({ profile, stableIndex });
+    const dressing = sample({ profile, stableIndex, category: 'voussoir' });
+    assert.deepEqual(stone, sample({ profile, stableIndex }));
+    assert.notDeepEqual(stone.front.rimWidths, stone.back.rimWidths);
+    assert.notDeepEqual(stone.front.rimWidths, stone.front.rimDepths);
+    for (const side of ['front', 'back']) {
+      for (const field of ['rimWidths', 'rimDepths']) {
+        assert.ok(Object.isFrozen(stone[side][field]));
+        for (let i = 0; i < 8; i += 1) {
+          assert.ok(stone[side][field][i] >= 1 - profile.rimVariation);
+          assert.ok(stone[side][field][i] <= 1 + profile.rimVariation);
+          assert.ok(Math.abs(dressing[side][field][i] - 1) <= Math.abs(stone[side][field][i] - 1) + 1e-12);
+        }
+      }
+    }
+  }
+  assert.equal(sample().front.rimWidths, null, 'ordinary rounded fieldstone keeps its uniform rim');
+});
+
 test('radii stay inside the stone and the corner never undercuts the rim', () => {
   for (let stableIndex = 0; stableIndex < 200; stableIndex += 1) {
     const width = 0.3 + (stableIndex % 7) * 0.15;

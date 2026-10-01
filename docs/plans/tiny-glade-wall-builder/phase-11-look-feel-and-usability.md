@@ -44,6 +44,19 @@ The images suggest a hierarchy: overall silhouette, individual stone mass, joint
 
 ## 3. Current implementation and concrete gaps
 
+### Update, October 1
+
+The [creation and sound pass](../../qa/wall-detail-editing-audio-review-2026-10-01.md)
+added Draw/Line/Circle, direct wall-body movement, cancellation handling and
+quiet editing feedback. The subsequent [stone fidelity pass](../../qa/wall-stone-fidelity-review-2026-10-01.md)
+adds uneven faceted bevels on both faces, calmer surfaces, taller blocks beside
+thin inserts, and lighter mortar. Its final suite passed 2,937 tests and the
+production build passed. Ordinary sandstone units retain 96 near / 64 coarse
+triangles. Use its [testing prompt](../../qa/wall-stone-fidelity-test-prompt-2026-10-01.md)
+for close-up and geometry verification. Cap variation, coherent coarse packing,
+semantic joins, broader contact decoration and release performance gates remain
+open. Earlier status entries below describe their dates, not the latest state.
+
 ### Update, September 30
 
 The later [fitted-openings and growth review](../../qa/wall-openings-growth-review-2026-09-30.md) adds contour-fitted shoulders, full-depth reveals, more varied sandstone proportions and sparse rooted ivy. Growth has a **Natural / None** control with persistence, matching and synchronized undo/redo. The full suite passed 2,908 tests; the production build passed. Use the [AI testing prompt](../../qa/wall-openings-growth-test-prompt-2026-09-30.md) for independent verification. Simple shape creation, semantic joins, broader contact decoration and release performance gates remain open.

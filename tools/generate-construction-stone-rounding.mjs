@@ -50,6 +50,7 @@ const SCHEMA = {
   cornerRadius: {
     ratioMin: range(0, 0.5),
     ratioMax: range(0, 0.5),
+    variation: range(0, 1),
   },
   bulge: {
     ratioMin: range(0, 0.3),

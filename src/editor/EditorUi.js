@@ -1,4 +1,5 @@
 import { MINIMAP_SIZE } from './constants.js';
+import { ConstructionDrawingControls } from './construction/ui/ConstructionDrawingControls.js';
 import {
   exportJson,
   exportMap,
@@ -206,7 +207,7 @@ export class EditorUi {
               Thickness
               <input data-role="construction-thickness" type="number" min="0.1" max="10" step="0.1" value="0.8" />
             </label>
-            <p class="panel-note">Draw mode: drag across terrain. Edit mode: select a wall, then drag its gold anchors.</p>
+            <p class="panel-note">Choose Draw, Line or Circle, then drag across the ground. Select a wall to move it or drag its nodes to bend it.</p>
             <div class="selection-card" data-role="selected-construction">No live construction selected.</div>
             <button class="action-button action-button--wide action-button--danger" type="button" data-action="delete-construction">
               Delete construction
@@ -1059,6 +1060,8 @@ export class EditorUi {
   }
 
   bind(controller) {
+    this.constructionDrawingControls?.dispose();
+    this.constructionDrawingControls = new ConstructionDrawingControls(this.viewport, controller);
     this.controller = controller;
     this.toolRow.addEventListener('click', (event) => {
       const button = event.target.closest('[data-tool]');
@@ -1513,13 +1516,14 @@ export class EditorUi {
       this.selection.textContent = `${objectDefinition.label} · ${state.objectRotation * 90}°`;
     } else if (state.tool === 'construction') {
       this.selection.textContent = state.isDrawingConstruction
-        ? 'Drawing curved wall'
+        ? `Drawing ${state.constructionShape === 'circle' ? 'round' : state.constructionShape === 'line' ? 'straight' : 'curved'} wall`
         : state.isMovingConstructionAnchor
           ? 'Moving curve anchor'
           : state.selectedConstruction
             ? `${state.selectedConstruction.label} · revision ${state.selectedConstruction.revision}`
             : state.constructionMode === 'draw'
-              ? 'Drag to draw a curved wall'
+              ? state.constructionShape === 'circle' ? 'Drag from centre to rim'
+                : state.constructionShape === 'line' ? 'Drag to draw a straight wall' : 'Drag to draw a curved wall'
               : 'Select a wall to edit';
     } else if (state.tool === 'settings') {
       this.selection.textContent = this.godRaysTechnique !== 'off'

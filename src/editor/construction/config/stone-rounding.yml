@@ -19,6 +19,7 @@ defaults:
   cornerRadius:
     ratioMin: 0.2
     ratioMax: 0.3
+    variation: 0
 
   # How far the face centre stands proud of its rolled edge.
   bulge:
@@ -105,18 +106,20 @@ styles:
       minimum: 0.01
       maximum: 0.028
     cornerRadius:
-      ratioMin: 0.04
+      ratioMin: 0.06
       ratioMax: 0.14
+      # Each corner wears differently; dressings inherit their calmer scale.
+      variation: 0.6
     bulge:
       ratioMin: 0.02
       ratioMax: 0.04
       maximum: 0.009
     faceFlatness: 0.75
     protrusionScale: 0.8
-    # One segment per corner: a small cut facet rather than a round.
+    # Close views soften the worn corners; coarse keeps the cheaper chamfer.
     lod:
       near:
-        arcSegments: 1
+        arcSegments: 2
         rimRings: 1
         faceRings: 0
       coarse:

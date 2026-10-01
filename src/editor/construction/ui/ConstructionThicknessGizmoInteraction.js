@@ -26,6 +26,8 @@ function installConstructionThicknessGizmo() {
   prototype.onDirectPointerDown = function thicknessPointerDown(event) {
     if (
       event.button !== PRIMARY_POINTER_BUTTON
+      || event.altKey || this.controller.constructionCutArmed
+      || this.controller.spacePressed || this.controller.isWorldInputBlocked?.()
       || this.directDrag
       || !this.directView
       || this.controller.tool !== 'construction'
@@ -67,6 +69,7 @@ function installConstructionThicknessGizmo() {
     };
     this.consumeDirectEvent(event);
     this.canvas?.setPointerCapture?.(event.pointerId);
+    this.controller.constructionAudio?.begin('move', { x: 0, y: 0, z: 0 });
   };
 
   const pointerMove = prototype.onDirectPointerMove;
@@ -104,6 +107,7 @@ function installConstructionThicknessGizmo() {
       ...drag.before,
       dimensions: { ...drag.before.dimensions, thickness },
     };
+    this.controller.constructionAudio?.move({ x: thickness - drag.startThickness, y: 0, z: 0 });
     this.controller.constructionView?.setDraft(drag.candidate, {
       constructionId: drag.constructionId,
       valid: true,
@@ -124,6 +128,7 @@ function installConstructionThicknessGizmo() {
       this.canvas.releasePointerCapture(event.pointerId);
     }
     this.directDrag = null;
+    this.controller.constructionAudio?.end();
     this.controller.constructionView?.clearDraft();
 
     if (commit && drag.candidate) {

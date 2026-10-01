@@ -11,6 +11,7 @@ export const CONSTRUCTION_STONE_ROUNDING_PROFILES = Object.freeze({
     cornerRadius: Object.freeze({
       ratioMin: 0.2,
       ratioMax: 0.3,
+      variation: 0,
     }),
     bulge: Object.freeze({
       ratioMin: 0.03,
@@ -65,8 +66,9 @@ export const CONSTRUCTION_STONE_ROUNDING_PROFILES = Object.freeze({
       maximum: 0.028,
     }),
     cornerRadius: Object.freeze({
-      ratioMin: 0.04,
+      ratioMin: 0.06,
       ratioMax: 0.14,
+      variation: 0.6,
     }),
     bulge: Object.freeze({
       ratioMin: 0.02,
@@ -90,7 +92,7 @@ export const CONSTRUCTION_STONE_ROUNDING_PROFILES = Object.freeze({
     minimumEdgeRadius: 0.012,
     lod: Object.freeze({
       near: Object.freeze({
-        arcSegments: 1,
+        arcSegments: 2,
         rimRings: 1,
         faceRings: 0,
       }),

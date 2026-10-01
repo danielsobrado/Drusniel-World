@@ -84,7 +84,8 @@ function scaleFace(face, scale) {
 function fitOutline(ring, pillow, arcSegments) {
   let scale = 1;
   for (let attempt = 0; attempt < FIT_ATTEMPTS; attempt += 1) {
-    const outline = createRoundedOutline(ring, pillow.cornerRadius * scale, arcSegments);
+    const outline = createRoundedOutline(ring, pillow.cornerRadius * scale, arcSegments,
+      pillow.cornerRadii?.map(radius => radius * scale));
     if (outline) {
       return {
         outline,

@@ -6,6 +6,56 @@ global:
   debug_volume: 0.40
 
 events:
+  # Quiet stone grains while travelling; single settling impacts on commit.
+  construction.draw:
+    enabled: true
+    volume: 0.28
+    cooldown_ms: 120
+    synth: stone_draw
+    pitch: 1
+    duration_ms: 55
+  construction.move:
+    enabled: true
+    volume: 0.24
+    cooldown_ms: 120
+    synth: stone_move
+    pitch: 1
+    duration_ms: 100
+  construction.cut:
+    enabled: true
+    volume: 0.28
+    cooldown_ms: 120
+    synth: stone_cut
+    pitch: 1
+    duration_ms: 130
+  construction.place:
+    enabled: true
+    volume: 0.42
+    cooldown_ms: 60
+    synth: stone_place
+    pitch: 1
+    duration_ms: 85
+  construction.remove:
+    enabled: true
+    volume: 0.34
+    cooldown_ms: 60
+    synth: stone_remove
+    pitch: 1
+    duration_ms: 65
+  construction.undo:
+    enabled: true
+    volume: 0.28
+    cooldown_ms: 60
+    synth: stone_remove
+    pitch: 1
+    duration_ms: 65
+  construction.redo:
+    enabled: true
+    volume: 0.28
+    cooldown_ms: 60
+    synth: stone_place
+    pitch: 1
+    duration_ms: 85
   ui.click:
     enabled: true
     volume: 0.20
@@ -320,3 +370,114 @@ events:
     synth: jump
     pitch: 180
     duration_ms: 120
+
+  # Existing recorded footsteps, now kept in the canonical source too.
+  player.footstep:
+    enabled: true
+    volume: 0.07
+    cooldown_ms: 70
+    synth: footstep
+    pitch: 110
+    duration_ms: 90
+  player.footstep.water:
+    enabled: true
+    volume: 0.22
+    cooldown_ms: 70
+    synth: splash
+    pitch: 240
+    duration_ms: 220
+    samples:
+      - footsteps/water-01.mp3
+      - footsteps/water-02.mp3
+      - footsteps/water-03.mp3
+      - footsteps/water-04.mp3
+      - footsteps/water-05.mp3
+      - footsteps/water-06.mp3
+  player.footstep.grass:
+    enabled: true
+    cooldown_ms: 70
+    synth: footstep
+    pitch: 110
+    duration_ms: 90
+    volume: 0.24
+    samples:
+      - footsteps/grass-01.mp3
+      - footsteps/grass-02.mp3
+      - footsteps/grass-03.mp3
+      - footsteps/grass-04.mp3
+      - footsteps/grass-05.mp3
+      - footsteps/grass-06.mp3
+      - footsteps/grass-07.mp3
+      - footsteps/grass-08.mp3
+  player.footstep.leaves:
+    enabled: true
+    cooldown_ms: 70
+    synth: footstep
+    pitch: 110
+    duration_ms: 90
+    volume: 0.26
+    samples:
+      - footsteps/leaves-01.mp3
+      - footsteps/leaves-02.mp3
+      - footsteps/leaves-03.mp3
+      - footsteps/leaves-04.mp3
+      - footsteps/leaves-05.mp3
+      - footsteps/leaves-06.mp3
+  player.footstep.mud:
+    enabled: true
+    cooldown_ms: 70
+    synth: footstep
+    pitch: 110
+    duration_ms: 90
+    volume: 0.24
+    samples:
+      - footsteps/mud-01.mp3
+      - footsteps/mud-02.mp3
+      - footsteps/mud-03.mp3
+      - footsteps/mud-04.mp3
+      - footsteps/mud-05.mp3
+      - footsteps/mud-06.mp3
+  player.footstep.gravel:
+    enabled: true
+    cooldown_ms: 70
+    synth: footstep
+    pitch: 110
+    duration_ms: 90
+    volume: 0.22
+    samples:
+      - footsteps/gravel-01.mp3
+      - footsteps/gravel-02.mp3
+      - footsteps/gravel-03.mp3
+      - footsteps/gravel-04.mp3
+      - footsteps/gravel-05.mp3
+      - footsteps/gravel-06.mp3
+  player.footstep.snow:
+    enabled: true
+    cooldown_ms: 70
+    synth: footstep
+    pitch: 70
+    duration_ms: 140
+    volume: 0.26
+    samples:
+      - footsteps/snow-01.mp3
+      - footsteps/snow-02.mp3
+      - footsteps/snow-03.mp3
+      - footsteps/snow-04.mp3
+      - footsteps/snow-05.mp3
+      - footsteps/snow-06.mp3
+      - footsteps/snow-07.mp3
+      - footsteps/snow-08.mp3
+  player.footstep.sand:
+    enabled: true
+    cooldown_ms: 70
+    synth: footstep
+    pitch: 110
+    duration_ms: 90
+    volume: 0.24
+    samples:
+      - footsteps/sand-01.mp3
+      - footsteps/sand-02.mp3
+      - footsteps/sand-03.mp3
+      - footsteps/sand-04.mp3
+      - footsteps/sand-05.mp3
+      - footsteps/sand-06.mp3

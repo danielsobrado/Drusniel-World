@@ -1,0 +1,34 @@
+.construction-drawing-controls {
+  position: absolute;
+  z-index: 58;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  width: min(350px, calc(100% - 24px));
+  padding: 6px 8px;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 14px;
+  background: var(--glade-paper, rgb(25 33 27 / 91%));
+  color: var(--glade-ink, #e9e6d9);
+  box-shadow: var(--glade-shadow, 0 8px 24px rgb(0 0 0 / 18%));
+  font-family: var(--glade-font, inherit);
+  text-align: center;
+}
+.construction-drawing-controls[hidden] { display: none; }
+.construction-drawing-controls.has-selection { bottom: 140px; }
+.construction-drawing-controls > div { display: flex; gap: 4px; }
+.construction-drawing-controls button {
+  flex: 1;
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.construction-drawing-controls button:hover { background: rgb(96 76 52 / 9%); }
+.construction-drawing-controls button[aria-pressed="true"] { background: #d8c88e; color: #282d20; }
+.construction-drawing-controls button:focus-visible { outline: 2px solid #897945; outline-offset: 1px; }
+.construction-drawing-controls p { margin: 6px 4px 2px; font-size: 11px; line-height: 1.4; }

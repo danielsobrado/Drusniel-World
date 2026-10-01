@@ -1,8 +1,9 @@
 /**
  * Rounded outlines of one convex stone face, for the pillow-stone mesher.
  *
- * The ring at inset `t` is the face quad's *core* — the quad inset by the
- * corner radius — offset back outward by `cornerRadius − t` with round joins.
+ * Each corner's arc centre is inset by its radius along both adjacent edges.
+ * At inset `t`, its arc has radius `cornerRadius − t`. Different corner radii
+ * share the same edge offset, so their connecting strips stay tangent.
  * That is a rounded rectangle for a rectangular stone and a rounded
  * parallelogram for a leaning lattice stone, and every ring has the same point
  * count, so consecutive rings stitch into bands with no topology change. The
@@ -62,12 +63,13 @@ function edgeNormals(ring) {
  * The quad with every edge moved inward by `distance`, or null once an edge
  * would flip — the inset has swallowed the stone.
  */
-function insetQuad(ring, normals, distance) {
+function insetQuad(ring, normals, radii) {
   const core = [];
   for (let index = 0; index < 4; index += 1) {
     const before = normals[(index + 3) % 4];
     const after = normals[index];
     const [x, y] = ring[index];
+    const distance = radii[index];
     const lineBefore = before[0] * x + before[1] * y - distance;
     const lineAfter = after[0] * x + after[1] * y - distance;
     const determinant = before[0] * after[1] - before[1] * after[0];
@@ -96,15 +98,18 @@ export function outlinePointCount(arcSegments) {
  * Build the rounded-outline sampler for one face quad.
  *
  * @param ring counter-clockwise convex quad from `normalizeConvexQuad`
- * @param cornerRadius in-plane corner radius; also the deepest valid inset
+ * @param cornerRadius default in-plane corner radius
  * @param arcSegments segments per quarter-ish corner arc
+ * @param cornerRadii optional four radii; their minimum is the deepest valid inset
  * @returns null when the corner radius does not fit the quad
  */
-export function createRoundedOutline(ring, cornerRadius, arcSegments) {
+export function createRoundedOutline(ring, cornerRadius, arcSegments, cornerRadii = null) {
   if (!(cornerRadius > 0) || !(arcSegments >= 1)) return null;
+  const radii = cornerRadii ?? [cornerRadius, cornerRadius, cornerRadius, cornerRadius];
+  if (radii.length !== 4 || !radii.every(radius => Number.isFinite(radius) && radius > 0)) return null;
   const normals = edgeNormals(ring);
   if (!normals) return null;
-  const core = insetQuad(ring, normals, cornerRadius);
+  const core = insetQuad(ring, normals, radii);
   if (!core) return null;
 
   const pointCount = outlinePointCount(arcSegments);
@@ -112,6 +117,7 @@ export function createRoundedOutline(ring, cornerRadius, arcSegments) {
   const directionY = new Float64Array(pointCount);
   const coreX = new Float64Array(pointCount);
   const coreY = new Float64Array(pointCount);
+  const radiusAt = new Float64Array(pointCount);
   let point = 0;
   for (let corner = 0; corner < 4; corner += 1) {
     const before = normals[(corner + 3) % 4];
@@ -125,6 +131,7 @@ export function createRoundedOutline(ring, cornerRadius, arcSegments) {
       directionY[point] = Math.sin(angle);
       coreX[point] = core[corner][0];
       coreY[point] = core[corner][1];
+      radiusAt[point] = radii[corner];
       point += 1;
     }
   }
@@ -138,13 +145,13 @@ export function createRoundedOutline(ring, cornerRadius, arcSegments) {
 
   return Object.freeze({
     pointCount,
-    cornerRadius,
+    cornerRadius: Math.min(...radii),
     centroid: Object.freeze([centroidX, centroidY]),
     /** Outward unit normal of ring point `index` (the same at every inset). */
     normalX: (index) => directionX[index],
     normalY: (index) => directionY[index],
     /** Ring point `index` at inset `inset`, `0 <= inset <= cornerRadius`. */
-    pointX: (index, inset) => coreX[index] + (cornerRadius - inset) * directionX[index],
-    pointY: (index, inset) => coreY[index] + (cornerRadius - inset) * directionY[index],
+    pointX: (index, inset) => coreX[index] + (radiusAt[index] - inset) * directionX[index],
+    pointY: (index, inset) => coreY[index] + (radiusAt[index] - inset) * directionY[index],
   });
 }

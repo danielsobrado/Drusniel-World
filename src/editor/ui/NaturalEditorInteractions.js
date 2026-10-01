@@ -3,6 +3,7 @@ import { ObjectSelectionController } from '../interaction/ObjectSelectionControl
 import { OBJECT_SELECTION_ADDITIVE_MODE_EVENT } from '../interaction/ObjectSelectionEvents.js';
 import { installNaturalConstructionContextBridge } from './NaturalConstructionContextBridge.js';
 import { installNaturalEditorHoverBridge } from './NaturalEditorHoverBridge.js';
+import { constructionCutIntent } from '../construction/ConstructionPointerIntent.js';
 
 const BOOTSTRAP_MARK = Symbol.for('drusniel.natural-editor-interactions-bootstrap');
 const PRIMARY_POINTER_BUTTON = 0;
@@ -247,12 +248,13 @@ export function installNaturalEditorInteractions(controller) {
           event.clientY,
           controller.activeCamera,
         );
-      if (!handle && !constructionId && controller.naturalConstructionReturnTool) {
+      const cutting = constructionCutIntent(event, handle, controller.constructionCutArmed);
+      if (!cutting && !handle && !constructionId && controller.naturalConstructionReturnTool) {
         restoreConstructionTool();
         event.preventDefault();
         return;
       }
-      controller.constructionMode = handle || constructionId ? 'edit' : 'draw';
+      controller.constructionMode = !cutting && (handle || constructionId) ? 'edit' : 'draw';
     }
     const result = original.onConstructionPointerDown(event);
     if (controller.constructionDrawing || controller.constructionAnchorDrag) {

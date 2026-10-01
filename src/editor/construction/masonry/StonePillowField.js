@@ -90,7 +90,7 @@ function sampleFace(profile, hash, { shortSide, depth, scale }) {
  * straight extrusion; rim radius, bulge and tilt differ per face because the
  * far side of a wall is seen too and must not mirror the near side.
  *
- * @returns {Readonly<{ cornerRadius: number, front: object, back: object }>}
+ * @returns {Readonly<{ cornerRadius: number, cornerRadii: ReadonlyArray<number>|null, front: object, back: object }>}
  */
 export function sampleStonePillow({
   profile,
@@ -132,7 +132,13 @@ export function sampleStonePillow({
     shortSide * MAX_CORNER_TO_SHORT,
   );
 
-  return Object.freeze({ cornerRadius, front, back });
+  // Keep both faces on the same footprint. Independent stable lanes change
+  // corner wear without changing packing, neighbouring stones or tessellation.
+  const variation = (corner.variation ?? 0) * Math.min(1, scale);
+  const cornerRadii = variation > 0 ? Object.freeze(Array.from({ length: 4 }, (_, i) =>
+    clamp(cornerRadius * (1 + signedLane(mixSeed(cornerHash, i + 1), 8) * variation),
+      Math.max(front.edgeRadius, back.edgeRadius), shortSide * MAX_CORNER_TO_SHORT))) : null;
+  return Object.freeze({ cornerRadius, cornerRadii, front, back });
 }
 
 /**

@@ -8,7 +8,7 @@ import { createConstructionMaterials, disposeConstructionMaterials } from '/src/
 import { coarsePlacementsForModule } from '/src/editor/construction/render/ConstructionLod.js';
 
 /** Fixed semantic scenes, camera and lighting for comparing masonry changes. */
-export async function createConstructionAppearanceFixture({ styleKey = 'glade-sandstone', lodBand = 'near', growth = 'auto', view = 'front' } = {}) {
+export async function createConstructionAppearanceFixture({ styleKey = 'glade-sandstone', lodBand = 'near', growth = 'auto', view = 'front', closeup = false } = {}) {
   const renderer = new THREE.WebGPURenderer({ antialias: true });
   await renderer.init();
   renderer.setSize(1200, 800);
@@ -21,6 +21,12 @@ export async function createConstructionAppearanceFixture({ styleKey = 'glade-sa
   const camera = new THREE.OrthographicCamera(-10.5, 10.5, 7, -7, 0.1, 100);
   camera.position.set(11, 10, view === 'back' ? -16 : 16);
   camera.lookAt(0, 2, 0);
+  if (closeup) {
+    camera.zoom = 3;
+    camera.position.set(2, 3.8, view === 'back' ? -12 : 12);
+    camera.lookAt(0, 1.8, 0);
+    camera.updateProjectionMatrix();
+  }
 
   async function capture(id, light = 'neutral') {
     const scene = new THREE.Scene();
@@ -81,7 +87,7 @@ export async function createConstructionAppearanceFixture({ styleKey = 'glade-sa
     // GPU completion makes the screenshot independent of shader compile timing.
     await renderer.backend.device?.queue.onSubmittedWorkDone();
     return {
-      id, light, lodBand, growth, view, stones, triangles, growthLeaves, backend: renderer.backend.constructor.name,
+      id, light, lodBand, growth, view, closeup, stones, triangles, growthLeaves, backend: renderer.backend.constructor.name,
       dispose() {
         scene.traverse(object => object.geometry?.dispose());
         ground.material.dispose();

@@ -387,8 +387,8 @@ export const CONSTRUCTION_STYLES = Object.freeze({
     faceOffsetAmplitude: 0.032,
     // Blocks meet at the joint width: no in-plane shrink or turn.
     exactFit: true,
-    // Painted chips and cracks inside each block (ConstructionShellDetail).
-    faceDetail: { strength: 0.35, metres: 2.2 },
+    // Real units already supply the joints. Keep the material's fine stone
+    // grain, without projecting the shell's masonry pattern over each face.
     geometry: 'rounded',
     defaultTop: 'flat',
     footing: {

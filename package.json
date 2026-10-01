@@ -59,6 +59,7 @@
     "qa:construction:ruin": "node scripts/run-construction-ruin-qa.mjs",
     "qa:construction:rounded": "node scripts/run-construction-rounded-stone-qa.mjs",
     "qa:construction:appearance": "node scripts/run-construction-appearance-qa.mjs",
+    "qa:construction:editing": "node scripts/run-construction-editing-qa.mjs",
     "verify": "npm run check:natural-ui && npm run validate:assets:production && npm test && npm run build",
     "extract:grass-profiles": "node scripts/extract-grass-blade-profiles.mjs"
   },

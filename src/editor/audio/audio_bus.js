@@ -95,13 +95,14 @@ class AudioBus {
     let categoryScale = 1;
     if (eventId.startsWith("ui.")) {
       categoryScale = this.config.global.ui_volume;
-    } else if (eventId.startsWith("project.") || eventId.startsWith("camera.") || eventId.startsWith("texture.") || eventId.startsWith("material.") || eventId.startsWith("terrain.") || eventId.startsWith("spell.")) {
+    } else if (eventId.startsWith("project.") || eventId.startsWith("camera.") || eventId.startsWith("texture.") || eventId.startsWith("material.") || eventId.startsWith("terrain.") || eventId.startsWith("spell.") || eventId.startsWith("construction.")) {
       categoryScale = this.config.global.world_volume;
     } else if (eventId.startsWith("clod.")) {
       categoryScale = this.config.global.debug_volume;
     }
     const eventVol = options?.volume !== void 0 ? options.volume : eventCfg.volume;
     const finalVolume = Math.min(1, Math.max(0, eventVol * categoryScale));
+    if (finalVolume === 0) return;
     if (this.playSample(eventCfg, finalVolume, options)) return;
     this.synthManager.playSynth(
       eventCfg.synth,

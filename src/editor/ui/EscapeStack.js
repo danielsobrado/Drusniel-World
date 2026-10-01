@@ -13,6 +13,7 @@
 
 export const ESCAPE_PRIORITY = Object.freeze({
   modal: 100,
+  activeDrag: 95,
   palette: 90,
   inspector: 80,
   gesture: 70,

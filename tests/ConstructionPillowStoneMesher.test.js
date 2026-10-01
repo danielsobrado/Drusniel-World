@@ -122,6 +122,21 @@ test('rounding only removes material inside the face quad', () => {
   }
 });
 
+test('uneven corner wear stays inside a leaning stone with unchanged mesh cost', () => {
+  const profile = constructionStoneRoundingProfile('glade-sandstone');
+  const ring = normalizeConvexQuad(LEANING_QUAD);
+  for (let stableIndex = 0; stableIndex < 40; stableIndex += 1) {
+    const pillow = sampleStonePillow({ profile, seed: 3141, stableIndex, width: 0.93, height: 0.475, depth: 0.8 });
+    const { result, arrays } = writeStone({ pillow, lod: profile.lod.near });
+    assert.equal(result.triangles, estimatePillowStone(profile.lod.near).triangles);
+    for (let vertex = 0; vertex < arrays.vertexCount; vertex += 1) {
+      assert.ok(insideConvex(ring, arrays.positions[vertex * 3], arrays.positions[vertex * 3 + 1], 1e-6));
+      const normal = arrays.normals.slice(vertex * 3, vertex * 3 + 3);
+      assert.ok(Math.abs(Math.hypot(...normal) - 1) < 1e-5);
+    }
+  }
+});
+
 test('every triangle faces the way its vertices say the surface faces', () => {
   const { arrays } = writeStone();
   const { positions, normals, indices } = arrays;

@@ -27,6 +27,22 @@ test('the same stone always rounds the same way', () => {
   assert.equal(Object.isFrozen(sample().front), true);
 });
 
+test('sandstone wears each corner independently while preserving rim clearance', () => {
+  const profile = constructionStoneRoundingProfile('glade-sandstone');
+  let varied = 0;
+  for (let stableIndex = 0; stableIndex < 100; stableIndex += 1) {
+    const options = { profile, stableIndex, width: 0.43, height: 0.34 };
+    const stone = sample(options);
+    assert.deepEqual(stone, sample(options));
+    if (new Set(stone.cornerRadii).size > 1) varied += 1;
+    for (const radius of stone.cornerRadii) {
+      assert.ok(radius >= Math.max(stone.front.edgeRadius, stone.back.edgeRadius));
+      assert.ok(radius <= 0.34 * 0.48);
+    }
+  }
+  assert.ok(varied > 90, 'rim clearance can clamp the smallest corners equally');
+});
+
 test('front and back faces roll and dome independently', () => {
   let differing = 0;
   for (let stableIndex = 0; stableIndex < 40; stableIndex += 1) {

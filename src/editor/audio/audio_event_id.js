@@ -33,6 +33,14 @@ const ALL_AUDIO_EVENTS = [
   "terrain.lower",
   "terrain.smooth",
   "terrain.brush.radius",
+  // Wall gestures and their committed edits.
+  'construction.draw',
+  'construction.move',
+  'construction.cut',
+  'construction.place',
+  'construction.remove',
+  'construction.undo',
+  'construction.redo',
   // Spells
   "spell.fire.cast",
   "spell.water.cast",

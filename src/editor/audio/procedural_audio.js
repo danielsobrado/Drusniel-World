@@ -1,3 +1,5 @@
+import { playStoneSound } from './stone_audio.js';
+
 const FLAME_BASE_RATE = 16e3;
 const FLAME_DELAY = 222.5;
 const FLAME_ATTACK_SECONDS = 0.08;
@@ -135,12 +137,16 @@ class ProceduralAudio {
     }
   }
   playSynth(synthName, config, optionsVolume, optionsPitch, optionsVariant, optionsDurationMs) {
-    if (!this.ctx) return;
+    if (!this.ctx || !this.enabled) return;
     this.resumeContext();
     const vol = Math.min(1, Math.max(0, optionsVolume !== void 0 ? optionsVolume : config.volume));
     const pitch = optionsPitch !== void 0 ? optionsPitch : config.pitch;
     const duration = (optionsDurationMs !== void 0 ? optionsDurationMs : config.duration_ms) / 1e3;
     const variant = optionsVariant !== void 0 ? optionsVariant : 0;
+    if (synthName.startsWith('stone_')) {
+      playStoneSound(this.ctx, this.master, this.noiseBuf, synthName.slice(6), vol, duration);
+      return;
+    }
     switch (synthName) {
       case "click":
         this.tone(pitch, duration, vol, "square");

@@ -10,7 +10,7 @@ opening cuts, vegetation, workshop parity, and usability/performance gates.
 The completion status above describes the earlier implementation phases;
 Phase 11's status table records the fixes already shipped.
 
-Latest review: [September 30 — fitted openings, sandstone variation and ivy](../../qa/wall-openings-growth-review-2026-09-30.md), with an [independent AI testing prompt](../../qa/wall-openings-growth-test-prompt-2026-09-30.md). The earlier [sandstone defaults, matching walls and battlement review](../../qa/wall-construction-followup-2026-09-30.md) records the preceding slice.
+Latest review: [October 1 — close-up detail, creation and editing sounds](../../qa/wall-detail-editing-audio-review-2026-10-01.md), with an [independent AI testing prompt](../../qa/wall-detail-editing-audio-test-prompt-2026-10-01.md). Earlier work is recorded in the [September 30 openings and ivy review](../../qa/wall-openings-growth-review-2026-09-30.md) and the [sandstone defaults, matching walls and battlement review](../../qa/wall-construction-followup-2026-09-30.md).
 
 **Next implementation:** [September 28 handoff — appearance and interaction](implementation-handoff-2026-09-28.md).
 It includes fresh visual/performance evidence, reproducible curve and LOD

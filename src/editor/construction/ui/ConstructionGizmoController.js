@@ -320,6 +320,8 @@ export class ConstructionGizmoController {
   onDirectPointerDown(event) {
     if (
       event.button !== PRIMARY_POINTER_BUTTON
+      || event.altKey || this.controller.constructionCutArmed
+      || this.controller.spacePressed || this.controller.isWorldInputBlocked?.()
       || this.directDrag
       || !this.directView
       || this.controller.tool !== 'construction'
@@ -327,7 +329,15 @@ export class ConstructionGizmoController {
     ) return;
 
     this.syncDirectGizmo();
-    const hit = this.directView.pick(event.clientX, event.clientY, this.controller.activeCamera);
+    let hit = this.directView.pick(event.clientX, event.clientY, this.controller.activeCamera);
+    // Once selected, the visible wall itself is a move handle. Nodes keep
+    // priority, and double-click still reaches the exact node-insertion tool.
+    if (!hit && event.detail < 2 && this.controller.selectedConstructionId) {
+      const view = this.controller.constructionView;
+      const node = view?.pickHandle?.(event.clientX, event.clientY, this.controller.activeCamera);
+      const wall = !node && view?.pickConstruction?.(event.clientX, event.clientY, this.controller.activeCamera);
+      if (wall === this.controller.selectedConstructionId) hit = { kind: 'move-all', body: true };
+    }
     if (!hit) return;
 
     const before = this.selectedRecord();
@@ -370,6 +380,9 @@ export class ConstructionGizmoController {
         arcTable,
         planeY,
         startPoint,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        body: hit.body === true,
         candidate: null,
       };
     } else {
@@ -377,13 +390,21 @@ export class ConstructionGizmoController {
     }
 
     this.consumeDirectEvent(event);
+    if (hit.body) this.close();
     this.canvas?.setPointerCapture?.(event.pointerId);
+    this.controller.constructionAudio?.begin('move', { x: 0, y: 0, z: 0 });
   }
 
   onDirectPointerMove(event) {
     const drag = this.directDrag;
     if (!drag || event.pointerId !== drag.pointerId || !this.directView) return;
     this.consumeDirectEvent(event);
+
+    // A click on the wall is selection, not a tiny accidental translation.
+    if (drag.body && !drag.moved) {
+      if (Math.hypot(event.clientX - drag.startClientX, event.clientY - drag.startClientY) < 4) return;
+      drag.moved = true;
+    }
 
     if (drag.kind === 'height') {
       // The modifier policy the anchor drag follows too: Shift is finer motion,
@@ -409,6 +430,7 @@ export class ConstructionGizmoController {
         return;
       }
       drag.candidate = { ...drag.before, top };
+      this.controller.constructionAudio?.move({ x: 0, y: delta, z: 0 });
     } else {
       const point = this.directView.canonicalPointOnHorizontalPlane(
         event.clientX,
@@ -428,6 +450,10 @@ export class ConstructionGizmoController {
         return;
       }
       drag.candidate = candidate;
+      this.controller.constructionAudio?.move({
+        x: (point.x - drag.startPoint.x) * precision, y: 0,
+        z: (point.z - drag.startPoint.z) * precision,
+      });
     }
 
     this.controller.constructionView?.setDraft(drag.candidate, {
@@ -446,6 +472,7 @@ export class ConstructionGizmoController {
       this.canvas.releasePointerCapture(event.pointerId);
     }
     this.directDrag = null;
+    this.controller.constructionAudio?.end();
     this.controller.constructionView?.clearDraft();
 
     if (commit && drag.candidate) {
@@ -480,7 +507,14 @@ export class ConstructionGizmoController {
     this.finishDirectDrag(event, { commit: false });
   }
 
+  cancelDirectDrag() {
+    if (!this.directDrag) return;
+    this.finishDirectDrag({ pointerId: this.directDrag.pointerId,
+      preventDefault() {}, stopImmediatePropagation() {} }, { commit: false });
+  }
+
   dispose() {
+    this.cancelDirectDrag();
     this.unsubscribeController?.();
     this.unsubscribeStore?.();
     if (this.canvas && this.directView) {

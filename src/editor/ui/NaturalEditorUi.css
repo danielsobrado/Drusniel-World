@@ -121,7 +121,7 @@
 }
 
 .editor-shell[data-natural-ui-installed="true"] [data-panel="construction"] > .panel-note:not(label)::after {
-  content: "Drag empty ground to draw. Click a wall to select it, then drag its handles. Double-click a wall to add a control point.";
+  content: "Choose Draw, Line or Circle below. Drag empty ground to build. Select a wall to move it, or drag its nodes to bend it. Double-click to add a node.";
   font-size: 11px;
   line-height: 1.45;
 }

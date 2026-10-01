@@ -640,8 +640,9 @@ async function startEditor() {
     controller.constructionPalette.closeInspector();
     return true;
   }, { label: 'construction inspector' });
-  escapeStack.register(ESCAPE_PRIORITY.gesture, () => {
-    if (!controller.constructionDrawing && !controller.constructionAnchorDrag) return false;
+  escapeStack.register(ESCAPE_PRIORITY.activeDrag, () => {
+    if (!controller.constructionDrawing && !controller.constructionAnchorDrag
+      && !controller.constructionGizmo?.directDrag) return false;
     controller.cancelConstructionGesture();
     controller.emitState();
     return true;

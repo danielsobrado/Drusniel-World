@@ -14,7 +14,6 @@ import { executeConstructionCommand } from './construction/ConstructionCommands.
 import {
   closestPointOnCubicBezierPath,
   controlPointsForSegment,
-  createCubicBezierPathFromStroke,
   findCubicBezierSelfIntersections,
   moveCubicBezierAnchor,
   setCubicBezierHandle,
@@ -39,6 +38,10 @@ import {
   drawingLookFromRecord,
 } from './construction/ConstructionDrawingLook.js';
 import { cutFeatureStyle, resolveCutStroke, resolveWindowGroup, WINDOW_LINK_ARC } from './construction/ConstructionCutStroke.js';
+import { CONSTRUCTION_DRAW_SHAPES, constructionPathFromGesture } from './construction/ConstructionDrawingPath.js';
+import { ConstructionEditAudio } from './construction/ConstructionEditAudio.js';
+import { constructionCutIntent } from './construction/ConstructionPointerIntent.js';
+export { isUsableConstructionStroke } from './construction/ConstructionDrawingPath.js';
 
 /** Commit a raise/lower burst as one history entry once the keys settle. */
 const TOP_EDIT_COMMIT_MS = 250;
@@ -51,45 +54,8 @@ const SECONDARY_POINTER_BUTTON = 2;
 const POINTER_TAP_DISTANCE = 6;
 const POINTER_TAP_MS = 400;
 
-/** A wall stroke must be drawn at least this far, or a stray click would build. */
-const MIN_CONSTRUCTION_STROKE_LENGTH = 0.5;
-/** Endpoints closer than this are the same point, so the stroke is a loop. */
-const CONSTRUCTION_CLOSURE_TOLERANCE = 0.5;
 /** How far a cut stroke's tip reaches for a wall to preview an opening on. */
 const CUT_PREVIEW_RADIUS = 1.5;
-
-/**
- * Decide whether a freehand stroke can become a wall.
- *
- * Length is accumulated along the sampled points, never measured between the
- * first and last sample: a loop returns to its own start, so endpoint distance
- * is ~0 and would reject every courtyard as "too short". Closure is resolved
- * before the length decision, so a returning stroke is recognised as a loop
- * rather than a zero-length wall.
- *
- * @returns `{ length, closed, usable }` — accumulated length in metres,
- *   whether the stroke returns to its start, and whether it is long enough.
- */
-export function isUsableConstructionStroke(stroke, {
-  closureTolerance = CONSTRUCTION_CLOSURE_TOLERANCE,
-  minimumLength = MIN_CONSTRUCTION_STROKE_LENGTH,
-} = {}) {
-  if (!Array.isArray(stroke) || stroke.length < 2) {
-    return { length: 0, closed: false, usable: false };
-  }
-  let length = 0;
-  for (let index = 1; index < stroke.length; index += 1) {
-    length += Math.hypot(
-      stroke[index].x - stroke[index - 1].x,
-      stroke[index].z - stroke[index - 1].z,
-    );
-  }
-  // Two coincident samples are a mis-tap, not a loop.
-  const closed = stroke.length >= 3
-    && Math.hypot(stroke.at(-1).x - stroke[0].x, stroke.at(-1).z - stroke[0].z)
-      <= closureTolerance;
-  return { length, closed, usable: length >= minimumLength };
-}
 
 /**
  * The snapping options an anchor drag runs with.
@@ -314,6 +280,8 @@ export class EditorController {
     this.selectedObjectId = null;
     this.selectedConstructionId = null;
     this.constructionMode = 'draw';
+    this.constructionShape = 'freehand';
+    this.constructionAudio = new ConstructionEditAudio();
     this.constructionHeight = 3.5;
     this.constructionThickness = 0.8;
     this.constructionDrawingLook = null;
@@ -430,6 +398,7 @@ export class EditorController {
       objectCount: this.objectMap.size,
       constructionCount: this.constructionStore?.size ?? 0,
       constructionMode: this.constructionMode,
+      constructionShape: this.constructionShape,
       constructionHeight: this.constructionHeight,
       constructionThickness: this.constructionThickness,
       constructionStepSnap: this.constructionStepSnap,
@@ -523,6 +492,12 @@ export class EditorController {
     this.setSelectedObject(null);
     this.updatePreviews();
     this.emitState();
+  }
+
+  selectConstructionShape(shape) {
+    if (!CONSTRUCTION_DRAW_SHAPES.includes(shape)) return;
+    this.constructionShape = shape;
+    this.selectConstructionMode('draw');
   }
 
   setConstructionDimensions({ height, thickness }) {
@@ -678,6 +653,7 @@ export class EditorController {
       return;
     }
     this.applyHistory(entry, 'undo');
+    this.constructionAudio?.history(entry, 'undo');
     this.redoStack.push(entry);
     this.emitMap();
     this.emitState();
@@ -690,6 +666,7 @@ export class EditorController {
       return;
     }
     this.applyHistory(entry, 'redo');
+    this.constructionAudio?.history(entry, 'redo');
     this.undoStack.push(entry);
     this.emitMap();
     this.emitState();
@@ -1122,6 +1099,10 @@ export class EditorController {
   }
 
   onConstructionPointerDown(event) {
+    if (event.altKey || this.constructionCutArmed) {
+      const handle = this.constructionView.pickHandle?.(event.clientX, event.clientY, this.activeCamera);
+      if (constructionCutIntent(event, handle, this.constructionCutArmed)) this.constructionMode = 'draw';
+    }
     if (this.constructionMode === 'edit') {
       const handle = this.constructionView.pickHandle(
         event.clientX,
@@ -1150,6 +1131,7 @@ export class EditorController {
           };
         }
         this.canvas.setPointerCapture(event.pointerId);
+        this.constructionAudio?.begin('move', this.pickCanonicalConstructionPoint(event));
         this.emitState();
         return;
       }
@@ -1182,6 +1164,7 @@ export class EditorController {
     // the walls it crosses instead of becoming a wall itself. The gizmo's cut
     // button arms the same thing for a pointer that cannot hold a modifier.
     this.constructionCutStroke = event.altKey || this.constructionCutArmed;
+    this.constructionAudio?.begin(this.constructionCutStroke ? 'cut' : 'draw', point);
     this.canvas.setPointerCapture(event.pointerId);
     this.emitState();
   }
@@ -1193,7 +1176,10 @@ export class EditorController {
       const previous = this.constructionStroke.at(-1);
       const advanced = Math.hypot(point.x - previous.x, point.z - previous.z) >= 0.12;
       if (advanced) {
-        this.constructionStroke.push(point);
+        if (!this.constructionCutStroke && ['line', 'circle'].includes(this.constructionShape)) {
+          this.constructionStroke = [this.constructionStroke[0], point];
+        } else this.constructionStroke.push(point);
+        this.constructionAudio?.move(point);
       }
       if (this.constructionCutStroke) {
         // A cut is not a wall, so it gets no wall preview. It gets the wall's
@@ -1208,10 +1194,10 @@ export class EditorController {
       }
       if (this.constructionStroke.length >= 2) {
         try {
-          const path = createCubicBezierPathFromStroke(this.constructionStroke, {
-            anchorPrefix: 'preview-anchor',
-            segmentPrefix: 'preview-segment',
+          const path = constructionPathFromGesture(this.constructionStroke, {
+            shape: this.constructionShape, id: 'construction-preview',
           });
+          if (!path) { this.constructionView.clearDraft(); return; }
           const record = this.constructionDraftRecord(path, 'construction-preview');
           this.constructionView.setDraft(record, {
             valid: findCubicBezierSelfIntersections(path).length === 0,
@@ -1224,6 +1210,7 @@ export class EditorController {
     }
 
     if (this.constructionAnchorDrag) {
+      this.constructionAudio?.move(point);
       const drag = this.constructionAnchorDrag;
       if (drag.handleKind === 'tangent') {
         const anchor = drag.before.path.anchors.find(({ id }) => id === drag.anchorId);
@@ -1298,6 +1285,7 @@ export class EditorController {
   }
 
   onConstructionPointerUp(event) {
+    this.constructionAudio?.end();
     if (this.canvas.hasPointerCapture(event.pointerId)) {
       this.canvas.releasePointerCapture(event.pointerId);
     }
@@ -1318,22 +1306,14 @@ export class EditorController {
         this.emitState();
         return;
       }
-      const strokeInfo = isUsableConstructionStroke(stroke);
-      if (!strokeInfo.usable) {
-        this.emitNotice('Drag at least 0.5 metres to create a wall.', true);
-        this.emitState();
-        return;
-      }
       try {
         const id = this.constructionStore.nextConstructionId();
-        // Hand a closed loop its own start back, so the fitter drops the
-        // duplicated endpoint and the loop closes on one seam, not a stub.
-        const points = strokeInfo.closed ? [...stroke.slice(0, -1), stroke[0]] : stroke;
-        const path = createCubicBezierPathFromStroke(points, {
-          closed: strokeInfo.closed,
-          anchorPrefix: `${id}-anchor`,
-          segmentPrefix: `${id}-segment`,
-        });
+        const path = constructionPathFromGesture(stroke, { shape: this.constructionShape, id });
+        if (!path) {
+          this.emitNotice('Drag at least 0.5 metres to create a wall.', true);
+          this.emitState();
+          return;
+        }
         if (findCubicBezierSelfIntersections(path).length > 0) {
           throw new Error('Construction paths cannot intersect themselves.');
         }
@@ -1358,6 +1338,7 @@ export class EditorController {
       const drag = this.constructionAnchorDrag;
       this.constructionAnchorDrag = null;
       this.constructionView.clearDraft();
+      if (drag.candidate === drag.before) { this.emitState(); return; }
       try {
         if (findCubicBezierSelfIntersections(drag.candidate.path).length > 0) {
           throw new Error('Construction paths cannot intersect themselves.');
@@ -1419,6 +1400,8 @@ export class EditorController {
   }
 
   cancelConstructionGesture() {
+    this.constructionGizmo?.cancelDirectDrag?.();
+    this.constructionAudio?.end();
     // Settle any buffered raise/lower first: leaving the store ahead of history
     // across a tool or selection change would strand the edit un-undoable.
     this.flushTopEdit();
@@ -1793,6 +1776,7 @@ export class EditorController {
   }
 
   commitHistory(entry) {
+    this.constructionAudio?.commit(entry);
     this.undoStack.push(entry);
     if (this.undoStack.length > MAX_HISTORY_ENTRIES) {
       this.undoStack.shift();

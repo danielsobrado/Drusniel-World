@@ -1,6 +1,6 @@
-# SimCity DnD
+# Drusniel World Builder
 
-A D&D-inspired city builder built with Three.js, with biome-driven regions, settlement simulation, adventuring parties, monsters, factions, and a streamed campaign-scale world.
+A D&D-inspired city builder built with Three.js, with biome-driven regions, settlement simulation, adventuring parties, monsters, factions, and a streamed campaign-scale world (Loading Azgaar maps).
 
 ## World editor
 

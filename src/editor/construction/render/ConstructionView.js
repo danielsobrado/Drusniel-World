@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { cubicBezierPathBounds, sampleCubicBezierPath } from '../curve/CubicBezierPath.js';
 import { createCurveArcTable } from '../masonry/CurveArcTable.js';
-import { buildModuleMasonry } from '../compile/ConstructionMasonryBuilder.js';
+import { attachConstructionGrowth, buildModuleMasonry } from '../compile/ConstructionMasonryBuilder.js';
 import { CONSTRUCTION_MATERIAL_SLOT } from './ConstructionMaterialSlots.js';
 import { createConstructionMaterials, releaseConstructionMaterials } from './ConstructionMaterials.js';
 import { ConstructionShellMaterials } from './ConstructionShellMaterials.js';
@@ -871,6 +871,15 @@ export class ConstructionView {
         totalLength: entry.plan?.totalLength,
       })
       : module.placements ?? [];
+    // A pure LOD transition can retain decoration when both bands consume the
+    // exact same solved placements. Record/terrain changes force fresh growth.
+    const source = resident.growthSource;
+    const terrainRevision = this.terrainView.worldStore?.revision ?? 0;
+    const retainedGrowth = source?.recordRevision === entry.record.revision
+      && source.contentHash === module.contentHash && source.placements === placements
+      && source.terrainRevision === terrainRevision
+      ? resident.meshes.find(mesh => mesh.userData.constructionMaterialSlot === CONSTRUCTION_MATERIAL_SLOT.GROWTH)
+      : null;
     const built = placements.length
       ? buildModuleMasonry(placements, {
         record: entry.record,
@@ -880,6 +889,7 @@ export class ConstructionView {
         groundHeightAt: (x, z) => this.terrainView.getCanonicalHeight(x, z) ?? 0,
         pathInterval: module.pathInterval,
         lodBand,
+        includeGrowth: !retainedGrowth,
       })
       : { meshes: [], stats: null };
     // Reject if the module drifted while we were building.
@@ -898,6 +908,10 @@ export class ConstructionView {
       for (const mesh of built.meshes ?? []) mesh.geometry.dispose();
       return;
     }
+    if (retainedGrowth) {
+      retainedGrowth.castShadow = lodBand !== 'coarse';
+      attachConstructionGrowth(built, retainedGrowth);
+    }
     resident.builtBand = lodBand;
     resident.visibleBand = lodBand;
     resident.band = lodBand;
@@ -911,6 +925,7 @@ export class ConstructionView {
     // Remove the old meshes in the same tick the new ones go in, so a module
     // never flickers to empty mid-swap (doc 18 §6).
     for (const stale of resident.meshes) {
+      if (built.meshes.includes(stale)) continue;
       entry.group.remove(stale);
       stale.geometry.dispose();
     }
@@ -928,6 +943,7 @@ export class ConstructionView {
     }
     resident.meshes = built.meshes;
     resident.stats = built.stats;
+    resident.growthSource = { recordRevision: entry.record.revision, contentHash: module.contentHash, placements, terrainRevision };
     this.refreshModuleStats();
     this.applySelectionMaterial(entry.record.id, entry);
     this.updateShellVisibility(entry);

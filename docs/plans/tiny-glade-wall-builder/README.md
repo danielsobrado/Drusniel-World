@@ -10,11 +10,12 @@ opening cuts, vegetation, workshop parity, and usability/performance gates.
 The completion status above describes the earlier implementation phases;
 Phase 11's status table records the fixes already shipped.
 
-Latest review: [October 2 — distance continuity](../../qa/wall-distance-continuity-review-2026-10-02.md), with an [independent AI testing prompt](../../qa/wall-distance-continuity-test-prompt-2026-10-02.md). It follows the [crown and close-up pass](../../qa/wall-crown-detail-review-2026-10-02.md), the [October 1 stone fidelity pass](../../qa/wall-stone-fidelity-review-2026-10-01.md) and the [creation, manipulation and sound pass](../../qa/wall-detail-editing-audio-review-2026-10-01.md). Earlier work is recorded in the [September 30 openings and ivy review](../../qa/wall-openings-growth-review-2026-09-30.md) and the [sandstone defaults, matching walls and battlement review](../../qa/wall-construction-followup-2026-09-30.md).
+Latest review: [October 2 — ivy detail](../../qa/wall-ivy-detail-review-2026-10-02.md), with an [independent AI testing prompt](../../qa/wall-ivy-detail-test-prompt-2026-10-02.md). It follows the [distance continuity pass](../../qa/wall-distance-continuity-review-2026-10-02.md), [crown and close-up pass](../../qa/wall-crown-detail-review-2026-10-02.md), [October 1 stone fidelity pass](../../qa/wall-stone-fidelity-review-2026-10-01.md) and [creation, manipulation and sound pass](../../qa/wall-detail-editing-audio-review-2026-10-01.md). Earlier work is recorded in the [September 30 openings and ivy review](../../qa/wall-openings-growth-review-2026-09-30.md) and the [sandstone defaults, matching walls and battlement review](../../qa/wall-construction-followup-2026-09-30.md).
 
-**Next implementation:** [September 28 handoff — appearance and interaction](implementation-handoff-2026-09-28.md).
-It includes fresh visual/performance evidence, reproducible curve and LOD
-defects, and the remaining work in delivery order for the implementing AI.
+**Next implementation:** [Full fidelity ledger — October 2](full-fidelity-improvements-2026-10-02.md).
+It records every remaining visual, interaction, chemistry, audio and performance
+requirement. The earlier [September 28 handoff](implementation-handoff-2026-09-28.md)
+retains background evidence and reproduction steps for that pass.
 
 This folder is the execution plan for turning the live construction tool into a
 Tiny Glade-style procedural wall builder. It extends

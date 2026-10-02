@@ -3,16 +3,16 @@ const profiles = {
   "glade-sandstone": {
     "cellSize": 3.2,
     "chance": 0.42,
-    "maximumHeight": 1.35,
+    "maximumHeight": 2.85,
     "stems": 2,
-    "nodes": 6,
-    "leavesPerNode": 3,
+    "nodes": 8,
+    "leavesPerNode": 2,
     "leafRadius": [
-      0.065,
-      0.115
+      0.09,
+      0.18
     ],
-    "spread": 0.32,
-    "standOff": 0.075,
+    "spread": 0.48,
+    "standOff": 0.025,
     "clearance": 0.16,
     "maxLeavesPerModule": 192,
     "palette": [

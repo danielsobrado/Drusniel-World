@@ -1,5 +1,6 @@
 import { mixSeed } from '../../workshop/ProceduralRandom.js';
 import { constructionStoneColorProfile } from '../config/ConstructionStoneColorProfiles.generated.js';
+import { stoneColorPatch } from '../masonry/StoneColorPatchField.js';
 
 const COLOR_HASH = 0x243f6a88;
 const VALUE_HASH = 0x85a308d3;
@@ -32,6 +33,7 @@ export function applyConstructionStoneColorGrade(geometry, {
   stableIndex,
   category = 'field',
   hasCustomStoneMaterial = false,
+  surface = null,
 } = {}) {
   const color = geometry?.getAttribute?.('color');
   if (!color) return geometry;
@@ -41,6 +43,7 @@ export function applyConstructionStoneColorGrade(geometry, {
     stableIndex,
     category,
     hasCustomStoneMaterial,
+    surface,
   });
   if (!multipliers) return geometry;
 
@@ -67,6 +70,7 @@ export function constructionStoneColorMultipliers({
   stableIndex,
   category = 'field',
   hasCustomStoneMaterial = false,
+  surface = null,
 } = {}) {
   const profile = constructionStoneColorProfile(styleKey);
   if (
@@ -96,5 +100,8 @@ export function constructionStoneColorMultipliers({
     * categoryAmount
     * lerp(0.72, 1, strengthLane);
   const value = lerp(profile.value.min, profile.value.max, lane(valueHash, 8));
-  return target.map((channel) => lerp(1, channel, amount) * value);
+  const patch = profile.patches && surface ? stoneColorPatch(profile.patches, seed, surface) : null;
+  const patchStrength = patch ? profile.patches.strength * categoryAmount : 0;
+  return target.map((channel, index) => lerp(lerp(1, channel, amount) * value,
+    patch?.[index] ?? 1, patchStrength));
 }

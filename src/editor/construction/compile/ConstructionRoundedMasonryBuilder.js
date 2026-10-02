@@ -167,6 +167,7 @@ function appendFallbackStone(writer, {
     stableIndex: placement.stableIndex,
     category: shape.category,
     hasCustomStoneMaterial,
+    surface: { s: placement.s, y: placement.y },
   });
   const position = geometry.getAttribute('position');
   const normal = geometry.getAttribute('normal');
@@ -353,6 +354,7 @@ export function buildRoundedModuleMasonry(placements, {
         stableIndex: placement.stableIndex,
         category,
         hasCustomStoneMaterial,
+        surface: { s: placement.s, y: placement.y },
       }),
       weather: stoneUnitWeathering(recipe, placement.heightRatio),
       occlusion: profile.occlusion,

@@ -346,7 +346,12 @@ function resolveStoneEdgeWear({
  */
 export function buildModuleMasonry(placements, options) {
   const built = buildStoneBatches(placements, options);
-  const growth = buildConstructionGrowth(options);
+  const growth = options.includeGrowth === false ? null : buildConstructionGrowth({ ...options, placements });
+  return attachConstructionGrowth(built, growth);
+}
+
+/** Add fresh or retained decoration to the masonry batch and its counters. */
+export function attachConstructionGrowth(built, growth) {
   if (growth) {
     built.meshes.push(growth);
     built.stats.growthLeaves = growth.userData.constructionGrowthLeaves;
@@ -649,6 +654,7 @@ function buildSoftModuleMasonry(placements, {
       },
     );
     stoneGeometries.push(applyConstructionStoneColorGrade(shadedStone, {
+      surface: { s: placement.s, y: placement.y },
       styleKey: record.style.key,
       seed: record.seed,
       stableIndex: placement.stableIndex,

@@ -30,7 +30,8 @@ export function planWallGrowth(record, arcTable, pathInterval) {
       if (random() > profile.chance) continue;
       const root = start + (cell + 0.2 + random() * 0.6) * profile.cellSize;
       if (root < from || root >= to || root >= end - 0.2) continue;
-      const height = Math.min(profile.maximumHeight, top.heightAt(root) * 0.65) * (0.55 + random() * 0.45);
+      const height = Math.max(0.07, Math.min(profile.maximumHeight,
+        top.heightAt(root) - profile.leafRadius[1] - 0.08)) * (0.65 + random() * 0.35);
       const clear = (s, y, radius) => {
         if (s - radius < 0 || s + radius > arcTable.totalLength || y + radius > top.heightAt(s)) return false;
         const spans = survivingIntervalsOverBand([s - radius, s + radius], openings,
@@ -41,31 +42,41 @@ export function planWallGrowth(record, arcTable, pathInterval) {
       if (!clear(root, 0.05, profile.spread + profile.leafRadius[1])) continue;
       for (let stem = 0; stem < profile.stems; stem += 1) {
         const phase = random() * Math.PI * 2;
+        const nodeCount = Math.min(profile.nodes, Math.max(2, Math.floor(height / (profile.leafRadius[1] * 1.5)) + 1));
         let previous = [root, 0.015];
-        for (let node = 0; node < profile.nodes; node += 1) {
-          const t = node / (profile.nodes - 1);
+        let connected = false;
+        for (let node = 0; node < nodeCount; node += 1) {
+          const t = node / (nodeCount - 1);
           const s = root + Math.sin(t * 4 + phase) * profile.spread * (0.25 + t * 0.75);
           const y = 0.07 + height * t;
           if (!clear(s, y, profile.leafRadius[1])) break;
           const range = [Math.min(previous[0], s) - 0.015, Math.max(previous[0], s) + 0.015];
           const clearStem = survivingIntervalsOverBand(range, openings, [previous[1], y], { clearance: profile.clearance });
           if (clearStem.length !== 1 || Math.abs(clearStem[0][1] - clearStem[0][0] - range[1] + range[0]) > 1e-7) break;
-          const branch = { from: previous, to: [s, y], rooted: node === 0 };
-          previous = branch.to;
+          const branch = Object.freeze({ from: Object.freeze(previous), to: Object.freeze([s, y]), rooted: !connected });
           let stemAttached = false;
           for (let leaf = 0; leaf < profile.leavesPerNode; leaf += 1) {
             const radius = profile.leafRadius[0] + random() * (profile.leafRadius[1] - profile.leafRadius[0]);
             const angle = random() * Math.PI * 2;
-            const leafS = s + Math.cos(angle) * radius * 0.8;
-            const leafY = Math.max(radius * 0.7, y + Math.sin(angle) * radius * 0.6);
+            const leafS = s + Math.cos(angle) * radius * 1.1;
+            const leafY = Math.max(radius + 0.015, y + Math.sin(angle) * radius * 0.8);
             if (!clear(leafS, leafY, radius)) continue;
+            const petioleRange = [Math.min(s, leafS) - 0.008, Math.max(s, leafS) + 0.008];
+            const petioleSpans = survivingIntervalsOverBand(petioleRange, openings,
+              [Math.min(y, leafY) - 0.008, Math.max(y, leafY) + 0.008], { clearance: profile.clearance });
+            if (petioleSpans.length !== 1 || Math.abs(petioleSpans[0][1] - petioleSpans[0][0]
+              - petioleRange[1] + petioleRange[0]) > 1e-7) continue;
             leaves.push(Object.freeze({ id: `${segment.id}:${cell}:${side}:${stem}:${node}:${leaf}`,
-              s: leafS, y: leafY, side, radius, angle, outward: profile.standOff + random() * 0.025,
+              s: leafS, y: leafY, side, radius, angle, outward: profile.standOff + random() * 0.012,
+              shape: random() < 0.35 ? 'lobed' : 'heart', fold: radius * (0.035 + random() * 0.04),
+              tilt: (random() - 0.5) * 0.18,
+              petiole: Object.freeze({ from: branch.to, to: Object.freeze([leafS, leafY]) }),
               ...(!stemAttached ? { stem: branch } : {}),
               color: profile.palette[Math.floor(random() * profile.palette.length)] }));
             stemAttached = true;
             if (leaves.length >= profile.maxLeavesPerModule) return leaves;
           }
+          if (stemAttached) { previous = branch.to; connected = true; }
         }
       }
     }

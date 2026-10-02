@@ -20,7 +20,8 @@ export function refreshConstructionGrowth(entry, terrainView) {
     if (!module || !stoneMeshes.length) continue;
     const mesh = buildConstructionGrowth({
       record: entry.record, materials: entry.materials, arcTable: entry.arcTable,
-      moduleOrigin: entry.origin, pathInterval: module.pathInterval,
+      moduleOrigin: entry.origin, pathInterval: module.pathInterval, placements: module.placements,
+      lodBand: resident.builtBand ?? resident.band,
       groundHeightAt: (x, z) => terrainView.getCanonicalHeight(x, z) ?? 0,
     });
     if (!mesh) continue;
@@ -28,6 +29,8 @@ export function refreshConstructionGrowth(entry, terrainView) {
     mesh.userData.constructionId = entry.record.id;
     mesh.visible = stoneMeshes[0].visible;
     entry.group.add(mesh); resident.meshes.push(mesh);
+    resident.growthSource = { recordRevision: entry.record.revision, contentHash: module.contentHash,
+      placements: module.placements, terrainRevision: terrainView.worldStore?.revision ?? 0 };
     if (resident.stats) {
       resident.stats.growthLeaves = mesh.userData.constructionGrowthLeaves;
       resident.stats.growthTriangles = mesh.geometry.index.count / 3;

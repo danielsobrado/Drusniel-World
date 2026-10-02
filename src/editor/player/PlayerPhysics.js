@@ -210,6 +210,19 @@ export function stepPlayerPhysics({
       eyeHeight: config.eyeHeight,
     });
 
+  if (movement.ready === false) {
+    // Terrain alone cannot stand in for an unloaded bridge, roof, or platform.
+    // Keep the last physics pose and velocity until the collision set is ready;
+    // otherwise gravity can carry the player through the missing support.
+    return {
+      ...state,
+      collisionReady: false,
+      collisionBlocked: true,
+      collisionStepped: false,
+      collisionContacts: movement.contacts ?? EMPTY_CONTACTS,
+    };
+  }
+
   let nextX = movement.position.x;
   let nextZ = movement.position.z;
   let supportHeight = Number.isFinite(movement.supportHeight)

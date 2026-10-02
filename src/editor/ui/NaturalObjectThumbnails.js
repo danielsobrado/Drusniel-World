@@ -1,5 +1,5 @@
 import './NaturalObjectThumbnails.css';
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { OBJECT_BY_KEY } from '../objectCatalog.js';
 import { createObjectModelParts } from '../ObjectModelLibrary.js';
 import { NATURAL_EDITOR_UI_CONFIG } from './NaturalEditorUiConfig.generated.js';
@@ -17,7 +17,7 @@ function idle(callback) {
 }
 
 function createPreviewRenderer() {
-  const renderer = new THREE.WebGLRenderer({
+  const renderer = new THREE.WebGPURenderer({
     alpha: true,
     antialias: true,
     preserveDrawingBuffer: true,
@@ -226,12 +226,17 @@ class NaturalObjectThumbnails {
     return null;
   }
 
-  ensureRenderer() {
+  async ensureRenderer() {
     if (this.renderer) return true;
     if (this.failed || this.disposed) return false;
     let renderer = null;
     try {
       renderer = createPreviewRenderer();
+      await renderer.init();
+      if (this.disposed) {
+        renderer.dispose();
+        return false;
+      }
       this.renderer = renderer;
       this.scene = createPreviewScene();
       return true;
@@ -254,10 +259,10 @@ class NaturalObjectThumbnails {
       this.scheduleRendererDisposal();
       return;
     }
-    if (!this.ensureRenderer()) return;
-
     this.rendering = true;
+    clearTimeout(this.disposeTimer);
     try {
+      if (!await this.ensureRenderer() || this.disposed || this.panel.hidden) return;
       const definition = OBJECT_BY_KEY.get(key);
       if (definition && !this.cache.has(key)) {
         const url = await previewImageUrl(this.renderer, this.scene, this.camera, definition);

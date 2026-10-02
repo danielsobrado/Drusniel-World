@@ -127,3 +127,46 @@ test('not-ready motor output blocks horizontal motion without corrupting vertica
   assert.equal(next.y, CONFIG.eyeHeight);
   assert.equal(next.collisionReady, false);
 });
+
+for (const airborne of [false, true]) {
+  test(`collision streaming pauses ${airborne ? 'falling' : 'elevated support'} until colliders are ready`, () => {
+    const initial = {
+      ...createPlayerState({ x: 2, z: 3, groundHeight: 5, eyeHeight: CONFIG.eyeHeight }),
+      grounded: !airborne,
+      verticalVelocity: airborne ? -4 : 0,
+      supportSourceId: airborne ? null : 'bridge',
+    };
+    let state = initial;
+    let ready = false;
+    const step = () => stepPlayerPhysics({
+      state,
+      input: INPUT,
+      deltaSeconds: 0.05,
+      config: CONFIG,
+      forward: FORWARD,
+      right: RIGHT,
+      getGroundHeight: () => 0,
+      resolveHorizontalMotion: ({ start, displacement }) => ({
+        position: ready ? { ...start, x: start.x + displacement.x } : start,
+        ready,
+        blocked: !ready,
+        supportHeight: ready ? 5 : 0,
+        supportSourceId: ready ? 'bridge' : 'terrain',
+      }),
+    });
+
+    for (let frame = 0; frame < 60; frame += 1) state = step();
+    assert.equal(state.x, initial.x);
+    assert.equal(state.y, initial.y, 'must not fall through unloaded elevated geometry');
+    assert.equal(state.footY, initial.footY);
+    assert.equal(state.verticalVelocity, initial.verticalVelocity);
+    assert.equal(state.supportSourceId, initial.supportSourceId);
+    assert.equal(state.collisionReady, false);
+    ready = true;
+    state = step();
+    assert.ok(state.x > initial.x);
+    assert.equal(state.footY, 5);
+    assert.equal(state.collisionReady, true);
+    assert.equal(state.supportSourceId, 'bridge');
+  });
+}

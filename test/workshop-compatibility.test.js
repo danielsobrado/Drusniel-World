@@ -8,7 +8,10 @@ import {
   normalizeProceduralRecipe,
 } from '../src/editor/workshop/ProceduralAssetStore.js';
 import { planWorkshopComposition } from '../src/editor/workshop/ProceduralWorkshopComposition.js';
-import { stableJson } from '../scripts/lib/workshopCompatibility.mjs';
+import { createProceduralObjectLodParts } from '../src/editor/workshop/ProceduralAssetManager.js';
+import { createProceduralWorkshopComponentParts } from '../src/editor/workshop/ProceduralWorkshopComponentParts.js';
+import { disposeModelParts } from '../src/editor/assets/modelParts.js';
+import { snapshotLod, stableJson, uniqueOwnedParts } from '../scripts/lib/workshopCompatibility.mjs';
 
 const config = yaml.load(await readFile(
   new URL('../config/workshop-compatibility.yaml', import.meta.url),
@@ -24,6 +27,27 @@ function fixture(id) {
   assert.ok(value, `Missing workshop compatibility fixture ${id}.`);
   return value;
 }
+
+test('LOD compatibility snapshots accept the coarse fallback for a missing shell core', () => {
+  const entry = fixture('wall-stepped');
+  const store = new ProceduralAssetStore();
+  const record = store.add({ label: entry.label, recipe: entry.recipe });
+  const near = createProceduralWorkshopComponentParts(record.recipe);
+  let lod = null;
+  try {
+    lod = createProceduralObjectLodParts(record, near, config.lod);
+    assert.ok(lod);
+    assert.ok(lod.shell === lod.coarse);
+    assert.equal(lod.statistics.shellFootprintDelta, Infinity);
+    assert.equal(snapshotLod(lod).statistics.shellFootprintDelta, null);
+    assert.throws(() => snapshotLod({
+      ...lod,
+      statistics: { ...lod.statistics, shellFootprintDelta: NaN },
+    }), /non-finite/);
+  } finally {
+    disposeModelParts(uniqueOwnedParts(near, lod));
+  }
+});
 
 test('workshop compatibility catalogue covers Phase 0 behavior families', () => {
   const ids = new Set(config.fixtures.map(({ id }) => id));

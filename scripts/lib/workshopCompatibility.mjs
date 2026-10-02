@@ -98,10 +98,17 @@ export function snapshotParts(parts, precision = 6) {
 
 export function snapshotLod(lodParts, precision = 6) {
   if (!lodParts) return null;
+  const statistics = { ...lodParts.statistics };
+  // A missing shell core uses Infinity to select the valid coarse fallback.
+  // Report that unavailable measurement as null; keep rejecting non-finite
+  // geometry and every other unexpected non-finite statistic.
+  if (lodParts.shell === lodParts.coarse && statistics.shellFootprintDelta === Infinity) {
+    statistics.shellFootprintDelta = null;
+  }
   return stableValue({
     config: lodParts.config,
     shadows: lodParts.shadows,
-    statistics: lodParts.statistics,
+    statistics,
     coarse: snapshotParts(lodParts.coarse, precision),
     shell: snapshotParts(lodParts.shell, precision),
   }, precision);

@@ -1,6 +1,12 @@
 import { AzgaarImportWorkerClient } from './import/AzgaarImportWorkerClient.js';
 import { isAzgaarFullJson } from './import/AzgaarJsonImporter.js';
 import { buildAzgaarImportSummary } from './import/AzgaarMacroWorldSource.js';
+import {
+  browserDocument,
+  createBrowserStorageRecord,
+  preferredBrowserRecord,
+  serializeBrowserFallback,
+} from './BrowserStorageRecord.js';
 
 const DATABASE_NAME = 'simcity-dnd-worlds';
 const DATABASE_VERSION = 1;
@@ -106,7 +112,8 @@ async function listIndexedDbDocuments(prefix) {
 }
 
 function saveToLocalStorage(storageKey, document) {
-  localStorage.setItem(storageKey, JSON.stringify(document));
+  const record = createBrowserStorageRecord(document, null, { fallback: true });
+  localStorage.setItem(storageKey, serializeBrowserFallback(record));
 }
 
 function loadFromLocalStorage(storageKey) {
@@ -129,21 +136,43 @@ async function listLocalStorageDocuments(prefix) {
   return matches;
 }
 
-function mergeDocumentLists(primary, legacy) {
-  const byKey = new Map(legacy.map((entry) => [entry.key, entry]));
-  for (const entry of primary) byKey.set(entry.key, entry);
-  return [...byKey.values()].sort((left, right) => left.key.localeCompare(right.key));
+function mergeDocumentLists(primary, local) {
+  const byKey = new Map(local.map((entry) => [entry.key, entry]));
+  for (const entry of primary) {
+    byKey.set(entry.key, {
+      key: entry.key,
+      document: preferredBrowserRecord(entry.document, byKey.get(entry.key)?.document),
+    });
+  }
+  return [...byKey.values()]
+    .map(({ key, document }) => ({ key, document: browserDocument(document) }))
+    .sort((left, right) => left.key.localeCompare(right.key));
 }
 
 export async function saveToBrowser(storageKey, document) {
   let indexedDbError = null;
   if (typeof indexedDB !== 'undefined') {
     try {
-      await withStore('readwrite', (store) => store.put(document, storageKey));
+      let previousLocal = null;
       try {
-        localStorage.removeItem(storageKey);
+        previousLocal = localStorage.getItem(storageKey);
       } catch {
-        // IndexedDB is authoritative; stale localStorage cleanup is best effort.
+        // IndexedDB remains usable when localStorage is denied.
+      }
+      let localRecord = null;
+      try {
+        localRecord = previousLocal ? parseDocument(previousLocal) : null;
+      } catch {
+        // An invalid fallback must not prevent saving a valid document.
+      }
+      const record = createBrowserStorageRecord(document, localRecord);
+      await withStore('readwrite', (store) => store.put(record, storageKey));
+      try {
+        if (localStorage.getItem(storageKey) === previousLocal) {
+          localStorage.removeItem(storageKey);
+        }
+      } catch {
+        // The record acknowledges the old fallback even if cleanup is denied.
       }
       return;
     } catch (error) {
@@ -163,20 +192,21 @@ export async function saveToBrowser(storageKey, document) {
 
 export async function loadFromBrowser(storageKey) {
   let indexedDbError = null;
+  let primary = null;
   if (typeof indexedDB !== 'undefined') {
     try {
-      const document = await withStore('readonly', (store) => store.get(storageKey));
-      if (document) return document;
+      primary = await withStore('readonly', (store) => store.get(storageKey));
     } catch (error) {
       indexedDbError = error;
       warnIndexedDbFallback('load', error);
     }
   }
   try {
-    const document = loadFromLocalStorage(storageKey);
+    const document = browserDocument(preferredBrowserRecord(primary, loadFromLocalStorage(storageKey)));
     if (document !== null || !indexedDbError) return document;
     throw storageFailure('Unable to load the browser document.', indexedDbError, null);
   } catch (fallbackError) {
+    if (primary != null) return browserDocument(primary);
     if (fallbackError?.storageFailure && indexedDbError) throw fallbackError;
     if (indexedDbError) {
       throw storageFailure('Unable to load the browser document.', indexedDbError, fallbackError);
@@ -224,7 +254,7 @@ export async function listBrowserDocuments(prefix) {
         try {
           return mergeDocumentLists(documents, await listLocalStorageDocuments(prefix));
         } catch {
-          return documents;
+          return mergeDocumentLists(documents, []);
         }
       }
     } catch (error) {
@@ -234,7 +264,7 @@ export async function listBrowserDocuments(prefix) {
   }
   try {
     const documents = await listLocalStorageDocuments(prefix);
-    if (documents.length > 0 || !indexedDbError) return documents;
+    if (documents.length > 0 || !indexedDbError) return mergeDocumentLists([], documents);
     throw storageFailure('Unable to list browser documents.', indexedDbError, null);
   } catch (fallbackError) {
     if (fallbackError?.storageFailure && indexedDbError) throw fallbackError;

@@ -2,6 +2,7 @@ import { PreviewTransaction } from './PreviewTransaction.js';
 import { HandleController } from './HandleController.js';
 import { SelectionController } from './SelectionController.js';
 import { WORKSHOP_TOOL_ID_PATTERN } from './WorkshopInteractionConstants.js';
+import { notifyWorkshopListeners } from '../kernel/WorkshopNotifications.js';
 
 function requireToolId(value) {
   if (typeof value !== 'string' || !WORKSHOP_TOOL_ID_PATTERN.test(value)) {
@@ -54,7 +55,7 @@ export class WorkshopToolController {
       document: this.previewDocument,
       committedDocument: this.#bus.document,
     });
-    for (const listener of this.#previewListeners) listener(snapshot);
+    notifyWorkshopListeners(this.#previewListeners, snapshot, 'Workshop preview');
     return snapshot;
   }
 

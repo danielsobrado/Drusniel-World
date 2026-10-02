@@ -8,6 +8,7 @@ import {
   WorkshopPatch,
 } from './WorkshopPatch.js';
 import { WORKSHOP_COMMAND_TYPE_PATTERN } from './WorkshopKernelConstants.js';
+import { notifyWorkshopListeners } from './WorkshopNotifications.js';
 
 function commandType(command) {
   if (!command || typeof command !== 'object' || Array.isArray(command)) {
@@ -146,7 +147,7 @@ export class WorkshopCommandBus {
       metadata: Object.freeze({ ...metadata }),
     });
     this.#document = result.document;
-    for (const listener of this.#listeners) listener(event);
+    notifyWorkshopListeners(this.#listeners, event, 'Workshop command');
     return event;
   }
 

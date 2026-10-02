@@ -59,6 +59,7 @@ patchViewportFramebufferSources();
 const PICK_ITERATIONS = 6;
 const _resizeSize = /* @__PURE__ */ new THREE.Vector2();
 const PREVIEW_HEIGHT_OFFSET = 0.08;
+const TERRAIN_REQUEST_RETRY_DELAY_MS = 1000;
 
 export function inspectRendererBackend(renderer) {
   const backend = renderer?.backend;
@@ -221,6 +222,7 @@ function createSlot({ slotIndex, scene, geometry, worldStore, stylizedConfig, sh
     lastUsed: 0,
     token: 0,
     loading: false,
+    retryAt: null,
     pageRevision: -1,
     texturePixels,
     surfaceMaskPixels,
@@ -547,6 +549,7 @@ export class InfiniteTerrainView {
   }
 
   async updateStreaming(focusWorld, timestamp = performance.now(), force = false) {
+    if (this.disposed) return;
     const velocity = this.calculateVelocity(focusWorld, timestamp);
     this.focusVelocity = velocity;
 
@@ -572,6 +575,7 @@ export class InfiniteTerrainView {
     this.focusChunk = currentChunk;
 
     if (!force && nextFocusKey === this.focusChunkKey) {
+      this.retryFailedSlots(timestamp);
       this.positionSlots();
       return;
     }
@@ -613,7 +617,16 @@ export class InfiniteTerrainView {
       }
       void this.assignSlot(slot, assignment.descriptor);
     }
+    this.retryFailedSlots(timestamp);
     this.positionSlots();
+  }
+
+  retryFailedSlots(timestamp) {
+    for (const slot of this.slots) {
+      if (!slot.loading && slot.descriptor && slot.retryAt != null && timestamp >= slot.retryAt) {
+        void this.assignSlot(slot, slot.descriptor);
+      }
+    }
   }
 
   calculateVelocity(focusWorld, timestamp) {
@@ -631,6 +644,7 @@ export class InfiniteTerrainView {
   }
 
   async assignSlot(slot, descriptor, { immediate = false } = {}) {
+    if (this.disposed) return;
     PerfCounters.inc('terrainAssignSlots');
     slot.token += 1;
     const token = slot.token;
@@ -638,6 +652,7 @@ export class InfiniteTerrainView {
     slot.descriptor = descriptor;
     slot.lastUsed = this.clock;
     slot.loading = true;
+    slot.retryAt = null;
     slot.mesh.visible = false;
     this.positionSlot(slot);
 
@@ -647,11 +662,15 @@ export class InfiniteTerrainView {
         Math.abs(descriptor.chunkZ - this.focusChunk.chunkZ),
       )
       : 0;
-    const fetchPromise = this.worldStore.requestChunk(
-      descriptor.chunkX,
-      descriptor.chunkZ,
-      { priority: requestPriority },
-    )
+    const fetchPromise = Promise.resolve()
+      .then(() => {
+        if (this.disposed || slot.token !== token) return null;
+        return this.worldStore.requestChunk(
+          descriptor.chunkX,
+          descriptor.chunkZ,
+          { priority: requestPriority },
+        );
+      })
       .then((page) => {
         if (this.disposed || slot.token !== token || slot.key !== descriptor.key) {
           if (slot.token === token) {
@@ -675,8 +694,11 @@ export class InfiniteTerrainView {
         }));
       })
       .catch((error) => {
-        if (slot.token === token) {
+        if (!this.disposed && slot.token === token) {
           slot.loading = false;
+          // Retained slots are otherwise skipped even after a focus change.
+          // Back off instead of leaving a permanent hole or retrying every frame.
+          slot.retryAt = performance.now() + TERRAIN_REQUEST_RETRY_DELAY_MS;
         }
         // Cancellation is an intentional optimization, not a failure.
         if (!error?.cancelled) {
@@ -729,6 +751,7 @@ export class InfiniteTerrainView {
     slot.pageRevision = ready.revision;
     slot.mesh.visible = true;
     slot.loading = false;
+    slot.retryAt = null;
     if (streamedIn) {
       this.emitStreaming(Object.freeze({
         kind: 'chunk-streamed-in',

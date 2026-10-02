@@ -7,6 +7,7 @@ import {
 } from '../src/editor/workshop/ProceduralWorkshopComposition.js';
 import { disposeModelParts } from '../src/editor/assets/modelParts.js';
 import { createProceduralWorkshopComponentParts } from '../src/editor/workshop/ProceduralWorkshopComponentParts.js';
+import { snapshotParts } from '../scripts/lib/workshopCompatibility.mjs';
 
 const composition = {
   primitives: [
@@ -97,5 +98,24 @@ test('v4 composition primitives compile into editable products with semantic mat
     assert.ok(parts.stats.drawParts <= 16);
   } finally {
     disposeModelParts(parts);
+  }
+});
+
+test('mixed tower and polygon roofs batch without changing their geometry or gameplay semantics', () => {
+  const unbatched = createProceduralWorkshopComponentParts({ composition, remesh: false });
+  let batched = [];
+  try {
+    batched = createProceduralWorkshopComponentParts({ composition, remesh: true });
+    const expected = snapshotParts(unbatched);
+    const actual = snapshotParts(batched);
+    assert.deepEqual(actual.bounds, expected.bounds);
+    assert.equal(actual.triangles, expected.triangles);
+    assert.deepEqual(actual.semantics, expected.semantics);
+    assert.ok(batched.length < unbatched.length);
+    for (const part of batched) {
+      assert.ok(part.geometry.getAttribute('position').array.every(Number.isFinite));
+    }
+  } finally {
+    disposeModelParts([...unbatched, ...batched]);
   }
 });

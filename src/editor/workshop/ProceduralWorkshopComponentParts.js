@@ -714,15 +714,26 @@ function componentGeometryMatrix(component, components, cache) {
 
 function mergedGeometry(geometries, errorMessage) {
   if (geometries.length === 1) return geometries[0];
+  // Composition combines indexed primitives (e.g. cone roofs) with triangle
+  // lists from polygon roof solvers. Three requires one indexing convention.
+  const mixedIndices = geometries.some((geometry) => geometry.index)
+    && geometries.some((geometry) => !geometry.index);
+  const inputs = mixedIndices
+    ? geometries.map((geometry) => geometry.index ? geometry.toNonIndexed() : geometry)
+    : geometries;
   let merged = null;
   try {
-    merged = mergeGeometries(geometries, false);
+    merged = mergeGeometries(inputs, false);
     if (!merged) throw new Error(errorMessage);
     merged.computeBoundingBox();
     merged.computeBoundingSphere();
   } catch (error) {
     merged?.dispose();
     throw error;
+  } finally {
+    inputs.forEach((geometry, index) => {
+      if (geometry !== geometries[index]) geometry.dispose();
+    });
   }
   geometries.forEach((geometry) => geometry.dispose());
   return merged;

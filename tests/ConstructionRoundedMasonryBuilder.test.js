@@ -132,6 +132,21 @@ test('the coarse band is the same stones at a quarter of the triangles', () => {
   dispose(coarse);
 });
 
+test('sandstone distance geometry preserves its cells with one third of the stone triangles', () => {
+  const context = wall({ key: 'glade-sandstone' });
+  const near = build(context);
+  const placements = coarsePlacements(context.placements, { styleKey: context.record.style.key });
+  const coarse = build(context, { lodBand: 'coarse', placements });
+  assert.equal(placements, context.placements);
+  assert.equal(coarse.stats.stones, near.stats.stones);
+  assert.equal(coarse.stats.roundedFallbacks, 0);
+  assert.equal(coarse.stats.stoneTriangles * 3, near.stats.stoneTriangles);
+  assert.equal(coarse.stats.mortarTriangles, near.stats.mortarTriangles);
+  assert.equal(coarse.meshes.length, 2, 'detail stays batched');
+  dispose(near);
+  dispose(coarse);
+});
+
 test('mortar sits deep behind the rounded faces', () => {
   const context = wall();
   const built = build(context);

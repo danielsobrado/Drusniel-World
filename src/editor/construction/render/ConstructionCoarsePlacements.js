@@ -1,5 +1,5 @@
 import { constructionJointProfile } from '../config/ConstructionJointProfiles.generated.js';
-import { constructionStyle } from '../masonry/ConstructionStyleCatalog.js';
+import { constructionStyle, isConstructionStyleKey } from '../masonry/ConstructionStyleCatalog.js';
 import { scaleCorners } from '../masonry/CourseLattice.js';
 import { moduleCourseRange } from '../masonry/CurvedCoursePacker.js';
 import {
@@ -219,7 +219,7 @@ function courseIndexSpan(course) {
 }
 
 /**
- * @param options.styleKey joint profile the coarse joints are amplified with
+ * @param options.styleKey catalog layout policy and coarse joint profile
  * @param options.courseRangeAt optional `(courseIndex) => [from, to]`, the arc
  *   range each course occupies in this module (`moduleCourseRange`). With it, a
  *   stone at a module edge is not refused a stretch just because the course
@@ -230,6 +230,10 @@ function courseIndexSpan(course) {
  */
 export function coarsePlacements(placements, { styleKey = null, courseRangeAt = null } = {}) {
   if (!Array.isArray(placements) || placements.length === 0) return placements ?? [];
+  // Geometry tessellation supplies the distance reduction for these styles.
+  // Keep identity, joints, opening masks and crown slices exactly as solved.
+  if (isConstructionStyleKey(styleKey)
+    && constructionStyle(styleKey).coarseLayout === 'preserve') return placements;
   const field = [];
   const rest = [];
   for (const placement of placements) {

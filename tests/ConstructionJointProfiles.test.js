@@ -85,12 +85,21 @@ test('generator --check passes for checked-in output', () => {
 });
 
 test('generator output is deterministic', () => {
-  const first = runGenerator();
-  assert.equal(first.status, 0, first.stderr || first.stdout);
-  const afterFirst = readFileSync(GENERATED_PATH, 'utf8');
-  const second = runGenerator();
-  assert.equal(second.status, 0, second.stderr || second.stdout);
-  assert.equal(readFileSync(GENERATED_PATH, 'utf8'), afterFirst);
+  // Other test processes import the checked-in module concurrently. Generate
+  // in a private directory so readers cannot observe a temporarily empty file.
+  const dir = mkdtempSync(join(tmpdir(), 'joint-profile-output-'));
+  const output = join(dir, 'profiles.js');
+  try {
+    const first = runGenerator(['--out', output]);
+    assert.equal(first.status, 0, first.stderr || first.stdout);
+    const afterFirst = readFileSync(output, 'utf8');
+    assert.equal(afterFirst, readFileSync(GENERATED_PATH, 'utf8'));
+    const second = runGenerator(['--out', output]);
+    assert.equal(second.status, 0, second.stderr || second.stdout);
+    assert.equal(readFileSync(output, 'utf8'), afterFirst);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('default profile preserves legacy joint dimensions', () => {

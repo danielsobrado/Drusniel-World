@@ -16,7 +16,7 @@ function mesh(corners, width, height, depth, seed, band) {
     corners, depth, position: [0, 0, 0], rotation: [0, 0, 0], pillow,
   }, { lod: profile.lod[band], shade });
   assert.ok(result, `seed ${seed}: stone must fit`);
-  assert.equal(result.triangles, band === 'near' ? 96 : 64);
+  assert.equal(result.triangles, band === 'near' ? 96 : 32);
   return writer.toArrays();
 }
 
@@ -64,7 +64,7 @@ test('worn sandstone stays closed and outward-facing for small, thin and leaning
   }
 });
 
-test('near edge midpoints preserve the coarse packed silhouette and stable wear samples', () => {
+test('edge midpoint subdivision preserves the rounded outline and stable wear samples', () => {
   const ring = [[-0.25, -0.2], [0.25, -0.2], [0.28, 0.2], [-0.22, 0.2]];
   const radii = [0.025, 0.032, 0.021, 0.035];
   const near = createRoundedOutline(ring, 0.03, 1, radii, 2);
@@ -79,6 +79,22 @@ test('near edge midpoints preserve the coarse packed silhouette and stable wear 
     const start = corner * 3 + 1, end = ((corner + 1) % 4) * 3, mid = corner * 3 + 2;
     for (const coordinate of ['pointX', 'pointY']) {
       assert.ok(Math.abs(near[coordinate](mid, 0) - (near[coordinate](start, 0) + near[coordinate](end, 0)) / 2) < 1e-12);
+    }
+  }
+});
+
+test('distance corner samples retain wear identity within the rounding radius', () => {
+  const ring = [[-0.25, -0.2], [0.25, -0.2], [0.28, 0.2], [-0.22, 0.2]];
+  const radii = [0.025, 0.032, 0.021, 0.035];
+  const near = createRoundedOutline(ring, 0.03, 1, radii, 2);
+  const coarse = createRoundedOutline(ring, 0.03, 0, radii, 1);
+  assert.equal(coarse.pointCount, 4);
+  for (let corner = 0; corner < 4; corner += 1) {
+    assert.equal(coarse.wearIndex(corner), near.wearIndex(corner * 3));
+    const x = coarse.pointX(corner, 0), y = coarse.pointY(corner, 0);
+    for (let endpoint = 0; endpoint < 2; endpoint += 1) {
+      const index = corner * 3 + endpoint;
+      assert.ok(Math.hypot(x - near.pointX(index, 0), y - near.pointY(index, 0)) <= radii[corner] + 1e-9);
     }
   }
 });

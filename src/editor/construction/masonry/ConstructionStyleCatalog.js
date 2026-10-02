@@ -47,6 +47,8 @@ export const DEFAULT_COPING = Object.freeze({
   height: 0.16,
   oversail: 1.14,
   widthRatio: 1.15,
+  // Downward wear as a fraction of cap height; its bed stays seated.
+  crownVariation: 0,
 });
 
 /** Shared defaults that reproduce the former hard-coded packer behaviour. */
@@ -72,6 +74,9 @@ const DEFAULT_STYLE_TUNING = Object.freeze({
   geometry: 'soft',
   // Top style a newly drawn wall starts with; null keeps the schema default.
   defaultTop: null,
+  // Preserve the solved cells at distance, or merge cells/courses for styles
+  // whose larger masonry tolerates that change in pattern.
+  coarseLayout: 'merge',
   // Optional taller, wider, buried first course. Null means course 0 is an
   // ordinary course sitting on grade, as it always was.
   footing: null,
@@ -137,6 +142,7 @@ function freezeCoping(coping, key) {
   finiteInRange(resolved.height, `${key} coping height`, 0.05, 0.6);
   finiteInRange(resolved.oversail, `${key} coping oversail`, 1, 1.6);
   finiteInRange(resolved.widthRatio, `${key} coping widthRatio`, 0.8, 2);
+  finiteInRange(resolved.crownVariation, `${key} coping crownVariation`, 0, 0.25);
   return Object.freeze(resolved);
 }
 
@@ -226,6 +232,9 @@ export function defineConstructionStyle(input) {
 
   if (style.defaultTop != null && !TOP_STYLE_KEYS.has(style.defaultTop)) {
     throw new Error(`${style.key} defaultTop ${style.defaultTop} is not a top style.`);
+  }
+  if (!['merge', 'preserve'].includes(style.coarseLayout)) {
+    throw new Error(`${style.key} coarseLayout must be merge or preserve.`);
   }
 
   style.footing = freezeFooting(style.footing, style.key);
@@ -371,6 +380,7 @@ export const CONSTRUCTION_STYLES = Object.freeze({
   'glade-sandstone': defineConstructionStyle({
     key: 'glade-sandstone',
     label: 'Glade sandstone',
+    coarseLayout: 'preserve',
     courseHeight: 0.4,
     targetWidth: 0.46,
     minWidth: 0.14,
@@ -413,6 +423,7 @@ export const CONSTRUCTION_STYLES = Object.freeze({
       height: 0.24,
       oversail: 1.04,
       widthRatio: 1.1,
+      crownVariation: 0.12,
     },
   }),
 });

@@ -206,11 +206,17 @@ function writeFace(writer, emit, {
   const bulge = face.bulge;
   const summit = halfDepth + bulge;
   const rings = [];
+  const varyingRim = Boolean(face.rimWidths || face.rimDepths);
 
   for (let ring = 0; ring <= rimRings; ring += 1) {
     const angle = (HALF_PI * ring) / rimRings;
     const cosine = Math.cos(angle);
     const sine = Math.sin(angle);
+    // Uniform rims share a slope; single-band bevels have only the exact
+    // horizontal/vertical endpoint normals. Normalise only intermediate
+    // elliptic slopes per point, where changing width/depth affects direction.
+    const uniformLength = !varyingRim && ring > 0 && ring < rimRings
+      ? Math.hypot(cosine * rim.depths[0], sine * rim.widths[0]) : 0;
     const indices = new Array(pointCount);
     for (let point = 0; point < pointCount; point += 1) {
       const width = rim.widths[point];
@@ -222,7 +228,8 @@ function writeFace(writer, emit, {
       // normal still meets the side band and broad face without a seam.
       const nx = cosine * depth;
       const nz = sine * width;
-      const normalLength = Math.hypot(nx, nz);
+      const normalLength = ring === 0 ? depth : ring === rimRings ? width
+        : varyingRim ? Math.hypot(nx, nz) : uniformLength;
       indices[point] = emit(
         outline.pointX(point, inset),
         outline.pointY(point, inset),

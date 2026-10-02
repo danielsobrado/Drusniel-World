@@ -44,6 +44,25 @@ The images suggest a hierarchy: overall silhouette, individual stone mass, joint
 
 ## 3. Current implementation and concrete gaps
 
+### Update, October 2
+
+The subsequent [distance continuity pass](../../qa/wall-distance-continuity-review-2026-10-02.md)
+preserves every sandstone placement in the coarse tier and simplifies ordinary
+units to 32 triangles. The suite passed 2,944 tests; the build and WebGPU checks
+passed. Frame performance was similar in the comparison, while construction
+build time rose about 18%. Hitch acceptance remains open. Use its
+[testing prompt](../../qa/wall-distance-continuity-test-prompt-2026-10-02.md) for
+independent transition checks. Other styles retain their merge policies.
+
+The [crown and close-up detail pass](../../qa/wall-crown-detail-review-2026-10-02.md)
+adds restrained deterministic cap wear, fixes missing crown courses on short
+walls, sizes splits against the surviving crown slice and reduces redundant
+normal calculations in the batched mesher. The full suite passed 2,941 tests;
+the production build and WebGPU appearance checks passed. See its
+[testing prompt](../../qa/wall-crown-detail-test-prompt-2026-10-02.md) for low-wall,
+local-profile, interaction and performance checks. Coarse packing, richer
+decoration, semantic joins and release performance acceptance remain open.
+
 ### Update, October 1
 
 The [creation and sound pass](../../qa/wall-detail-editing-audio-review-2026-10-01.md)

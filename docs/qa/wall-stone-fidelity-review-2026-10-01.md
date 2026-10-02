@@ -91,6 +91,7 @@ with collision p95 of 0.1 ms.
 | New stones | 48.74 | 36.76 ms | 10.00% |
 | Baseline repeat | 48.24 | 48.24 ms | 12.04% |
 | New stones repeat | 35.37 | 63.13 ms | 22.91% |
+| Final baseline check | 58.26 | 34.84 ms | 6.20% |
 
 The new-build measurements are slower in both pairs. The baseline also varies
 substantially, so these runs do not isolate the cause. **Performance acceptance
@@ -103,7 +104,12 @@ mean render-plus-completion time was about **3.43 ms faceted / 3.45 ms smooth**.
 This did not reproduce the world-scale slowdown; it does not exonerate all of the
 geometry/packing changes. Keep the full-world performance concern open.
 
-Raw evidence: `tmp/stone-detail-perf-{before,after,before-repeat,after-repeat}.json`
+The final baseline check recovered to 58.26 FPS after the slow second pair.
+This strengthens the need to investigate the new-build slowdown rather than
+attribute all of it to a steadily slowing machine. The follow-up cap/mesher pass
+has its own current baseline in the [October 2 review](wall-crown-detail-review-2026-10-02.md).
+
+Raw evidence: `tmp/stone-detail-perf-{before,after,before-repeat,after-repeat,baseline-check}.json`
 and `tmp/stone-material-perf.json`. The temporary isolation script is
 `tmp/stone-material-perf.mjs`; it does not change production settings.
 

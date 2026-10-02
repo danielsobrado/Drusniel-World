@@ -133,7 +133,8 @@ styles:
         rimRings: 1
         faceRings: 0
       coarse:
-        arcSegments: 1
+        # Preserve every solved stone; simplify each to four bevel corners.
+        arcSegments: 0
         rimRings: 1
         faceRings: 0
     # Bevels are shaded by the light, bright on top and darker underneath, as

@@ -502,8 +502,19 @@ export function packCurvedWall({
       const cell = cellCounter;
       cellCounter += 1;
 
-      const localTop = bodyHeightAt(s);
-      if (y > localTop) continue;
+      // A crown may cut below the course centre while leaving a substantial
+      // lower slice. Let the lattice trim that slice instead of dropping the
+      // whole course and exposing backing beneath the coping.
+      const centreTop = bodyHeightAt(s);
+      const startTop = bodyHeightAt(s - stone.width / 2);
+      const endTop = bodyHeightAt(s + stone.width / 2);
+      const localTop = Math.max(centreTop, startTop, endTop);
+      if (y - thisCourseHeight / 2 - bedMargin >= localTop) continue;
+      // Split against the space that survives crown clipping. Two leaves that
+      // would fit the nominal course can both collapse in a short crown slice.
+      // The conservative bed margin also protects against the shared bed wave.
+      const splitHeight = Math.min(thisCourseHeight, Math.max(0,
+        Math.min(centreTop, startTop, endTop) - (y - thisCourseHeight / 2) - bedMargin));
 
       // Coarse grid first, then split — the order the reference builds in, and
       // what puts one big block beside two stacked small ones.
@@ -515,7 +526,7 @@ export function packCurvedWall({
           maxDepth: style.splitMaxDepth ?? 2,
           minWidth: style.minWidth,
           minHeight: style.splitMinHeight ?? MIN_SPLIT_HEIGHT,
-          courseHeight: thisCourseHeight,
+          courseHeight: splitHeight,
           horizontalChance: style.splitHorizontalChance,
         },
       );
@@ -811,10 +822,13 @@ export function packCurvedWall({
       ));
       if (pierced) continue;
       const inset = 0.01 + hashLane(shapeSeed, index, 0) * 0.012;
-      emitUnit('coping', s, topHeightAt(s) - copingHeight / 2, index, {
+      // Vary the exposed crown, keeping each cap's bed at the solved body top.
+      // Downward-only wear preserves the authored wall-height envelope.
+      const crownDrop = copingHeight * (coping.crownVariation ?? 0) * hashLane(shapeSeed, index, 16);
+      emitUnit('coping', s, topHeightAt(s) - (copingHeight + crownDrop) / 2, index, {
         packedWidth: stone.width,
         width: Math.max(0.12, stone.width - inset),
-        height: copingHeight,
+        height: copingHeight - crownDrop,
         // Coping oversails the face, which is what throws the shadow line that
         // reads as a finished top.
         depth: thickness * coping.oversail,

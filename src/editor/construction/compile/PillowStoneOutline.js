@@ -89,7 +89,7 @@ function insetQuad(ring, normals, radii) {
   return core;
 }
 
-/** Four corner arcs, optionally with a midpoint on each connecting edge. */
+/** Four corner arcs (or one sample per corner), plus optional edge midpoints. */
 export function outlinePointCount(arcSegments, edgeSegments = 1) {
   return 4 * (arcSegments + edgeSegments);
 }
@@ -99,13 +99,14 @@ export function outlinePointCount(arcSegments, edgeSegments = 1) {
  *
  * @param ring counter-clockwise convex quad from `normalizeConvexQuad`
  * @param cornerRadius default in-plane corner radius
- * @param arcSegments segments per quarter-ish corner arc
+ * @param arcSegments segments per quarter-ish corner arc; 0 samples its
+ *   bisector once for a four-corner distant bevel without changing stone identity
  * @param cornerRadii optional four radii; their minimum is the deepest valid inset
  * @param edgeSegments 1 for straight edges, 2 to sample wear at their midpoints
  * @returns null when the corner radius does not fit the quad
  */
 export function createRoundedOutline(ring, cornerRadius, arcSegments, cornerRadii = null, edgeSegments = 1) {
-  if (!(cornerRadius > 0) || !(arcSegments >= 1)) return null;
+  if (!(cornerRadius > 0) || !(arcSegments >= 0) || !Number.isInteger(arcSegments)) return null;
   const radii = cornerRadii ?? [cornerRadius, cornerRadius, cornerRadius, cornerRadius];
   if (radii.length !== 4 || !radii.every(radius => Number.isFinite(radius) && radius > 0)) return null;
   const normals = edgeNormals(ring);
@@ -128,7 +129,7 @@ export function createRoundedOutline(ring, cornerRadius, arcSegments, cornerRadi
     let sweep = Math.atan2(after[1], after[0]) - start;
     while (sweep <= 0) sweep += Math.PI * 2;
     for (let step = 0; step <= arcSegments; step += 1) {
-      const angle = start + (sweep * step) / arcSegments;
+      const angle = start + sweep * (arcSegments === 0 ? 0.5 : step / arcSegments);
       directionX[point] = Math.cos(angle);
       directionY[point] = Math.sin(angle);
       coreX[point] = core[corner][0];

@@ -137,6 +137,28 @@ test('uneven corner wear stays inside a leaning stone with unchanged mesh cost',
   }
 });
 
+test('intermediate uneven bevel rings keep their elliptic slope normals', () => {
+  const profile = constructionStoneRoundingProfile('glade-sandstone');
+  const pillow = sampleStonePillow({ profile, seed: 3141, stableIndex: 17, width: 0.93, height: 0.475, depth: 0.8 });
+  const lod = { ...profile.lod.near, rimRings: 3 };
+  const { result, arrays } = writeStone({ pillow, lod });
+  assert.equal(result.triangles, estimatePillowStone(lod).triangles);
+  const outline = createRoundedOutline(normalizeConvexQuad(LEANING_QUAD), pillow.cornerRadius,
+    lod.arcSegments, pillow.cornerRadii, lod.edgeSegments);
+  for (let point = 0; point < outline.pointCount; point += 1) {
+    const index = outline.wearIndex(point);
+    const width = Math.min(pillow.front.edgeRadius * pillow.front.rimWidths[index], outline.insetLimit(point) * 0.9);
+    const depth = Math.min(pillow.front.edgeRadius * pillow.front.rimDepths[index], 0.4 * 0.6);
+    const angle = Math.PI / 6;
+    const nx = Math.cos(angle) * depth, nz = Math.sin(angle) * width;
+    const length = Math.hypot(nx, nz);
+    const offset = (outline.pointCount + point) * 3;
+    assert.ok(Math.abs(arrays.normals[offset] - nx / length * outline.normalX(point)) < 1e-6);
+    assert.ok(Math.abs(arrays.normals[offset + 1] - nx / length * outline.normalY(point)) < 1e-6);
+    assert.ok(Math.abs(arrays.normals[offset + 2] - nz / length) < 1e-6);
+  }
+});
+
 test('every triangle faces the way its vertices say the surface faces', () => {
   const { arrays } = writeStone();
   const { positions, normals, indices } = arrays;

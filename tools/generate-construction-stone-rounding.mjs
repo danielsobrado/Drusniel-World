@@ -76,7 +76,8 @@ const SCHEMA = {
   minimumEdgeRadius: range(0.001, 0.05),
   lod: {
     near: LOD_BAND,
-    coarse: LOD_BAND,
+    // Zero arc segments keeps one corner-bisector sample at distance.
+    coarse: { ...LOD_BAND, arcSegments: integer(0, 6) },
   },
   occlusion: {
     crevice: range(0, 1),

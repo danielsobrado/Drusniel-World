@@ -77,6 +77,8 @@ test('invalid documents are rejected with the offending key', () => {
   const cases = [
     [(document) => { document.defaults.edgeRadius.ratioMax = 0.9; }, /edgeRadius\.ratioMax/],
     [(document) => { document.defaults.lod.near.arcSegments = 2.5; }, /arcSegments must be an integer/],
+    [(document) => { document.defaults.lod.near.arcSegments = 0; }, /arcSegments/],
+    [(document) => { document.defaults.lod.coarse.arcSegments = -1; }, /arcSegments/],
     [(document) => { document.defaults.occlusion.groundTint = [1, 1]; }, /groundTint must be a three-number array/],
     [(document) => { document.defaults.shellShade = 5; }, /shellShade/],
     [(document) => { document.defaults.surprise = 1; }, /unknown key "surprise"/],

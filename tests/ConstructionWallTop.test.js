@@ -57,12 +57,12 @@ function setup(built = path(), overrides = {}) {
   return { record, arcTable };
 }
 
-function pack(record, arcTable) {
-  const profile = createWallTopProfile(record, arcTable, { style: STYLE });
+function pack(record, arcTable, style = STYLE) {
+  const profile = createWallTopProfile(record, arcTable, { style });
   return packCurvedWall({
     arcTable,
     arcRange: [0, arcTable.totalLength],
-    style: STYLE,
+    style,
     thickness: record.dimensions.thickness,
     seed: record.seed,
     topHeightAt: profile.heightAt,
@@ -207,6 +207,35 @@ test('a flat wall is finished with a coping course', () => {
   assert.ok(Math.abs(top - 3.5) < 0.02, `finished top was ${top}`);
 });
 
+test('sandstone cap wear varies its crown while keeping the bed and neighbouring stones fixed', () => {
+  const style = constructionStyle('glade-sandstone');
+  const control = { ...style, coping: { ...style.coping, crownVariation: 0 } };
+  const { record, arcTable } = setup(path(), { style: { key: style.key, version: 1 } });
+  const expected = pack(record, arcTable, control).stones;
+  const actual = pack(record, arcTable, style).stones;
+  assert.deepEqual(actual, pack(record, arcTable, style).stones);
+  assert.equal(actual.length, expected.length);
+  const heights = new Set();
+  for (let i = 0; i < actual.length; i += 1) {
+    const stone = actual[i], original = expected[i];
+    assert.equal(stone.stableIndex, original.stableIndex);
+    if (stone.category !== 'coping') {
+      assert.deepEqual(stone, original, 'cap wear must not repack or reroll body/dressings');
+      continue;
+    }
+    heights.add(stone.height);
+    const drop = original.height - stone.height;
+    assert.ok(drop >= -1e-12 && drop <= style.coping.height * style.coping.crownVariation + 1e-12);
+    assert.ok(Math.abs((stone.y - stone.height / 2) - (original.y - original.height / 2)) < 1e-12);
+    assert.ok(stone.y + stone.height / 2 <= record.dimensions.height + 1e-12);
+    assert.equal(stone.s, original.s);
+    assert.equal(stone.width, original.width);
+    assert.equal(stone.depth, original.depth);
+    assert.equal(stone.roll, original.roll);
+  }
+  assert.ok(heights.size > 20, 'wear should change along the course');
+});
+
 test('coping rolls to follow a sloped top', () => {
   const { record, arcTable } = setup();
   const ramped = normalizeConstructionRecord({
@@ -266,8 +295,12 @@ test('a raise adds courses rather than stretching stones', () => {
   });
   const after = pack(raised, arcTable);
   assert.ok(after.stats.courses >= flat.stats.courses);
-  const flatHeights = new Set(flat.stones.map(({ height }) => height.toFixed(3)));
-  const afterHeights = new Set(after.stones.map(({ height }) => height.toFixed(3)));
-  // Course height is uniform within a wall, so a raise must not double it.
-  assert.ok(afterHeights.size <= flatHeights.size + 2);
+  // Crown slices have many heights where a ramp intersects the grid. Check the
+  // actual course budget rather than counting those different trim heights.
+  const maximumCourse = STYLE.courseHeight * (1 + 2 * (STYLE.bedAmplitude ?? 0));
+  for (const stone of after.stones.filter((stone) => stone.category === 'field')) {
+    assert.ok(stone.support.top - stone.support.bottom <= maximumCourse + 1e-9);
+  }
+  assert.ok(after.stones.some((stone) => stone.category === 'field'
+    && stone.courseIndex >= flat.stats.courses), 'raising adds a new course');
 });

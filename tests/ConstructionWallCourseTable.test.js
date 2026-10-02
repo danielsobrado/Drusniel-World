@@ -63,7 +63,7 @@ function setup({ length = 24, height = 3.5, thickness = 0.8, top = 'flat', key =
   return { record, style, arcTable, profile };
 }
 
-function pack(context, { arcRange, seedOffset = 0 } = {}) {
+function pack(context, { arcRange, seedOffset = 0, courseHeight = context.style.courseHeight } = {}) {
   return packCurvedWall({
     arcTable: context.arcTable,
     arcRange: arcRange ?? [0, context.arcTable.totalLength],
@@ -72,7 +72,7 @@ function pack(context, { arcRange, seedOffset = 0 } = {}) {
     seed: context.record.seed,
     seedOffset,
     wallRange: [0, context.arcTable.totalLength],
-    courseHeight: context.style.courseHeight,
+    courseHeight,
     heightReference: context.record.dimensions.height,
     topHeightAt: context.profile.heightAt,
     ruinFactorAt: context.profile.ruinFactorAt,
@@ -80,6 +80,41 @@ function pack(context, { arcRange, seedOffset = 0 } = {}) {
     topStyle: context.record.top.style,
   });
 }
+
+test('sandstone crowns retain a partial course below its nominal centre', () => {
+  const context = setup({ height: 0.8, key: 'glade-sandstone' });
+  const { stones } = pack(context);
+  const crown = stones.filter((stone) => stone.category === 'field' && stone.courseIndex === 1);
+  assert.ok(crown.length > 0, 'the 0.16 m crown slice must survive');
+  assert.ok(crown.some((stone) => Math.abs(stone.support.top - 0.56) < 1e-9));
+  assert.ok(crown.every((stone) => stone.support.top <= 0.56 + 1e-9));
+});
+
+test('bounded course fitting seats low sandstone caps without thin crown remnants', () => {
+  for (let step = 50; step <= 160; step += 1) {
+    const height = step / 100;
+    const context = setup({ height, length: 4, key: 'glade-sandstone' });
+    const courseHeight = fitWallCourseHeight({
+      courseHeight: context.style.courseHeight,
+      footing: context.style.footing,
+      wallHeight: height,
+      copingHeight: context.style.coping.height,
+    });
+    const result = pack(context, { courseHeight });
+    const field = result.stones.filter((stone) => stone.category === 'field');
+    const bodyTop = height - context.style.coping.height;
+    assert.ok(field.length > 0, `${height} m wall has masonry`);
+    assert.ok(Math.abs(Math.max(...field.map((stone) => stone.support.top)) - bodyTop) < 1e-9,
+      `${height} m wall reaches its coping bed`);
+    assert.ok(field.every((stone) => stone.support.top - stone.support.bottom > 0.09),
+      `${height} m wall has no slivers`);
+    for (let s = 0.1; s < 3.9; s += 0.1) {
+      assert.ok(field.some((stone) => stone.support.span[0] <= s && stone.support.span[1] >= s
+        && Math.abs(stone.support.top - bodyTop) < 1e-9), `${height} m crown covered at ${s}`);
+    }
+    assert.deepEqual(pack(context, { courseHeight }), result);
+  }
+});
 
 test('without a footing the table is the uniform grid, to the bit', () => {
   const courseHeight = 0.56;

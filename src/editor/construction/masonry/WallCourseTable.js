@@ -75,10 +75,10 @@ const FIT_RANGE = Object.freeze([0.8, 1.25]);
 /**
  * Course height that lays whole courses from the ground to the capstones.
  *
- * With the style's height the courses rarely divide the body exactly, and the
- * packer drops a top course that is mostly above the coping, so up to half a
- * course of bare backing showed under the caps (0.19 m on a 3.2 m rounded
- * wall). Stretching or trimming that course instead leaves slivers. Fitting
+ * With the style's height the courses rarely divide the body exactly. The
+ * former packer dropped a top course mostly above the coping, leaving up to
+ * half a course of bare backing (0.19 m on a 3.2 m rounded wall). Trimming an
+ * arbitrary nominal grid can also leave slivers. Fitting
  * the height keeps every course whole. The fit is a pure function of wall-wide
  * inputs — the authored top base, not the local profile — so every module
  * shares one grid, and a raised section still adds whole courses above it.
@@ -88,7 +88,10 @@ const FIT_RANGE = Object.freeze([0.8, 1.25]);
  * @param options.wallHeight authored top base height
  * @param options.copingHeight capstone height
  * @param options.fitUncapped fit the body of a crenellated crown without coping
- * @returns the fitted height, or `courseHeight` when no fit lies within range
+ * When an exact fit falls outside the style's range, use a bounded grid that
+ * overshoots the crown. The lattice trims its last course; falling back to the
+ * nominal grid could instead leave a tiny remnant that is too short to emit.
+ * @returns the fitted height, or a bounded shorter-course grid that overshoots
  */
 export function fitWallCourseHeight({ courseHeight, footing = null, wallHeight, copingHeight = 0, fitUncapped = false }) {
   if ((!(copingHeight > 0) && !fitUncapped) || !(courseHeight > 0) || !(wallHeight > 0)) return courseHeight;
@@ -105,11 +108,20 @@ export function fitWallCourseHeight({ courseHeight, footing = null, wallHeight, 
   ]);
   let best = courseHeight;
   let distance = Infinity;
+  let overshoot = courseHeight;
+  let overshootDistance = Infinity;
   for (const count of counts) {
     let low = courseHeight * FIT_RANGE[0];
     let high = courseHeight * FIT_RANGE[1];
     const heightOf = (height) => footingOf(height) + count * height;
-    if (heightOf(low) > body || heightOf(high) < body) continue;
+    if (heightOf(low) > body) {
+      if (Math.abs(low - courseHeight) < overshootDistance) {
+        overshoot = low;
+        overshootDistance = Math.abs(low - courseHeight);
+      }
+      continue;
+    }
+    if (heightOf(high) < body) continue;
     // Total height is monotone even where the footing hits its wall-height
     // cap. Bisection also converges for one-course walls, where iteratively
     // subtracting the footing oscillates instead of finding the fit.
@@ -124,5 +136,5 @@ export function fitWallCourseHeight({ courseHeight, footing = null, wallHeight, 
       distance = Math.abs(fitted - courseHeight);
     }
   }
-  return best;
+  return Number.isFinite(distance) ? best : overshoot;
 }

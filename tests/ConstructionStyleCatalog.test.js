@@ -44,6 +44,8 @@ test('glade-sandstone matches the reference scale: small near-square blocks, res
   const candidate = constructionStyle('glade-sandstone');
   assert.equal(candidate.geometry, 'rounded');
   assert.equal(candidate.stonePalette, 'glade-sandstone');
+  assert.equal(candidate.coarseLayout, 'preserve');
+  assert.throws(() => defineConstructionStyle({ ...candidate, coarseLayout: 'shuffle' }), /coarseLayout/);
   // Taller whole blocks interleave with thin horizontal pairs in each course.
   assert.ok(candidate.courseHeight >= 0.35 && candidate.courseHeight <= 0.45);
   assert.ok(candidate.targetWidth >= 0.35 && candidate.targetWidth <= 0.5);
@@ -71,7 +73,7 @@ test('rounded fieldstone declares its mesher, top, footing and coping', () => {
     burialMargin: 0.1,
     burialMax: 0.6,
   });
-  assert.deepEqual({ ...style.coping }, { height: 0.24, oversail: 1.2, widthRatio: 1.35 });
+  assert.deepEqual({ ...style.coping }, { height: 0.24, oversail: 1.2, widthRatio: 1.35, crownVariation: 0 });
   assert.equal(Object.isFrozen(style.footing), true);
   assert.equal(Object.isFrozen(style.coping), true);
 });
@@ -81,10 +83,11 @@ test('styles without the new fields keep the behaviour they always had', () => {
     const style = constructionStyle(key);
     assert.equal(style.geometry, 'soft', key);
     assert.equal(style.defaultTop, null, key);
+    assert.equal(style.coarseLayout, 'merge', key);
     assert.equal(style.footing, null, key);
     assert.equal(style.coping, DEFAULT_COPING, key);
   }
-  assert.deepEqual({ ...DEFAULT_COPING }, { height: 0.16, oversail: 1.14, widthRatio: 1.15 });
+  assert.deepEqual({ ...DEFAULT_COPING }, { height: 0.16, oversail: 1.14, widthRatio: 1.15, crownVariation: 0 });
 });
 
 test('existing styles keep their authored values and packer defaults', () => {
@@ -199,5 +202,9 @@ test('invalid definitions fail immediately', () => {
   assert.throws(
     () => defineConstructionStyle({ ...base, coping: { oversail: 2 } }),
     /coping oversail/,
+  );
+  assert.throws(
+    () => defineConstructionStyle({ ...base, coping: { crownVariation: 0.4 } }),
+    /coping crownVariation/,
   );
 });

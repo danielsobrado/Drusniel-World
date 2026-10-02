@@ -102,7 +102,7 @@ export const CONSTRUCTION_STONE_ROUNDING_PROFILES = Object.freeze({
         faceRings: 0,
       }),
       coarse: Object.freeze({
-        arcSegments: 1,
+        arcSegments: 0,
         edgeSegments: 1,
         rimRings: 1,
         faceRings: 0,

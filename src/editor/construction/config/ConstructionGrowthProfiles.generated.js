@@ -20,10 +20,18 @@ const profiles = {
       "#889353",
       "#a3a461",
       "#596f42"
-    ]
+    ],
+    "ground": {
+      "cellSize": 1.1,
+      "reach": 0.22,
+      "maxDetailsPerModule": 32,
+      "flowerChance": 0.18,
+      "pebbleChance": 0.25,
+      "mossChance": 0.22
+    }
   }
 };
 for (const profile of Object.values(profiles)) {
-  Object.freeze(profile.palette); Object.freeze(profile.leafRadius); Object.freeze(profile);
+  Object.freeze(profile.palette); Object.freeze(profile.leafRadius); if (profile.ground) Object.freeze(profile.ground); Object.freeze(profile);
 }
 export const CONSTRUCTION_GROWTH_PROFILES = Object.freeze(profiles);

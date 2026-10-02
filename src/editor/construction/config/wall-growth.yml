@@ -13,3 +13,10 @@ styles:
     clearance: 0.16
     maxLeavesPerModule: 192
     palette: ['#6b7841', '#889353', '#a3a461', '#596f42']
+    ground:
+      cellSize: 1.1
+      reach: 0.22
+      maxDetailsPerModule: 32
+      flowerChance: 0.18
+      pebbleChance: 0.25
+      mossChance: 0.22

@@ -318,7 +318,7 @@ export class InfiniteTerrainView {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = rendererConfig.toneMappingExposure ?? 1.12;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.domElement.setAttribute('aria-label', 'Drusniel World infinite world editor viewport');
     container.append(this.renderer.domElement);
     // Size the drawing buffer here rather than waiting for the bootstrap's

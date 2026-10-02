@@ -30,9 +30,7 @@ export const SKY_PRESETS = Object.freeze({
     fogColor: '#a5ced3',
   }),
   // Building light after the Tiny Glade references (docs/reference/tiny-glade):
-  // a warm, fairly high sun, bright warm bounce off the ground and a pale,
-  // near-neutral sky light, so shaded stone stays light and warm and contrast
-  // stays low.
+  // Warm sun with restrained cool sky fill and earthy green ground bounce.
   glade: Object.freeze({
     label: 'Glade (warm building light)',
     sunElevation: 38,
@@ -42,11 +40,12 @@ export const SKY_PRESETS = Object.freeze({
     sunGlowColor: '#ffd9a0',
     sunColor: '#fff3dc',
     sunGlowIntensity: 0.35,
-    directionalColor: '#ffd29a',
-    directionalIntensity: 3.9,
-    ambientIntensity: 3.3,
-    ambientSaturation: 0.04,
-    groundLightColor: '#d3a86a',
+    directionalColor: '#ffe0b1',
+    directionalIntensity: 3.1,
+    ambientIntensity: 2.4,
+    ambientSaturation: 0.45,
+    groundLightColor: '#99916f',
+    shadowRadius: 3.2,
     fogColor: '#e9d8bf',
   }),
   highfield: Object.freeze({

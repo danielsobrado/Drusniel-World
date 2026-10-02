@@ -17,7 +17,7 @@ export const SKY_LOOK_NUMBERS = Object.freeze([
   'sunElevation', 'sunAzimuth', 'sunEmission', 'sunGlowIntensity',
   'cloudOpacity', 'cloudDensity',
   'ambientIntensity', 'ambientSaturation', 'directionalIntensity', 'fogDensityScale',
-  'cloudShadowStrength',
+  'cloudShadowStrength', 'shadowRadius',
 ]);
 /** The look values the sky material reads, which become its uniforms. */
 const MATERIAL_COLORS = Object.freeze(['lowColor', 'highColor', 'sunColor', 'sunGlowColor', 'cloudCore', 'cloudEdge', 'cloudRim']);
@@ -34,6 +34,7 @@ export function resolveSkyLook(sky, presetName = DEFAULT_SKY_PRESET) {
   for (const key of SKY_LOOK_COLORS) look[key] = preset[key] ?? sky[key];
   for (const key of SKY_LOOK_NUMBERS) look[key] = preset[key] ?? sky[key];
   look.ambientSaturation = preset.ambientSaturation ?? sky.ambientSaturation ?? 1;
+  look.shadowRadius = preset.shadowRadius ?? sky.shadowRadius ?? 2.4;
   look.fogDensityScale = preset.fogDensityScale ?? 1;
   look.cloudShadowStrength = preset.cloudShadowStrength ?? sky.cloudShadows?.strength ?? 0;
   return look;

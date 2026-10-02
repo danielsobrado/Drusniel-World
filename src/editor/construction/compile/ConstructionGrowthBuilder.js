@@ -4,12 +4,15 @@ import { planWallGrowth } from '../masonry/WallGrowth.js';
 import { CONSTRUCTION_MATERIAL_SLOT } from '../render/ConstructionMaterialSlots.js';
 import { createGrowthSurfaceSampler } from './ConstructionGrowthSurface.js';
 import { writeIvyLeaf, writeIvyStem } from './ConstructionIvyMesher.js';
+import { planWallGroundDetail } from '../masonry/WallGroundDetail.js';
+import { writeGroundDetail } from './ConstructionGroundDetailMesher.js';
 
 /** A single batched leaf mesh per occupied module; no textures or update loop. */
 export function buildConstructionGrowth({ record, materials, arcTable, moduleOrigin, groundHeightAt, pathInterval, placements, lodBand = 'near' }) {
   if (!materials.growth) return null;
   const leaves = planWallGrowth(record, arcTable, pathInterval);
-  if (!leaves.length) return null;
+  const groundDetails = planWallGroundDetail(record, arcTable, pathInterval);
+  if (!leaves.length && !groundDetails.length) return null;
   const writer = new MasonryVertexWriter({ vertices: leaves.length * 60, indices: leaves.length * 90 });
   const faceAt = createGrowthSurfaceSampler({ record, placements, arcTable });
   const color = new THREE.Color();
@@ -40,6 +43,7 @@ export function buildConstructionGrowth({ record, materials, arcTable, moduleOri
     color.set(leaf.color);
     writeIvyLeaf(writer, leaf, pointAt, color);
   }
+  for (const detail of groundDetails) writeGroundDetail(writer, detail, { arcTable, moduleOrigin, groundHeightAt, color });
   const arrays = writer.toArrays();
   const geometry = new THREE.BufferGeometry();
   for (const [name, values, size] of [['position', arrays.positions, 3], ['normal', arrays.normals, 3],
@@ -49,6 +53,7 @@ export function buildConstructionGrowth({ record, materials, arcTable, moduleOri
   const mesh = new THREE.Mesh(geometry, materials.growth);
   mesh.userData.constructionMaterialSlot = CONSTRUCTION_MATERIAL_SLOT.GROWTH;
   mesh.userData.constructionGrowthLeaves = leaves.length;
+  mesh.userData.constructionGroundDetails = groundDetails.length;
   mesh.castShadow = lodBand !== 'coarse'; mesh.receiveShadow = true;
   return mesh;
 }

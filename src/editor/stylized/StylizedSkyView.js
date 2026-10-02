@@ -347,6 +347,7 @@ export class StylizedSkyView {
     this.hemisphere.intensity = look.ambientIntensity;
     this.directional.color.set(look.directionalColor);
     this.directional.intensity = look.directionalIntensity;
+    this.directional.shadow.radius = look.shadowRadius;
     this.terrainView.scene.fog?.color.set(look.fogColor);
     this.fogDensityScale = look.fogDensityScale;
     this.setFogDensity();

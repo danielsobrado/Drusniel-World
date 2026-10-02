@@ -13,7 +13,7 @@ export function refreshConstructionGrowth(entry, terrainView) {
     resident.meshes = stoneMeshes;
     const oldTriangles = resident.stats?.growthTriangles ?? 0;
     if (resident.stats) {
-      resident.stats.growthTriangles = 0; resident.stats.growthLeaves = 0;
+      resident.stats.growthTriangles = 0; resident.stats.growthLeaves = 0; resident.stats.groundDetails = 0;
       resident.stats.totalTriangles -= oldTriangles;
       resident.stats.triangles = resident.stats.totalTriangles;
     }
@@ -33,6 +33,7 @@ export function refreshConstructionGrowth(entry, terrainView) {
       placements: module.placements, terrainRevision: terrainView.worldStore?.revision ?? 0 };
     if (resident.stats) {
       resident.stats.growthLeaves = mesh.userData.constructionGrowthLeaves;
+      resident.stats.groundDetails = mesh.userData.constructionGroundDetails ?? 0;
       resident.stats.growthTriangles = mesh.geometry.index.count / 3;
       resident.stats.totalTriangles += resident.stats.growthTriangles;
       resident.stats.triangles = resident.stats.totalTriangles;

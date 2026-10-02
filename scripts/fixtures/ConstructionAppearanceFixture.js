@@ -6,6 +6,9 @@ import { planConstruction } from '/src/editor/construction/planning/Construction
 import { buildModuleMasonry } from '/src/editor/construction/compile/ConstructionMasonryBuilder.js';
 import { createConstructionMaterials, disposeConstructionMaterials } from '/src/editor/construction/render/ConstructionMaterials.js';
 import { coarsePlacementsForModule } from '/src/editor/construction/render/ConstructionLod.js';
+import { SKY_PRESETS } from '/src/editor/stylized/sky/SkyPresets.js';
+import { skyAmbientColor } from '/src/editor/stylized/sky/skyAmbient.js';
+import { directionFromAngles } from '/src/editor/stylized/StylizedGodRaysPostProcess.js';
 
 /** Fixed semantic scenes, camera and lighting for comparing masonry changes. */
 export async function createConstructionAppearanceFixture({ styleKey = 'glade-sandstone', lodBand = 'near', growth = 'auto', view = 'front', closeup = false, zoom = null } = {}) {
@@ -16,6 +19,7 @@ export async function createConstructionAppearanceFixture({ styleKey = 'glade-sa
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
   renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   document.body.style.margin = '0';
   document.body.append(renderer.domElement);
   const camera = new THREE.OrthographicCamera(-10.5, 10.5, 7, -7, 0.1, 100);
@@ -35,13 +39,17 @@ export async function createConstructionAppearanceFixture({ styleKey = 'glade-sa
   async function capture(id, light = 'neutral') {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#c3c6b5');
-    scene.add(new THREE.HemisphereLight('#fffaf0', '#7c8264', 1.7));
-    const sun = new THREE.DirectionalLight(light === 'warm' ? '#ffe2af' : '#ffffff', 3);
-    sun.position.set(-5, 12, 8);
+    const look = light === 'warm' ? SKY_PRESETS.glade : null;
+    scene.add(new THREE.HemisphereLight(look ? skyAmbientColor(look) : '#fffaf0',
+      look?.groundLightColor ?? '#7c8264', look?.ambientIntensity ?? 1.7));
+    const sun = new THREE.DirectionalLight(look?.directionalColor ?? '#ffffff', look?.directionalIntensity ?? 3);
+    if (look) sun.position.copy(directionFromAngles(look.sunElevation, look.sunAzimuth).multiplyScalar(20));
+    else sun.position.set(-5, 12, 8);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, { left: -13, right: 13, top: 13, bottom: -13 });
     sun.shadow.normalBias = 0.025;
+    sun.shadow.radius = look?.shadowRadius ?? 1;
     scene.add(sun);
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200),
       new THREE.MeshStandardNodeMaterial({ color: '#89916d', roughness: 1 }));
@@ -56,6 +64,7 @@ export async function createConstructionAppearanceFixture({ styleKey = 'glade-sa
         ? [[-5, 3], [-5, 0], [-3, -3], [0, -4], [3, -3], [5, 0], [5, 3]]
         : [[-7, 0], [7, 0]];
     const path = createCubicBezierPathFromStroke(points, { closed: id === 'tower', simplifyTolerance: 0.02 });
+    const arcTable = createCurveArcTable(sampleCubicBezierPath(path));
     const record = normalizeConstructionRecord({
       version: 1, id: `appearance-${id}`, revision: 1, seed: 3141, kind: 'wall',
       style: { key: id === 'standard' ? 'coursed-rubble' : styleKey, version: 1, growth },
@@ -64,17 +73,17 @@ export async function createConstructionAppearanceFixture({ styleKey = 'glade-sa
       path,
       features: ['arches', 'arch-profiles', 'curved-arch'].includes(id) ? (id === 'arch-profiles' ? [0.12, 0.37, 0.63, 0.88]
         : id === 'curved-arch' ? [0.6] : [0.18, 0.5, 0.82]).map((arcFraction, i) => ({
-        id: `arch-${i}`, kind: 'arch', segmentId: path.segments[0].id,
-        arcFraction, width: id === 'arch-profiles' ? 2.4 : 3, height: 4.4, sill: 0,
+        id: `arch-${i}`, kind: 'arch', ...arcTable.fromArc(arcFraction * arcTable.totalLength),
+        width: id === 'arch-profiles' ? 2.4 : 3, height: 4.4, sill: 0,
         profile: id === 'arch-profiles' ? ['round', 'segmental', 'pointed', 'flat'][i] : 'round', dressed: true,
       })) : [],
     });
     const plan = planConstruction(record);
-    const arcTable = createCurveArcTable(sampleCubicBezierPath(record.path));
     const materials = createConstructionMaterials(record);
     let stones = 0;
     let triangles = 0;
     let growthLeaves = 0;
+    let groundDetails = 0;
     for (const module of plan.modules) {
       const placements = lodBand === 'coarse' ? coarsePlacementsForModule({ record, module, totalLength: plan.totalLength }) : module.placements;
       const built = buildModuleMasonry(placements, {
@@ -85,13 +94,17 @@ export async function createConstructionAppearanceFixture({ styleKey = 'glade-sa
       stones += built.stats.stones;
       triangles += built.stats.totalTriangles;
       growthLeaves += built.stats.growthLeaves ?? 0;
+      groundDetails += built.stats.groundDetails ?? 0;
     }
     await renderer.compileAsync(scene, camera);
     await renderer.renderAsync(scene, camera);
     // GPU completion makes the screenshot independent of shader compile timing.
     await renderer.backend.device?.queue.onSubmittedWorkDone();
     return {
-      id, light, lodBand, growth, view, closeup, zoom: camera.zoom, stones, triangles, growthLeaves, backend: renderer.backend.constructor.name,
+      id, light, lodBand, growth, view, closeup, zoom: camera.zoom, stones, triangles, growthLeaves, groundDetails,
+      lightingPreset: look ? 'glade' : 'neutral',
+      openingArcs: record.features.map(feature => arcTable.toArc(feature.segmentId, feature.arcFraction)),
+      backend: renderer.backend.constructor.name,
       dispose() {
         scene.traverse(object => object.geometry?.dispose());
         ground.material.dispose();

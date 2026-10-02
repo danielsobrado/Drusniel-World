@@ -7,6 +7,16 @@ import { skyAmbientColor } from '../src/editor/stylized/sky/skyAmbient.js';
 const luminance = (color) => color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722;
 const saturation = (color) => Math.max(color.r, color.g, color.b) - Math.min(color.r, color.g, color.b);
 
+test('shadow softness survives configured defaults, preset changes and interpolation', () => {
+  const configured = resolveSkyLook({}, 'configured');
+  assert.equal(configured.shadowRadius, 2.4);
+  const custom = resolveSkyLook({ shadowRadius: 1.5 }, 'configured');
+  const glade = resolveSkyLook({ shadowRadius: 1.5 }, 'glade');
+  assert.equal(custom.shadowRadius, 1.5);
+  assert.equal(glade.shadowRadius, 3.2);
+  assert.ok(Math.abs(mixSkyLooks(custom, glade, 0.5).shadowRadius - 2.35) < 1e-9);
+});
+
 test('full ambient saturation is the zenith colour itself', () => {
   const zenith = new THREE.Color('#3f83c2');
   const light = skyAmbientColor({ highColor: '#3f83c2', ambientSaturation: 1 });

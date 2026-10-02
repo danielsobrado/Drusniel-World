@@ -355,6 +355,7 @@ export function attachConstructionGrowth(built, growth) {
   if (growth) {
     built.meshes.push(growth);
     built.stats.growthLeaves = growth.userData.constructionGrowthLeaves;
+    built.stats.groundDetails = growth.userData.constructionGroundDetails ?? 0;
     built.stats.growthTriangles = growth.geometry.index.count / 3;
     built.stats.totalTriangles += built.stats.growthTriangles;
     built.stats.triangles = built.stats.totalTriangles;

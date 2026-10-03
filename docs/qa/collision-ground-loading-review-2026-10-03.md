@@ -32,7 +32,8 @@ tests also pass. The complete suite passed **2,994 tests**; `npm run build` pass
 Hardware comparison: headed Playwright Chromium, NVIDIA Lovelace, exclusively
 WebGPU, 1280 × 720, `chunk-cross`, `high-grass`, 8 s warmup, 12 s movement,
 settle enabled. The reference served the original three changed source files
-from Git HEAD; the fixed run served this workspace. Both used the same assets
+from Git HEAD at baseline-server startup; the fixed run served this workspace.
+Both used the same assets
 and remaining source files. Exploratory captures from port 5173 served another
 checkout and are excluded from this comparison.
 
@@ -51,5 +52,38 @@ stalls and are approximate. These are single-run observations, not a general
 FPS improvement claim. Raw captures are `tmp/collision-stall-local-before.json`
 and `tmp/collision-stall-local-after.json` (each contains `probe` and `report`).
 
-The wider movement/water matrix and its remaining frame-time limitations are
-recorded below after completion.
+## Wider movement and water checks
+
+Ran `npm run qa:perf:matrix -- --headed --url http://127.0.0.1:5175
+--warmup 8 --duration 12`. All five movement cases finished with 9/9 desired
+collision chunks ready, zero queued builds and zero failed chunks. Collision
+p95 was 0.1 ms in every case.
+
+| Case | Frame p95 | Hitch rate | Collision gate |
+| --- | ---: | ---: | --- |
+| Standard | 26.805 ms | 1.64% | pass |
+| Dense forest | 34.1 ms | 7.10% | pass |
+| High grass | 26.88 ms | 2.40% | pass |
+| Dense mixed | 23.42 ms | 1.19% | pass |
+| Construction ring | 31.075 ms | 2.85% | pass |
+
+The full matrix remains **failed** against the 33.3 ms p95 / 2% hitch targets.
+A repeated fixed dense-forest run passed both frame targets (24.8 ms p95,
+1.40% hitches); the original-code dense-forest run measured 16.925 ms p95 and
+1.15% hitches. Results vary, and the fixed runs complete more rock/tree manifests
+and publish different resident workloads during warmup. These observations do
+not establish an equivalent-workload rendering regression or improvement.
+
+The water route passed entry, swimming, submersion, surfacing, dry exit, body
+identity, origin stability, and active caustics. Collision finished ready; frame
+p95 was 14.9 ms and hitch rate 0.79%. The caustic CPU gate failed at a maximum
+1,577.6 ms against its 4 ms limit. The original-code water run failed the same
+gate at 1,428.6 ms (15.3 ms frame p95, 0.73% hitches), confirming that this
+rendering stall also occurs without the collision scheduling changes. No GPU
+validation errors occurred. The complete performance gate is not certified.
+
+Raw evidence: `tmp/perf-matrix-latest.json`, `tmp/perf-matrix/*.json`,
+`tmp/collision-stall-dense-before.json`,
+`tmp/collision-stall-dense-after-repeat.json`, and
+`tmp/collision-stall-water-before.json`, and
+`tmp/collision-stall-water-after.json`.

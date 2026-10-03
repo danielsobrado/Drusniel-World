@@ -230,8 +230,6 @@
   height: 100%;
   border-radius: 5px;
   background-color: rgb(6 9 7 / 62%);
-  background-image: url('/assets/ui/inventory/slot-well.webp');
-  background-size: cover;
   box-shadow:
     inset 0 2px 5px rgb(0 0 0 / 62%),
     inset 0 -1px 0 rgb(255 255 255 / 5%);
@@ -331,8 +329,6 @@
   height: 16px;
   border-radius: 50%;
   background-color: var(--accent);
-  background-image: url('/assets/ui/inventory/gold-coin.webp');
-  background-size: contain;
   box-shadow: inset 0 -2px 3px rgb(0 0 0 / 35%);
 }
 

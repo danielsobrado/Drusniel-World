@@ -119,15 +119,13 @@ function widenDirtyRange(range, index) {
   if (index > range.max) range.max = index;
 }
 
-function writeScalarInstance(attribute, index, value, range) {
-  if (attribute.array[index] === value) return;
-  attribute.array[index] = value;
-  widenDirtyRange(range, index);
-}
-
 function writeDitherInstance(attribute, index, fade, seed, colorVariation, range) {
   const array = attribute.array;
   const offset = index * 3;
+  // Compare the float32 values the GPU buffer holds, as for instance matrices.
+  fade = Math.fround(fade);
+  seed = Math.fround(seed);
+  colorVariation = Math.fround(colorVariation);
   if (
     array[offset] === fade
     && array[offset + 1] === seed
@@ -142,14 +140,17 @@ function writeDitherInstance(attribute, index, fade, seed, colorVariation, range
 function writeVector3Instance(attribute, index, value, range) {
   const array = attribute.array;
   const offset = index * 3;
+  const x = Math.fround(value[0]);
+  const y = Math.fround(value[1]);
+  const z = Math.fround(value[2]);
   if (
-    array[offset] === value[0]
-    && array[offset + 1] === value[1]
-    && array[offset + 2] === value[2]
+    array[offset] === x
+    && array[offset + 1] === y
+    && array[offset + 2] === z
   ) return;
-  array[offset] = value[0];
-  array[offset + 1] = value[1];
-  array[offset + 2] = value[2];
+  array[offset] = x;
+  array[offset + 1] = y;
+  array[offset + 2] = z;
   widenDirtyRange(range, index);
 }
 
@@ -294,6 +295,7 @@ export function buildChunkLodPlan({
   transitionMs,
   fadeSteps = 8,
   positionForChunk = null,
+  distanceForChunk = null,
   onTransition = null,
 }) {
   const entries = [];
@@ -322,7 +324,11 @@ export function buildChunkLodPlan({
       const storedState = transitionStates.get(key) ?? null;
       const previous = storedState?.target ?? null;
       const selected = selectProjectedLod({ pixels, previous, ...thresholds });
-      const target = clampLodToRadii({ band: selected, chunkDistance, ...radii });
+      const target = clampLodToRadii({
+        band: selected,
+        chunkDistance: distanceForChunk?.(chunkX, chunkZ) ?? chunkDistance,
+        ...radii,
+      });
       if (previous !== null && previous !== target) {
         onTransition?.({
           chunkX,

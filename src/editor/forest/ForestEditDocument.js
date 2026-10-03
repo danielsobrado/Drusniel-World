@@ -1,5 +1,9 @@
 const VALID_PATCH_STATES = new Set(['burned', 'regrowing', 'cleared']);
 
+export function hasForestEdits(document) {
+  return Boolean(document?.felled?.length || document?.planted?.length || document?.patches?.length);
+}
+
 function normalizePlant(record) {
   if (!record || typeof record.stableId !== 'string' || record.stableId.length === 0) {
     throw new Error('Planted forests require a stableId.');

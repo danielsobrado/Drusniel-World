@@ -35,6 +35,7 @@ import {
   pruneStateMap,
 } from './lod/StylizedLodRuntime.js';
 import { InstanceAnchor } from './lod/InstanceAnchor.js';
+import { createCameraChunkDistance } from './lod/chunkLodDistance.js';
 import {
   createCanopyClusterPart,
   createForestUnderstoryPrototypes,
@@ -522,8 +523,9 @@ export class StylizedTreeView {
       this.config.trees.perChunk,
       Math.trunc(this.config.trees.habitat?.maxAcceptedPerChunk) || 0,
     );
-    // Each band is sized to its own radius. `clampLodToRadii` guarantees a chunk
-    // can only emit 'near' within meshRadius and 'proxy' within proxyRadius, so
+    // Each band is sized to its own radius around the camera. `clampLodToRadii`
+    // limits 'near' to meshRadius and 'proxy' to proxyRadius; the extra ring
+    // accommodates transitions as the camera crosses chunk boundaries. Thus
     // sizing every renderer for the impostor window (as this used to) wasted
     // several times the instance memory — which matters now that the accepted
     // budget is high enough for closed forest.
@@ -676,6 +678,7 @@ export class StylizedTreeView {
         timestamp,
         transitionMs: settings.transitionMs,
         positionForChunk: (chunkX, chunkZ) => this.manifestStore.lodAnchor(chunkX, chunkZ),
+        distanceForChunk: createCameraChunkDistance(camera, origin, this.terrainView.chunkWorldSize),
         onTransition: ({ from, to, durationMs }) => {
           this.terrainView.postProcessing?.notifyReactive(
             from === 'impostor' || to === 'impostor'

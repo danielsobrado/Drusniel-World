@@ -964,6 +964,7 @@ export class EditorUi {
       return result;
     } catch (error) {
       session.fail(error);
+      this.failSceneReload(error);
       setTimeout(() => session.finish(), 2600);
       throw error;
     }
@@ -977,11 +978,19 @@ export class EditorUi {
    * whole navigation. Whatever replaces it is a fresh boot with its own overlay.
    */
   showSceneReload(label, detail = '') {
-    this.loading?.begin({
+    this.sceneReloadSession = this.loading?.begin({
       title: label,
       steps: [{ id: 'reload', label: 'Reloading the scene' }],
       detail,
     }).start('reload');
+  }
+
+  failSceneReload(error) {
+    const session = this.sceneReloadSession;
+    this.sceneReloadSession = null;
+    if (!session || session.closed) return;
+    session.fail(error);
+    setTimeout(() => session.finish(), 2600);
   }
 
   /**
@@ -1241,8 +1250,9 @@ export class EditorUi {
         const document = normalizeSceneSettings(await importJson(file));
         if (!this.confirmSceneReload('Loading a world look')) return;
         this.showSceneReload('Loading world look', file.name);
-        this.sceneSettingsRuntime.activate(document);
+        await this.sceneSettingsRuntime.activate(document);
       } catch (error) {
+        this.failSceneReload(error);
         this.showToast(error.message, true);
       }
     });
@@ -1649,7 +1659,7 @@ export class EditorUi {
             const document = await loadFromBrowser(selected.slice(8));
             if (!document) throw new Error('The selected browser settings no longer exist.');
             this.showSceneReload('Loading world look', document.name ?? '');
-            this.sceneSettingsRuntime.activate(document);
+            await this.sceneSettingsRuntime.activate(document);
           }
           break;
         }
@@ -1791,6 +1801,7 @@ export class EditorUi {
         default: break;
       }
     } catch (error) {
+      this.failSceneReload(error);
       this.showToast(error.message, true);
     }
   }

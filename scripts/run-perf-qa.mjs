@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { defaultPerfQaTimeoutMs } from './lib/perf-qa-timeout.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -58,10 +59,6 @@ const pitch = readArg('pitch');
 const viewportWidth = positiveNumber('viewportWidth', 1280, { integer: true });
 const viewportHeight = positiveNumber('viewportHeight', 720, { integer: true });
 const deviceScaleFactor = positiveNumber('deviceScaleFactor', 1);
-const timeoutMs = positiveNumber(
-  'timeoutMs',
-  (Number(warmup) + Number(duration) + 90) * 1000,
-);
 const outPath = path.resolve(readArg('out', path.join(outDir, 'perf-qa-latest.json')));
 const screenshotArg = readArg('screenshot');
 const screenshotPath = screenshotArg === null ? null : path.resolve(screenshotArg);
@@ -98,6 +95,7 @@ setOptionalQuery(query, 'z', spawnZ);
 setOptionalQuery(query, 'yaw', yaw);
 setOptionalQuery(query, 'pitch', pitch);
 const targetUrl = `${baseUrl.replace(/\/$/, '')}/?${query.toString()}`;
+const timeoutMs = positiveNumber('timeoutMs', defaultPerfQaTimeoutMs(query));
 
 fs.mkdirSync(outDir, { recursive: true });
 fs.mkdirSync(path.dirname(outPath), { recursive: true });

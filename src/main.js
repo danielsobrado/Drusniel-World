@@ -709,6 +709,8 @@ async function startEditor() {
   try {
     await sceneSettingsRuntime.applyInitialRuntime();
   } catch (error) {
+    sceneReloadPending = false;
+    ui.failSceneReload(error);
     boot.fail(error);
     ui.showToast(`Preset map not loaded: ${error.message}`, true);
   }

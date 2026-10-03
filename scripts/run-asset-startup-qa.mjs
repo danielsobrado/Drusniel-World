@@ -95,8 +95,21 @@ try {
       null,
       { timeout: timeoutMs },
     );
-    const report = await page.evaluate(() => {
+    const report = await page.evaluate(async () => {
       const startup = window.__assetStartupTelemetry.getReport();
+      const surface = window.__editor?.stylizedSurface;
+      if (!surface) throw new Error('Asset startup QA could not inspect the tree atlas state.');
+      await surface?.impostorReady;
+      const settings = surface?.config?.lod?.impostor;
+      const trees = surface?.treeView;
+      startup.treeImpostors = {
+        required: Boolean(surface?.config?.trees?.enabled && settings?.enabled
+          && settings.manifest && settings.runtimeBake === false),
+        expected: trees?.prototypes?.length ?? 0,
+        loaded: trees?.impostorAtlases?.length ?? 0,
+        fromAssets: trees?.impostorAtlases?.filter((atlas) => atlas.source === 'asset').length ?? 0,
+        sourceSignature: trees?.prototypeSignature ?? null,
+      };
       const resources = performance.getEntriesByType('resource')
         .filter((entry) => new URL(entry.name).pathname.endsWith('.glb'));
       const startTimes = resources.map((entry) => entry.startTime);
@@ -129,6 +142,12 @@ try {
     }
     if (report.failedAssets > 0 || report.ktx2.failedTranscodes > 0) {
       throw new Error(`Asset startup failures: ${JSON.stringify(report)}`);
+    }
+    const impostors = report.treeImpostors;
+    if (impostors.required && (impostors.expected === 0
+        || impostors.fromAssets !== impostors.expected
+        || impostors.loaded !== impostors.expected)) {
+      throw new Error(`Pre-baked tree impostors were not loaded: ${JSON.stringify(impostors)}`);
     }
     if (report.meshopt.decodeCount === 0 || report.ktx2.transcodeCount === 0
         || report.ktx2.gpuTextureBytes === 0) {

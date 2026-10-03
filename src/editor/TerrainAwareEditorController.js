@@ -2,6 +2,7 @@ import { EditorController } from './EditorController.js';
 import { evaluateObjectSurface } from './TerrainPlacement.js';
 import { createWorldDocument, loadWorldDocument } from './WorldDocument.js';
 import { worldToCell } from './world/WorldCoordinates.js';
+import { hasForestEdits } from './forest/ForestEditDocument.js';
 
 function cloneCampaign(campaign) {
   return campaign ? structuredClone(campaign) : null;
@@ -266,6 +267,7 @@ export class TerrainAwareEditorController extends EditorController {
     const beforeImportWarnings = [...this.importWarnings];
     if (beforeWorld.tileOverrides.length === 0
         && beforeWorld.heightOverrides.length === 0
+        && !hasForestEdits(beforeWorld.forestEdits)
         && beforeObjects.length === 0
         && beforeVoxelStamps.length === 0
         && beforeConstructions.length === 0

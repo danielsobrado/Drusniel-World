@@ -37,6 +37,30 @@ npm run qa:perf:parse
 npm run qa:perf:matrix -- --headed
 ```
 
+From WSL, use the Windows browser to access the host's hardware WebGPU adapter:
+
+```bash
+# Keep Vite running in WSL; Windows can reach it through localhost.
+npm run qa:perf:windows -- --qa chunk-cross --warmup 8 --duration 12 --settle
+```
+
+This command discovers Windows `node.exe` through PowerShell and launches the
+existing harness in headed Windows Playwright Chromium. It requires Node.js and
+the matching Playwright Chromium installed on Windows; the Linux browser download
+does not install the Windows binary. If the browser is missing, run
+`node node_modules/playwright/cli.js install chromium` from a Windows terminal in
+this checkout. Reports are written to this checkout's `tmp` directory, and the
+existing checks still reject software adapters and WebGL rendering.
+
+WSL can expose an NVIDIA GPU through `/dev/dxg` even without `/dev/dri`.
+`nvidia-smi` and `glxinfo -B` can confirm that bridge, but accelerated OpenGL does
+not prove that the Linux browser can create a WebGPU adapter. On this WSL setup,
+Windows Chromium selected the NVIDIA Lovelace adapter and executed a WebGPU
+compute shader with `isFallbackAdapter: false`; Linux Chromium returned no
+adapter. No driver replacement is needed for the Windows harness route.
+See [Microsoft's WSL GPU documentation](https://learn.microsoft.com/en-us/windows/wsl/tutorials/gui-apps)
+and [Playwright's browser installation guide](https://playwright.dev/docs/browsers).
+
 Or open the app with query params (overlay + optional JSON download):
 
 ```text

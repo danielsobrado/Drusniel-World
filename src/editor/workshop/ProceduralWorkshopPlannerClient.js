@@ -4,28 +4,46 @@ function staleError() {
   return new DOMException('A newer workshop plan replaced this result.', 'AbortError');
 }
 
+function disposedError() {
+  return new DOMException('Workshop planner was disposed.', 'AbortError');
+}
+
 export class ProceduralWorkshopPlannerClient {
   constructor({ workerFactory } = {}) {
     this.revision = 0;
     this.pending = new Map();
     this.worker = null;
+    this.disposed = false;
     if (workerFactory || typeof Worker !== 'undefined') {
-      this.worker = workerFactory
-        ? workerFactory()
-        : new Worker(new URL('./ProceduralWorkshopPlanner.worker.js', import.meta.url), {
-          type: 'module',
+      let worker = null;
+      try {
+        worker = workerFactory
+          ? workerFactory()
+          : new Worker(new URL('./ProceduralWorkshopPlanner.worker.js', import.meta.url), {
+            type: 'module',
+          });
+        if (!worker || typeof worker.addEventListener !== 'function') {
+          throw new Error('Workshop planner worker factory returned an invalid worker.');
+        }
+        worker.addEventListener('message', ({ data }) => {
+          if (!this.disposed && this.worker === worker) this.receive(data);
         });
-      if (!this.worker || typeof this.worker.addEventListener !== 'function') {
-        throw new Error('Workshop planner worker factory returned an invalid worker.');
+        worker.addEventListener('messageerror', (event) => this.failWorker(
+          worker, event, 'Workshop planning worker response could not be deserialized.',
+        ));
+        worker.addEventListener('error', (event) => this.failWorker(
+          worker, event, 'Workshop planning worker failed.',
+        ));
+        this.worker = worker;
+      } catch (error) {
+        worker?.terminate?.();
+        console.warn('Workshop planner worker is unavailable; planning will run on the main thread.', error);
       }
-      this.worker.addEventListener('message', ({ data }) => this.receive(data));
-      this.worker.addEventListener('error', (event) => this.failAll(
-        new Error(event.message || 'Workshop planning worker failed.'),
-      ));
     }
   }
 
   plan(recipe, dirtyIds = []) {
+    if (this.disposed) return Promise.reject(disposedError());
     const revision = ++this.revision;
     for (const [pendingRevision, pending] of this.pending) {
       if (pendingRevision < revision) {
@@ -34,15 +52,25 @@ export class ProceduralWorkshopPlannerClient {
       }
     }
     if (!this.worker) {
-      return Promise.resolve().then(() => planWorkshopComposition(recipe, dirtyIds));
+      return Promise.resolve().then(() => {
+        if (this.disposed) throw disposedError();
+        if (revision !== this.revision) throw staleError();
+        return planWorkshopComposition(recipe, dirtyIds);
+      });
     }
     return new Promise((resolve, reject) => {
       this.pending.set(revision, { resolve, reject });
-      this.worker.postMessage({ revision, recipe, dirtyIds });
+      try {
+        this.worker.postMessage({ revision, recipe, dirtyIds });
+      } catch (error) {
+        this.pending.delete(revision);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   }
 
-  receive({ revision, plan, error }) {
+  receive(data) {
+    const { revision, plan, error } = data ?? {};
     const pending = this.pending.get(revision);
     if (!pending) return;
     this.pending.delete(revision);
@@ -50,9 +78,19 @@ export class ProceduralWorkshopPlannerClient {
       pending.reject(staleError());
     } else if (error) {
       pending.reject(new Error(error));
+    } else if (!plan || typeof plan !== 'object') {
+      pending.reject(new Error('Workshop planning worker returned an invalid plan.'));
     } else {
       pending.resolve(plan);
     }
+  }
+
+  failWorker(worker, event, fallbackMessage) {
+    if (this.disposed || this.worker !== worker) return;
+    event.preventDefault?.();
+    worker.terminate();
+    this.worker = null;
+    this.failAll(new Error(event.message || fallbackMessage));
   }
 
   cancel() {
@@ -66,7 +104,9 @@ export class ProceduralWorkshopPlannerClient {
   }
 
   dispose() {
-    this.cancel();
+    if (this.disposed) return;
+    this.disposed = true;
+    this.failAll(disposedError());
     this.worker?.terminate();
     this.worker = null;
   }

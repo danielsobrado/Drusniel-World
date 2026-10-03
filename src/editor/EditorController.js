@@ -43,6 +43,14 @@ import { ConstructionEditAudio } from './construction/ConstructionEditAudio.js';
 import { constructionCutIntent } from './construction/ConstructionPointerIntent.js';
 export { isUsableConstructionStroke } from './construction/ConstructionDrawingPath.js';
 
+function notifyConstructionAudio(audio, action, ...args) {
+  try {
+    audio?.[action](...args);
+  } catch (error) {
+    console.error('Construction history audio failed.', error);
+  }
+}
+
 /** Commit a raise/lower burst as one history entry once the keys settle. */
 const TOP_EDIT_COMMIT_MS = 250;
 
@@ -648,26 +656,28 @@ export class EditorController {
     // history entry yet. Flush it first, or this undo pops the entry before it
     // and the burst then lands on top of the restored state.
     this.flushTopEdit();
-    const entry = this.undoStack.pop();
+    const entry = this.undoStack.at(-1);
     if (!entry) {
       return;
     }
     this.applyHistory(entry, 'undo');
-    this.constructionAudio?.history(entry, 'undo');
+    this.undoStack.pop();
     this.redoStack.push(entry);
+    notifyConstructionAudio(this.constructionAudio, 'history', entry, 'undo');
     this.emitMap();
     this.emitState();
   }
 
   redo() {
     this.flushTopEdit();
-    const entry = this.redoStack.pop();
+    const entry = this.redoStack.at(-1);
     if (!entry) {
       return;
     }
     this.applyHistory(entry, 'redo');
-    this.constructionAudio?.history(entry, 'redo');
+    this.redoStack.pop();
     this.undoStack.push(entry);
+    notifyConstructionAudio(this.constructionAudio, 'history', entry, 'redo');
     this.emitMap();
     this.emitState();
   }
@@ -1776,12 +1786,12 @@ export class EditorController {
   }
 
   commitHistory(entry) {
-    this.constructionAudio?.commit(entry);
     this.undoStack.push(entry);
     if (this.undoStack.length > MAX_HISTORY_ENTRIES) {
       this.undoStack.shift();
     }
     this.redoStack = [];
+    notifyConstructionAudio(this.constructionAudio, 'commit', entry);
     this.emitState();
   }
 

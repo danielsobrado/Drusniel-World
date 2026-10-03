@@ -101,6 +101,7 @@ export class CpuTreeImpostorBatch {
     }
 
     this.geometry.instanceCount = count;
+    this.mesh.visible = count > 0;
     if (count > 0) {
       markAttributeRangeUpdated(transforms, count, { counter: 'treeImpostorAttributeBytesUploaded' });
       markAttributeRangeUpdated(parameters, count, { counter: 'treeImpostorAttributeBytesUploaded' });

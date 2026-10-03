@@ -339,12 +339,36 @@ try {
         atlases: treeView.impostorAtlases.length,
       },
     );
+    const origin = editor.terrainView.floatingOrigin.getState();
+    const camera = editor.viewModeController.camera;
+    const chunkSize = editor.terrainView.chunkWorldSize;
+    const cameraChunk = `${Math.floor((camera.position.x + origin.x) / chunkSize)}:${
+      Math.floor(-(camera.position.z + origin.z) / chunkSize)
+    }`;
+    check(
+      'tree-camera-chunk-keeps-full-detail',
+      treeView.chunkLodStates.get(cameraChunk)?.target === 'near',
+      { cameraChunk, band: treeView.chunkLodStates.get(cameraChunk)?.target ?? null },
+    );
+    const treeAssets = [
+      { scene: config.assets.scene },
+      ...(config.assets.treeVariants ?? []),
+    ];
+    const bushAssets = config.assets.bushVariants ?? [];
+    const missingAssets = (definitions, view) => definitions
+      .filter((definition) => !view.prototypeIndicesByAsset.get(definition.id ?? definition.scene)?.length)
+      .map((definition) => definition.id ?? definition.scene);
+    const missingTrees = missingAssets(treeAssets, treeView);
+    const missingBushes = missingAssets(bushAssets, bushView);
     check(
       'configured-runtime-prototype-counts',
-      treeView.prototypes.length === 18 && bushView.prototypes.length === 5,
+      missingTrees.length === 0 && missingBushes.length === 0
+        && treeView.prototypes.length > 0 && bushView.prototypes.length > 0,
       {
         trees: treeView.prototypes.length,
         bushes: bushView.prototypes.length,
+        missingTrees,
+        missingBushes,
       },
     );
 
@@ -523,19 +547,20 @@ try {
     layer: 'bushes',
     representation: 'near',
     firstPrototype: 0,
-    prototypeCount: 5,
+    prototypeCount: report.bushPrototypes.length,
   });
   await captureCanvas(page, cdp, 'bush-near');
   await arrangeGallery({
     layer: 'bushes',
     representation: 'proxy',
     firstPrototype: 0,
-    prototypeCount: 5,
+    prototypeCount: report.bushPrototypes.length,
   });
   await captureCanvas(page, cdp, 'bush-proxy');
 
-  for (const firstPrototype of [0, 9]) {
-    const suffix = firstPrototype === 0 ? '00-08' : '09-17';
+  for (let firstPrototype = 0; firstPrototype < report.treePrototypes.length; firstPrototype += 9) {
+    const lastPrototype = Math.min(firstPrototype + 8, report.treePrototypes.length - 1);
+    const suffix = `${String(firstPrototype).padStart(2, '0')}-${String(lastPrototype).padStart(2, '0')}`;
     await arrangeGallery({
       layer: 'trees',
       representation: 'near',

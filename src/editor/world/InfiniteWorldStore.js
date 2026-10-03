@@ -1,4 +1,5 @@
 import { withSettlementData } from './settlements/SettlementData.js';
+import { hasForestEdits, normalizeForestEditDocument } from '../forest/ForestEditDocument.js';
 import { ProceduralWorldGenerator } from './ProceduralWorldGenerator.js';
 import { createWorldGenerator } from './WorldGeneratorFactory.js';
 import {
@@ -586,11 +587,13 @@ export class InfiniteWorldStore {
 
   clearOverrides() {
     const snapshot = this.createSnapshot({ cloneBaseTerrain: false });
-    if (this.tileOverrides.size === 0 && this.heightOverrides.size === 0) {
+    if (this.tileOverrides.size === 0 && this.heightOverrides.size === 0
+        && !hasForestEdits(this.forestEdits)) {
       return snapshot;
     }
     this.tileOverrides.clear();
     this.heightOverrides.clear();
+    this.forestEdits = normalizeForestEditDocument();
     this.cache.clear();
     this.emit({ kind: 'reset' });
     return snapshot;

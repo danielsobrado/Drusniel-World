@@ -164,6 +164,7 @@ export class GpuTreeImpostorBatch {
       appearances[offset + 3] = appearance[3];
     }
     this.recordCount = count;
+    this.mesh.visible = count > 0;
     this.countUniform.value = count;
     this.indirectNeedsReset ||= previousCount > 0 && count === 0;
     if (count > 0) {

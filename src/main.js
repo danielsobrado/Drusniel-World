@@ -1226,6 +1226,7 @@ async function startEditor() {
     if (!active) return;
 
     const frameTimestamp = Number.isFinite(timestamp) ? timestamp : performance.now();
+    stylizedSurface.beginFrame(frameTimestamp);
     const profiling = perfQa?.beginFrame(frameTimestamp) ?? false;
     const averageFps = frameRateMeter.record(frameTimestamp);
     if (frameTimestamp >= nextFrameRateDisplayAt) {

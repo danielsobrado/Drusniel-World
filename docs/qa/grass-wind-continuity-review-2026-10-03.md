@@ -47,6 +47,15 @@ apart at times 0, 8, and 60 seconds. The largest wind-vector jump fell from
 0.000093 per component, with no browser or GPU errors. Results are in
 `tmp/wind-gpu-continuity.json`.
 
+The settled origin view was captured with both grass and wind clocks frozen at
+zero, then with only the world-wind fragment node switched between the old and
+corrected evaluators. Images are `tmp/grass-seam-periodic-before.png` and
+`tmp/grass-seam-periodic-after.png`. The abrupt gust change across the origin is
+smoothed; local, continuous waves and biome-driven coverage remain visible.
+
+`npm run verify` passed all 2,992 tests, asset validations, the natural UI check,
+and the production build after the complete change.
+
 ## Hardware performance comparison
 
 Used the deterministic movement harness described in `docs/perf-qa.md` on the
@@ -59,20 +68,23 @@ node scripts/run-perf-qa.mjs --url http://127.0.0.1:5189 --headed
   --screenshot tmp/grass-wind-optimized.png
 ```
 
-| Metric | Before | Final change |
-| --- | ---: | ---: |
-| Settled before measurement | yes | yes |
-| Average FPS | 96.22 | 100.11 |
-| Frame dt p95 | 17.60 ms | 15.03 ms |
-| Frame dt p99 | 29.57 ms | 30.01 ms |
-| Hitches over 33.3 ms | 2 | 3 |
-| Compacted stems | 2,808,886 | 2,808,886 |
-| Accumulated meadow update time | 662.3 ms | 758.6 ms |
+| Metric | Before | Tile variation + LOD fix | Plus periodic field fix |
+| --- | ---: | ---: | ---: |
+| Settled before measurement | yes | yes | yes |
+| Average FPS | 96.22 | 100.11 | 93.34 |
+| Frame dt p95 | 17.60 ms | 15.03 ms | 15.86 ms |
+| Frame dt p99 | 29.57 ms | 30.01 ms | 31.40 ms |
+| Hitches over 33.3 ms | 2 | 3 | 4 |
+| Compacted stems | 2,808,886 | 2,808,886 | 2,808,886 |
+| Accumulated meadow update time | 662.3 ms | 758.6 ms | 798.2 ms |
 
 The uncached first implementation took 1,435.4 ms of accumulated meadow update
 time; caching removed most of that additional cost. The final implementation
-adds about 96 ms across the captured run while keeping the same stem workload.
-These are single-run comparisons and do not establish an overall FPS gain.
+adds about 136 ms across the captured run while keeping the same stem workload.
+These are single-run comparisons and do not establish an overall FPS gain or
+the cause of its run-to-run variation. The complete change retained p95 below
+33.3 ms and hitch rate below 2%; its movement capture is
+`tmp/grass-wind-periodic.json` with screenshot `tmp/grass-wind-periodic.png`.
 
 The full movement acceptance gate remains **failed**: collision readiness stops
 and streaming hitches occurred both before and after the grass changes. This

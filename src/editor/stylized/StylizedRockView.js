@@ -131,12 +131,13 @@ export class StylizedRockView {
     this.clusterField = null;
     this.signature = '';
     this.manifestCache = new Map();
-    this.pendingManifestBuild = null;
+    this.pendingManifestBuilds = new Map();
     this.manifestBuildsThisFrame = 0;
     this.manifestBuildBudgetMs = config.streaming?.rockManifestBuildBudgetMs
       ?? config.streaming?.heavyBuildBudgetMs
       ?? 3;
     this.manifestFrameStartedAt = 0;
+    this.manifestFrameTimestamp = null;
     this.prototypeBiomeRulesSignature = '[]';
     // Chunks other scatter layers asked about since the last prune. Bounded by
     // their request windows, which are a few hundred chunks of ~14 placements.
@@ -251,10 +252,18 @@ export class StylizedRockView {
     this.prototypeRevision += 1;
   }
 
-  update(timestamp, camera) {
-    if (this.disposed || this.prototypes.length === 0 || !this.terrainView.focusChunkKey || !camera) return;
+  beginFrame(timestamp) {
+    if (this.manifestFrameTimestamp === timestamp) return;
+    this.manifestFrameTimestamp = timestamp;
     this.manifestBuildsThisFrame = 0;
-    this.manifestFrameStartedAt = performance.now();
+    // Start the clock with the first cold build, rather than charging terrain
+    // commits or other frame work against the rock preparation allowance.
+    this.manifestFrameStartedAt = 0;
+  }
+
+  update(timestamp, camera) {
+    this.beginFrame(timestamp);
+    if (this.disposed || this.prototypes.length === 0 || !this.terrainView.focusChunkKey || !camera) return;
     const focus = this.terrainView.focusChunk;
     const origin = this.terrainView.floatingOrigin.getState();
     this.instanceAnchor.place(this.root, origin);
@@ -390,7 +399,7 @@ export class StylizedRockView {
     const cacheKey = `${chunkX}:${chunkZ}`;
     const cached = this.manifestCache.get(cacheKey);
     if (cached?.key === key) {
-      if (this.pendingManifestBuild?.cacheKey === cacheKey) this.pendingManifestBuild = null;
+      this.pendingManifestBuilds.delete(cacheKey);
       this.placementsByChunk.set(cacheKey, cached.placements);
       return cached.placements;
     }
@@ -537,13 +546,11 @@ export class StylizedRockView {
     const key = this.manifestKey(chunkX, chunkZ);
     const cacheKey = `${chunkX}:${chunkZ}`;
     const startedAt = performance.now();
-    const pending = this.pendingManifestBuild;
-    const placements = pending?.key === key && pending.cacheKey === cacheKey
+    const pending = this.pendingManifestBuilds.get(cacheKey);
+    const placements = pending?.key === key
       ? pending.builder.step()
       : buildStableChunkManifest(this.manifestOptions(chunkX, chunkZ));
-    if (pending?.key === key && pending.cacheKey === cacheKey) {
-      this.pendingManifestBuild = null;
-    }
+    this.pendingManifestBuilds.delete(cacheKey);
     const elapsed = performance.now() - startedAt;
     PerfCounters.inc('rockManifestBuilds');
     PerfCounters.inc('rockManifestBuildMs', elapsed);
@@ -561,18 +568,19 @@ export class StylizedRockView {
     ) {
       return null;
     }
+    if (this.manifestFrameStartedAt === 0) this.manifestFrameStartedAt = performance.now();
     this.manifestBuildsThisFrame += 1;
 
     const key = this.manifestKey(chunkX, chunkZ);
     const cacheKey = `${chunkX}:${chunkZ}`;
-    let pending = this.pendingManifestBuild;
-    if (pending?.key !== key || pending.cacheKey !== cacheKey) {
+    let pending = this.pendingManifestBuilds.get(cacheKey);
+    if (pending?.key !== key) {
       pending = {
         key,
         cacheKey,
         builder: createStableChunkManifestBuilder(this.manifestOptions(chunkX, chunkZ)),
       };
-      this.pendingManifestBuild = pending;
+      this.pendingManifestBuilds.set(cacheKey, pending);
     }
 
     const startedAt = performance.now();
@@ -588,7 +596,7 @@ export class StylizedRockView {
     PerfCounters.set('rockManifestBuild', sliceElapsed);
     if (placements === null) return null;
 
-    this.pendingManifestBuild = null;
+    this.pendingManifestBuilds.delete(cacheKey);
     PerfCounters.inc('rockManifestBuilds');
     return this.storeManifest(cacheKey, key, placements);
   }
@@ -662,6 +670,11 @@ export class StylizedRockView {
       if (!activeChunks.has(key) && !this.blockerRequests.has(key)) {
         this.manifestCache.delete(key);
         this.placementsByChunk.delete(key);
+      }
+    }
+    for (const key of this.pendingManifestBuilds.keys()) {
+      if (!activeChunks.has(key) && !this.blockerRequests.has(key)) {
+        this.pendingManifestBuilds.delete(key);
       }
     }
     // Consumers re-request every frame, so a fresh window is rebuilt before the
@@ -738,7 +751,7 @@ export class StylizedRockView {
     this.prototypeIndicesByAsset.clear();
     this.placements.length = 0;
     this.manifestCache.clear();
-    this.pendingManifestBuild = null;
+    this.pendingManifestBuilds.clear();
     this.placementsByChunk.clear();
     this.chunkLodStates.clear();
   }

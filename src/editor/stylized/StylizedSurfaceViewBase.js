@@ -590,6 +590,11 @@ export class StylizedSurfaceView {
     this.meadowGrass?.shiftOrigin(dx, dz);
   }
 
+  /** Share one preparation allowance between player collision and rendering. */
+  beginFrame(timestamp) {
+    this.rockView?.beginFrame(timestamp);
+  }
+
   /**
    * @param {number} timestamp
    * @param {object} camera
@@ -597,6 +602,7 @@ export class StylizedSurfaceView {
    *   render space, for the layers that react to the body standing in them
    */
   update(timestamp, camera, body = null) {
+    this.beginFrame(timestamp);
     if (!this.enabled || this.impostorBakeMode) return;
     this.frameStartedAt = performance.now();
     // These are gauges, not lifetime counters. Reset them before the slot pass

@@ -13,6 +13,7 @@ test('rock blocker preparation advances at most one bounded manifest slice per f
   const manifests = new Map();
   const view = Object.create(StylizedRockView.prototype);
   view.blockerRequests = new Set();
+  view.pendingManifestBuilds = new Map();
   view.manifestBuildsThisFrame = 0;
   view.manifestBuildBudgetMs = 100;
   view.manifestFrameStartedAt = performance.now();
@@ -40,7 +41,7 @@ test('rock blocker preparation advances at most one bounded manifest slice per f
       return slices.length < 3 ? null : placements;
     },
   };
-  view.pendingManifestBuild = { key: 'key:3:6', cacheKey: '3:6', builder };
+  view.pendingManifestBuilds.set('3:6', { key: 'key:3:6', cacheKey: '3:6', builder });
 
   // Every frame drives exactly one slice of the same cold build and reports
   // "not ready" until that build completes.
@@ -49,14 +50,14 @@ test('rock blocker preparation advances at most one bounded manifest slice per f
     assert.equal(view.prepareManifestForChunk(3, 6), null);
     assert.equal(slices.length, frame + 1);
     assert.equal(manifests.size, 0);
-    assert.strictEqual(view.pendingManifestBuild.builder, builder);
+    assert.strictEqual(view.pendingManifestBuilds.get('3:6').builder, builder);
   }
 
   startFrame();
   assert.deepEqual(view.prepareManifestForChunk(3, 6), placements);
   assert.equal(slices.length, 3);
   assert.deepEqual(manifests.get('3:6'), placements);
-  assert.equal(view.pendingManifestBuild, null);
+  assert.equal(view.pendingManifestBuilds.size, 0);
 
   // A prepared manifest is served from cache without resuming the builder.
   startFrame();
@@ -83,6 +84,7 @@ test('rock blocker preparation advances at most one bounded manifest slice per f
   const haloManifests = new Map();
   const live = Object.create(StylizedRockView.prototype);
   live.blockerRequests = new Set();
+  live.pendingManifestBuilds = new Map();
   live.manifestBuildsThisFrame = 0;
   live.manifestBuildBudgetMs = 100;
   live.manifestFrameStartedAt = performance.now();

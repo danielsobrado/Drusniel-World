@@ -790,7 +790,7 @@ export function createSimulationWorld({
       return serializeWorldSnapshot({
         definition,
         state,
-        commandRange: { count: journal.list().length },
+        commandRange: { count: journal.list().length, sequence: commandSeq },
       });
     },
 
@@ -855,6 +855,11 @@ export function createSimulationWorld({
       const applied = [];
       const accepted = [];
       const replayReasonLog = [];
+      const snapshotSequence = snapshot.commandRange?.sequence ?? snapshot.commandRange?.count ?? 0;
+      if (!Number.isSafeInteger(snapshotSequence) || snapshotSequence < 0) {
+        throw new Error('invalid_snapshot:command_sequence');
+      }
+      let replayCommandSeq = Math.max(commandSeq, snapshotSequence);
       for (const command of commands) {
         const result = isolatedDispatcher.dispatch(current, command, {
           definition: restored.definition,
@@ -868,11 +873,22 @@ export function createSimulationWorld({
         current = result.state;
         applied.push(command.id);
         accepted.push({ command, events: result.events });
+        // Generated entity IDs depend on command IDs. Reserve sequence numbers
+        // from this world's replay journal before accepting new live commands.
+        const worldSuffix = `:${restored.definition.worldId}:`;
+        const suffixIndex = command.id.lastIndexOf(worldSuffix);
+        if (suffixIndex >= 0) {
+          const sequence = Number(command.id.slice(suffixIndex + worldSuffix.length));
+          if (Number.isSafeInteger(sequence) && sequence >= 0) {
+            replayCommandSeq = Math.max(replayCommandSeq, sequence);
+          }
+        }
         if (result.result?.reasonCodes) replayReasonLog.push(...result.result.reasonCodes);
       }
 
       definition = restored.definition;
       state = current;
+      commandSeq = replayCommandSeq;
       clock.setTick(state.calendar.tick);
       state.calendar = calendarFromTick(clock.getTick(), clock.getConfig());
       lod.restore(replayLod.serialize());

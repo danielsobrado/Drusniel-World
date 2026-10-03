@@ -10,6 +10,37 @@ function createSimulation() {
   return createSimulationWorld({ campaign: createMiniCampaignFixture() });
 }
 
+test('replay into a fresh world reserves replayed command IDs for subsequent commands', () => {
+  const source = createSimulation();
+  source.initializeSystems();
+  const snapshot = source.snapshot();
+  const settlementId = [...source.state.settlements.keys()][0];
+  const first = source.promotePerson({ settlementId, name: 'First', role: 'merchant' });
+  const second = source.promotePerson({ settlementId, name: 'Second', role: 'merchant' });
+  const target = createSimulation();
+  assert.equal(target.replayFromSnapshot(snapshot, [first.command, second.command]).ok, true);
+  const next = target.promotePerson({ settlementId, name: 'Third', role: 'merchant' });
+  assert.equal(next.ok, true);
+  assert.equal(target.promotePerson({ settlementId, name: 'Fourth', role: 'merchant' }).ok, true);
+  const ids = target.getJournal().map((command) => command.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.equal(target.state.characters.get(first.result.characterId).data.name, 'First');
+});
+
+test('snapshot-only replay preserves command sequence after rejected commands', () => {
+  const source = createSimulation();
+  source.initializeSystems();
+  const settlementId = [...source.state.settlements.keys()][0];
+  source.promotePerson({ settlementId: 'missing', name: 'Rejected', role: 'merchant' });
+  const first = source.promotePerson({ settlementId, name: 'First', role: 'merchant' });
+  const target = createSimulation();
+  assert.equal(target.replayFromSnapshot(source.snapshot(), []).ok, true);
+  for (let i = 0; i < 4; i += 1) {
+    assert.equal(target.promotePerson({ settlementId, name: `New ${i}`, role: 'merchant' }).ok, true);
+  }
+  assert.equal(target.state.characters.get(first.result.characterId).data.name, 'First');
+});
+
 test('replay replaces live runtime history and derives LOD from the snapshot', () => {
   const simulation = createSimulation();
   assert.equal(simulation.initializeSystems().ok, true);

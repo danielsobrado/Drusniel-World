@@ -118,6 +118,9 @@ export function restoreWorldSnapshot(snapshot) {
     const serializedEntities = snapshot.entities[key] ?? [];
     if (!Array.isArray(serializedEntities)) throw invalidSnapshot(`entities.${key}`);
     for (const entity of serializedEntities) {
+      if (!entity || typeof entity !== 'object' || state[key].has(entity.id)) {
+        throw invalidSnapshot(`entities.${key}`);
+      }
       state[key].set(entity.id, structuredClone(entity));
     }
   }

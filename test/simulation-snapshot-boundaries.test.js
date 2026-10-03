@@ -22,6 +22,21 @@ function refreshChecksum(snapshot) {
   snapshot.snapshotChecksum = checksumCanonical(unsigned);
 }
 
+test('snapshot restore rejects duplicate entity IDs rather than silently overwriting them', () => {
+  const snapshot = createValidSnapshot();
+  const entity = {
+    id: 'settlement:duplicate', kind: 'settlement', status: 'active',
+    createdAtTick: 0, updatedAtTick: 0, revision: 0, schemaVersion: 1,
+    tags: [], data: {},
+  };
+  entity.kind = 'character';
+  entity.id = 'character:duplicate';
+  snapshot.entities.characters.push(entity, { ...entity, data: { name: 'Replacement' } });
+  refreshChecksum(snapshot);
+  assert.throws(() => restoreWorldSnapshot(snapshot),
+    (error) => error.code === 'invalid_snapshot' && error.path === 'entities.characters');
+});
+
 test('snapshot restore requires a checksum', () => {
   const snapshot = createValidSnapshot();
   delete snapshot.snapshotChecksum;

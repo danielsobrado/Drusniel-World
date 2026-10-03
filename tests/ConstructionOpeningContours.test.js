@@ -10,6 +10,8 @@ import { buildModuleMasonry } from '../src/editor/construction/compile/Construct
 import { coarsePlacementsForModule } from '../src/editor/construction/render/ConstructionLod.js';
 import { createConstructionMaterials, disposeConstructionMaterials } from '../src/editor/construction/render/ConstructionMaterials.js';
 import { courseSpans } from '../src/editor/construction/masonry/CurvedCoursePacker.js';
+import { openingArchContour, OPENING_CONTOUR_TOLERANCE } from '../src/editor/construction/masonry/OpeningContour.js';
+import { OPENING_CLEARANCE } from '../src/editor/construction/masonry/OpeningLayout.js';
 
 function fixture(style, profile, curved, dressed) {
   const path = createCubicBezierPathFromStroke(curved ? [[0, 0], [5, -1], [10, 0]] : [[0, 0], [10, 0]],
@@ -24,6 +26,23 @@ function fixture(style, profile, curved, dressed) {
 }
 
 test.afterEach(() => disposeConstructionMaterials());
+
+test('arch contour chords bound horizontal clearance even immediately below the apex', () => {
+  for (const profile of ['round', 'segmental', 'pointed']) {
+    const { opening } = fixture('glade-sandstone', profile, false, false);
+    const contour = openingArchContour(opening);
+    assert.ok(contour.length < 256, 'adaptive sampling remains bounded');
+    for (let i = 1; i < contour.length; i += 1) {
+      const a = contour[i - 1]; const b = contour[i];
+      for (const t of [0.25, 0.5, 0.75]) {
+        const y = a[1] + (b[1] - a[1]) * t;
+        const chord = a[0] + (b[0] - a[0]) * t;
+        const boundary = opening.s + openingHalfWidthAt(opening, y) + OPENING_CLEARANCE;
+        assert.ok(Math.abs(chord - boundary) <= OPENING_CONTOUR_TOLERANCE, `${profile}: horizontal error at height ${y}`);
+      }
+    }
+  }
+});
 
 for (const style of ['glade-sandstone', 'rounded-fieldstone', 'coursed-rubble']) {
   test(`${style}: fitted arches stay open and their reveals are stone in both detail tiers`, () => {

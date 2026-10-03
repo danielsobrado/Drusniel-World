@@ -28,7 +28,7 @@ try {
     growth: arg('growth', 'auto'), view: arg('view', 'front'), closeup: process.argv.includes('--closeup'),
     zoom: Number(arg('zoom', NaN)) });
   const results = [];
-  for (const id of arg('scenes', 'straight,curve,tower,arches,arch-profiles,curved-arch,low,growth,standard').split(',')) {
+  for (const id of arg('scenes', 'straight,curve,tower,arches,arch-profiles,curved-arch,low,growth,standard,meadow-closeup,meadow-curve,arched-courtyard').split(',')) {
     for (const light of ['neutral', 'warm']) {
       const result = await page.evaluate(async ({ id, light }) => {
         window.capture = await window.fixture.capture(id, light);

@@ -99,8 +99,8 @@ export function outlinePointCount(arcSegments, edgeSegments = 1) {
  *
  * @param ring counter-clockwise convex quad from `normalizeConvexQuad`
  * @param cornerRadius default in-plane corner radius
- * @param arcSegments segments per quarter-ish corner arc; 0 samples its
- *   bisector once for a four-corner distant bevel without changing stone identity
+ * @param arcSegments segments per quarter-ish corner arc; 0 keeps the solved
+ *   quad's corners with bisector normals for a four-corner distant bevel
  * @param cornerRadii optional four radii; their minimum is the deepest valid inset
  * @param edgeSegments 1 for straight edges, 2 to sample wear at their midpoints
  * @returns null when the corner radius does not fit the quad
@@ -132,8 +132,11 @@ export function createRoundedOutline(ring, cornerRadius, arcSegments, cornerRadi
       const angle = start + sweep * (arcSegments === 0 ? 0.5 : step / arcSegments);
       directionX[point] = Math.cos(angle);
       directionY[point] = Math.sin(angle);
-      coreX[point] = core[corner][0];
-      coreY[point] = core[corner][1];
+      // A four-point distant outline must retain the solved silhouette.
+      // Sampling only the arc bisectors moved every edge inward; beside a
+      // sloping bed that could expose backing across a whole narrow stone.
+      coreX[point] = arcSegments === 0 ? ring[corner][0] - radii[corner] * directionX[point] : core[corner][0];
+      coreY[point] = arcSegments === 0 ? ring[corner][1] - radii[corner] * directionY[point] : core[corner][1];
       radiusAt[point] = radii[corner];
       wearIndex[point] = corner * 2;
       point += 1;

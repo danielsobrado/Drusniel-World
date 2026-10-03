@@ -34,7 +34,7 @@ export const SKY_PRESETS = Object.freeze({
   glade: Object.freeze({
     label: 'Glade (warm building light)',
     sunElevation: 38,
-    sunAzimuth: 200,
+    sunAzimuth: 135,
     lowColor: '#f3dcbc',
     highColor: '#8ab4dc',
     sunGlowColor: '#ffd9a0',

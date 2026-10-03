@@ -21,7 +21,11 @@ export function openingArchContour(opening, clearance = OPENING_CLEARANCE) {
     const mid = point((a[1] + b[1]) / 2);
     const dx = b[0] - a[0]; const dy = b[1] - a[1];
     const error = Math.abs(dx * (mid[1] - a[1]) - dy * (mid[0] - a[0])) / Math.hypot(dx, dy);
-    if (depth < 16 && (error > OPENING_CONTOUR_TOLERANCE || Math.hypot(dx, dy) > 0.12)) {
+    // Clearance is measured horizontally at a given height. Near the crown,
+    // a small perpendicular error can still hide a large horizontal intrusion.
+    const horizontalError = Math.abs(mid[0] - (a[0] + b[0]) / 2);
+    if (depth < 24 && (error > OPENING_CONTOUR_TOLERANCE
+      || horizontalError > OPENING_CONTOUR_TOLERANCE * 0.5 || Math.hypot(dx, dy) > 0.12)) {
       split(a, mid, depth + 1); split(mid, b, depth + 1);
     } else result.push(b);
   };

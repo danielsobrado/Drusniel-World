@@ -747,7 +747,7 @@ function disposeBuiltGeometries(parts) {
 function buildPreviewParts(entries, components, remesh) {
   const groups = new Map();
   for (const entry of entries) {
-    const key = `${entry.materialRegion.id}|${entry.slot}|${entry.materialRegion.presetId ?? ''}`;
+    const key = `${entry.materialRegion.id}|${entry.slot}|${entry.materialRegion.presetId ?? ''}|uv:${!!entry.geometry.getAttribute('uv')}`;
     const group = groups.get(key) ?? {
       component: components.get(entry.componentId),
       material: entry.material,
@@ -802,7 +802,9 @@ function buildRuntimeParts(entries, components, remesh) {
   for (const entry of entries) {
     const component = components.get(entry.componentId);
     entry.geometry.applyMatrix4(componentGeometryMatrix(component, components, worldMatrices));
-    const key = `${entry.slot}|${entry.materialRegion.presetId ?? 'inherited'}`;
+    // Polygon roof pieces can omit UVs while primitive roofs supply them.
+    // Keep separate batches to preserve both streams without inventing mapping.
+    const key = `${entry.slot}|${entry.materialRegion.presetId ?? 'inherited'}|uv:${!!entry.geometry.getAttribute('uv')}`;
     const group = groups.get(key) ?? {
       material: entry.material,
       materialRegion: entry.materialRegion,

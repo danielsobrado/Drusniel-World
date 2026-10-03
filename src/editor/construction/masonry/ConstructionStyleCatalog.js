@@ -53,6 +53,7 @@ export const DEFAULT_COPING = Object.freeze({
 
 /** Shared defaults that reproduce the former hard-coded packer behaviour. */
 const DEFAULT_STYLE_TUNING = Object.freeze({
+  coursesPerBand: 1,
   splitMaxDepth: 2,
   // Null prefers the longer axis. A style can favour stacked thin inserts.
   splitHorizontalChance: null,
@@ -64,6 +65,9 @@ const DEFAULT_STYLE_TUNING = Object.freeze({
   depthScaleMin: 0.95,
   depthScaleMax: 0.985,
   faceOffsetAmplitude: 0.009,
+  faceOffsetCoherence: 0,
+  merlonHeight: null,
+  merlonCourseHeight: null,
 
   // Shortest leaf a horizontal split may leave, in metres. Matches
   // `CourseLattice`'s MIN_SPLIT_HEIGHT, which every style used before.
@@ -180,6 +184,12 @@ export function defineConstructionStyle(input) {
     finiteInRange(style.splitHorizontalChance, `${style.key} splitHorizontalChance`, 0, 1);
   }
   finiteInRange(style.splitMaxDepth, `${style.key} splitMaxDepth`, 0, 2);
+  finiteInRange(style.faceOffsetCoherence, `${style.key} faceOffsetCoherence`, 0, 1);
+  if (style.merlonHeight != null) finiteInRange(style.merlonHeight, `${style.key} merlonHeight`, 0.2, 2);
+  if (style.merlonCourseHeight != null) finiteInRange(style.merlonCourseHeight, `${style.key} merlonCourseHeight`, 0.1, 1);
+  if (!Number.isInteger(style.coursesPerBand) || style.coursesPerBand < 1 || style.coursesPerBand > 2) {
+    throw new Error(`${style.key} coursesPerBand must be 1 or 2.`);
+  }
   finiteInRange(style.splitMinHeight, `${style.key} splitMinHeight`, 0.05, 1);
 
   finiteInRange(style.jointInsetMin, `${style.key} jointInsetMin`, 0, 0.1);
@@ -392,15 +402,20 @@ export const CONSTRUCTION_STYLES = Object.freeze({
     stonePalette: 'glade-sandstone',
     bedAmplitude: 0.12,
     jointTilt: 0.065,
-    // Mix full-height blocks with paired smaller ones, without adding courses.
-    splitChance: 0.48,
-    splitHorizontalChance: 0.7,
-    splitMaxDepth: 1,
+    // Split two-course cells at different local heights. Unsplit cells become
+    // uprights; neighboring stacks supply fitted smaller stones and break seams.
+    coursesPerBand: 2,
+    splitChance: 0.88,
+    splitHorizontalChance: 0.65,
+    splitMaxDepth: 2,
     splitMinHeight: 0.13,
     depthScaleMin: 0.96,
     depthScaleMax: 1.0,
     // Some blocks stand proud of the face, a few sit back.
     faceOffsetAmplitude: 0.032,
+    faceOffsetCoherence: 0.65,
+    merlonHeight: 0.4,
+    merlonCourseHeight: 0.4,
     // Blocks meet at the joint width: no in-plane shrink or turn.
     exactFit: true,
     // Real units supply the joints and worn bevels; broad faces stay calm.
@@ -423,7 +438,7 @@ export const CONSTRUCTION_STYLES = Object.freeze({
       height: 0.24,
       oversail: 1.04,
       widthRatio: 1.1,
-      crownVariation: 0.12,
+      crownVariation: 0.22,
     },
   }),
 });

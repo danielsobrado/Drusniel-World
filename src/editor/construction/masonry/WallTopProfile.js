@@ -204,7 +204,7 @@ export function createWallTopProfile(record, arcTable, { style = null } = {}) {
    * Merlons over an arc range. The rhythm is phase-locked to absolute arc
    * length so adjacent modules agree at their shared boundary.
    */
-  function crenellationsOver(s0, s1, { merlonHeight = DEFAULT_MERLON_HEIGHT } = {}) {
+  function crenellationsOver(s0, s1, { merlonHeight = style?.merlonHeight ?? DEFAULT_MERLON_HEIGHT } = {}) {
     if (top.style !== 'crenellated') return [];
     const merlons = [];
     const width = merlonSpacing * MERLON_DUTY;

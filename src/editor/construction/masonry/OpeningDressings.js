@@ -2,6 +2,8 @@ import { openingArchContour } from './OpeningContour.js';
 
 const TRIM = 0.22;
 const JOINT = 0.006;
+// Keep the backing behind the reveal even where two dressed stones meet.
+const REVEAL_RECESS = 0.06;
 
 function polylineSamples(points) {
   const distances = [0];
@@ -32,7 +34,7 @@ function dressing(points, thickness) {
   const y = (Math.max(...ys) + Math.min(...ys)) / 2;
   const local = values => values.map(([x, h]) => [x - s, h - y]);
   // Backing retreats from the reveal, while the visible arch stone spans its depth.
-  const innerCore = points.map((p, i) => p.map((v, axis) => v + (outer[i][axis] - v) * 0.14));
+  const innerCore = points.map((p, i) => p.map((v, axis) => v + (outer[i][axis] - v) * (REVEAL_RECESS / TRIM)));
   return {
     category: 'voussoir', s, y, width, height, depth: thickness * 1.06,
     offsetNormal: 0, roll: 0,
@@ -58,7 +60,7 @@ export function layoutOpening(opening, { thickness, minWidth = 0.2 }) {
       depth: thickness * 1.06, offsetNormal: 0, roll: 0,
       contourPolygons: [[rectangle(-(jambHeight - JOINT) / 2, (jambHeight - JOINT) / 2)]],
       mortarPolygons: [[rectangle(-jambHeight / 2, jambHeight / 2,
-        -TRIM / 2 + (side > 0 ? 0.025 : 0), TRIM / 2 - (side < 0 ? 0.025 : 0))]],
+        -TRIM / 2 + (side > 0 ? REVEAL_RECESS : 0), TRIM / 2 - (side < 0 ? REVEAL_RECESS : 0))]],
     });
   }
   if (opening.profile === 'flat') return { jambs, voussoirs: [], keystone: {

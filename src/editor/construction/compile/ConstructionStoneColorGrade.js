@@ -102,6 +102,8 @@ export function constructionStoneColorMultipliers({
   const value = lerp(profile.value.min, profile.value.max, lane(valueHash, 8));
   const patch = profile.patches && surface ? stoneColorPatch(profile.patches, seed, surface) : null;
   const patchStrength = patch ? profile.patches.strength * categoryAmount : 0;
-  return target.map((channel, index) => lerp(lerp(1, channel, amount) * value,
-    patch?.[index] ?? 1, patchStrength));
+  // Patches tint the stone's own grade rather than replacing it: pale areas
+  // still contain darker stones and an outlier remains an outlier.
+  return target.map((channel, index) => lerp(1, channel, amount) * value
+    * lerp(1, patch?.[index] ?? 1, patchStrength));
 }

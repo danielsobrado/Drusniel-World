@@ -45,6 +45,7 @@ export function layoutMerlon(merlon, {
   thickness,
   seed,
   index,
+  courseHeight = null,
 }) {
   const shape = mixSeed(seed ^ MERLON_HASH, index);
   const spurHash = mixSeed(seed ^ SPUR_HASH, index);
@@ -59,7 +60,7 @@ export function layoutMerlon(merlon, {
   // wall in a fine-grained style the crown can otherwise eat enough of
   // `MAX_CONSTRUCTION_STONES` to leave the far end of the wall unbuilt.
   const bridge = lane(shape, 0) < 0.72 ? 1 : 3;
-  const rows = bridge === 1 ? 2 : 4;
+  const rows = courseHeight > 0 ? Math.max(1, Math.min(4, Math.ceil(merlon.height / courseHeight))) : bridge === 1 ? 2 : 4;
   // How many stones will actually course across this merlon. A fine-grained
   // style crenellates on a tighter spacing, and three columns across a 0.5 m
   // merlon would be splinters, not masonry.
@@ -67,7 +68,7 @@ export function layoutMerlon(merlon, {
   // "The central polygon is deleted." Only the tall variant, only where there is
   // a pier to leave either side of the void, and not always — so a crown reads
   // as a run of plain merlons with the odd arrow loop in it.
-  const pierced = bridge === 3 && columns === 3 && lane(shape, 8) < 0.75;
+  const pierced = rows >= 4 && bridge === 3 && columns === 3 && lane(shape, 8) < 0.75;
 
   // "For each polygon a new polygon is created relatively to the bounding box,
   // randomly y offsetted and scaled."
@@ -132,7 +133,7 @@ export function layoutMerlon(merlon, {
     const side = lane(spurHash, 8) < 0.5 ? -1 : 1;
     const crownWidth = rowWidthAt(rows - 1);
     const length = Math.max(0.1, (0.3 + lane(spurHash, 16) * 0.45) * cellSize(crownWidth, columns));
-    const row = rows - 1 - Math.round(lane(spurHash, 24));
+    const row = Math.max(0, rows - 1 - Math.round(lane(spurHash, 24)));
     units.push({
       category: 'ashlar',
       s: merlon.s + side * (crownWidth / 2 + length / 2),

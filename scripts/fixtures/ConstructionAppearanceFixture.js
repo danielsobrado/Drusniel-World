@@ -9,6 +9,8 @@ import { coarsePlacementsForModule } from '/src/editor/construction/render/Const
 import { SKY_PRESETS } from '/src/editor/stylized/sky/SkyPresets.js';
 import { skyAmbientColor } from '/src/editor/stylized/sky/skyAmbient.js';
 import { directionFromAngles } from '/src/editor/stylized/StylizedGodRaysPostProcess.js';
+import { constructionGardenScene } from './ConstructionGardenScenes.js';
+import { addConstructionGardenEnvironment, gardenHeightAt } from './ConstructionGardenEnvironment.js';
 
 /** Fixed semantic scenes, camera and lighting for comparing masonry changes. */
 export async function createConstructionAppearanceFixture({ styleKey = 'glade-sandstone', lodBand = 'near', growth = 'auto', view = 'front', closeup = false, zoom = null } = {}) {
@@ -35,13 +37,24 @@ export async function createConstructionAppearanceFixture({ styleKey = 'glade-sa
     camera.zoom = zoom;
     camera.updateProjectionMatrix();
   }
+  const baseCamera = camera.clone();
 
   async function capture(id, light = 'neutral') {
+    camera.copy(baseCamera);
+    const garden = constructionGardenScene(id, { styleKey, growth });
+    if (garden) {
+      camera.position.fromArray(garden.camera.position);
+      if (view === 'back') camera.position.z *= -1;
+      camera.lookAt(...garden.camera.target);
+      camera.zoom = Number.isFinite(zoom) && zoom > 0 && zoom <= 10 ? zoom : garden.camera.zoom;
+      camera.updateProjectionMatrix();
+    }
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#c3c6b5');
     const look = light === 'warm' ? SKY_PRESETS.glade : null;
-    scene.add(new THREE.HemisphereLight(look ? skyAmbientColor(look) : '#fffaf0',
-      look?.groundLightColor ?? '#7c8264', look?.ambientIntensity ?? 1.7));
+    const hemisphere = new THREE.HemisphereLight(look ? skyAmbientColor(look) : '#fffaf0',
+      look?.groundLightColor ?? '#7c8264', look?.ambientIntensity ?? 1.7);
+    scene.add(hemisphere);
     const sun = new THREE.DirectionalLight(look?.directionalColor ?? '#ffffff', look?.directionalIntensity ?? 3);
     if (look) sun.position.copy(directionFromAngles(look.sunElevation, look.sunAzimuth).multiplyScalar(20));
     else sun.position.set(-5, 12, 8);
@@ -51,12 +64,14 @@ export async function createConstructionAppearanceFixture({ styleKey = 'glade-sa
     sun.shadow.normalBias = 0.025;
     sun.shadow.radius = look?.shadowRadius ?? 1;
     scene.add(sun);
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200),
+    const ground = garden ? null : new THREE.Mesh(new THREE.PlaneGeometry(200, 200),
       new THREE.MeshStandardNodeMaterial({ color: '#89916d', roughness: 1 }));
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.04;
-    ground.receiveShadow = true;
-    scene.add(ground);
+    if (ground) {
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -0.04;
+      ground.receiveShadow = true;
+      scene.add(ground);
+    }
 
     const points = id === 'tower'
       ? Array.from({ length: 32 }, (_, i) => [Math.cos(i * Math.PI / 16) * 3.6, Math.sin(i * Math.PI / 16) * 3.6])
@@ -78,36 +93,46 @@ export async function createConstructionAppearanceFixture({ styleKey = 'glade-sa
         profile: id === 'arch-profiles' ? ['round', 'segmental', 'pointed', 'flat'][i] : 'round', dressed: true,
       })) : [],
     });
-    const plan = planConstruction(record);
-    const materials = createConstructionMaterials(record);
+    const walls = garden?.walls ?? [{ record, arcTable }];
+    const environment = garden ? await addConstructionGardenEnvironment(scene,
+      { ...garden, sun, hemisphere, renderer, showTrees: view !== 'back' }) : null;
     let stones = 0;
     let triangles = 0;
     let growthLeaves = 0;
     let groundDetails = 0;
-    for (const module of plan.modules) {
-      const placements = lodBand === 'coarse' ? coarsePlacementsForModule({ record, module, totalLength: plan.totalLength }) : module.placements;
-      const built = buildModuleMasonry(placements, {
-        record, materials, arcTable, moduleOrigin: { x: 0, z: 0 }, groundHeightAt: () => 0,
-        pathInterval: module.pathInterval, lodBand,
-      });
-      for (const mesh of built.meshes) scene.add(mesh);
-      stones += built.stats.stones;
-      triangles += built.stats.totalTriangles;
-      growthLeaves += built.stats.growthLeaves ?? 0;
-      groundDetails += built.stats.groundDetails ?? 0;
+    for (const { record, arcTable } of walls) {
+      const plan = planConstruction(record);
+      const materials = createConstructionMaterials(record);
+      for (const module of plan.modules) {
+        const placements = lodBand === 'coarse' ? coarsePlacementsForModule({ record, module, totalLength: plan.totalLength }) : module.placements;
+        const built = buildModuleMasonry(placements, {
+          record, materials, arcTable, moduleOrigin: { x: 0, z: 0 }, groundHeightAt: garden ? gardenHeightAt : () => 0,
+          pathInterval: module.pathInterval, lodBand,
+        });
+        for (const mesh of built.meshes) scene.add(mesh);
+        stones += built.stats.stones;
+        triangles += built.stats.totalTriangles;
+        growthLeaves += built.stats.growthLeaves ?? 0;
+        groundDetails += built.stats.groundDetails ?? 0;
+      }
     }
     await renderer.compileAsync(scene, camera);
     await renderer.renderAsync(scene, camera);
     // GPU completion makes the screenshot independent of shader compile timing.
     await renderer.backend.device?.queue.onSubmittedWorkDone();
     return {
-      id, light, lodBand, growth, view, closeup, zoom: camera.zoom, stones, triangles, growthLeaves, groundDetails,
+      id, light, lodBand, growth, view, closeup: closeup || id === 'meadow-closeup', zoom: camera.zoom, stones, triangles, growthLeaves, groundDetails,
       lightingPreset: look ? 'glade' : 'neutral',
-      openingArcs: record.features.map(feature => arcTable.toArc(feature.segmentId, feature.arcFraction)),
+      wallCount: walls.length, environment: environment?.stats ?? null,
+      camera: { position: camera.position.toArray(), rotation: camera.quaternion.toArray(), zoom: camera.zoom },
+      openingArcs: walls.flatMap(({ record, arcTable }) => record.features.map(feature => arcTable.toArc(feature.segmentId, feature.arcFraction))),
       backend: renderer.backend.constructor.name,
       dispose() {
-        scene.traverse(object => object.geometry?.dispose());
-        ground.material.dispose();
+        const geometries = new Set();
+        scene.traverse(object => { if (object.geometry) geometries.add(object.geometry); });
+        for (const geometry of geometries) geometry.dispose();
+        ground?.material.dispose();
+        environment?.dispose();
         sun.shadow.dispose();
         disposeConstructionMaterials();
       },

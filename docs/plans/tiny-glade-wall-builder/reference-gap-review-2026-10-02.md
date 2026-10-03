@@ -2,6 +2,13 @@
 
 Date: 2026-10-02
 
+Latest implementation and refreshed priorities:
+[Wall bond and close-up review](../../qa/wall-bond-detail-review-2026-10-02.md).
+The evidence below records the earlier ground/lighting milestone. Paired bands,
+coherent depth offsets, stronger color patches and smaller battlements have
+since landed; remaining band seams, broad upright proportions, selective wear,
+meadow scenes, direct gestures and the hitch gate still require work.
+
 This review refines the active scope in
 [Full wall fidelity improvements](full-fidelity-improvements-2026-10-02.md).
 The full scope remains required. The recommendations below describe our

@@ -12,15 +12,15 @@ edit invalidation, undo, persistence, collision and near/coarse identity.
 
 | Requirement | Current state | Completion evidence |
 | --- | --- | --- |
-| Matching close-up, curved meadow and arched courtyard reference scenes | Plain fixtures corrected for full-path opening positions; meadow/courtyard compositions pending | Render all three at matching poses and inspect actual PNGs |
+| Matching close-up, curved meadow and arched courtyard reference scenes | Fixed garden scene families implemented; 36 hardware captures verified, repeats pixel-identical; exact reference/art and world-scene alignment pending | Render all three at matching poses and inspect actual PNGs |
 | Warm sunlight, cooler shaded faces, softer shadows and contact shading | Glade sun/fill and shadow softness refined; warm fixture uses production preset; world verification pending | World and fixture captures plus settled rendering comparison |
-| Mixed joint patterns, fewer continuous seams/four-way joints, upright blocks and fillers | Mixed leaves exist; refinement pending | Neutral close-up layout/coverage checks across seeds and curves |
+| Mixed joint patterns, fewer continuous seams/four-way joints, upright blocks and fillers | Paired bands and uneven inserts implemented; band-boundary seams and narrow repeated uprights still need refinement | Neutral close-up layout/coverage checks across seeds and curves |
 | Exposure-aware corner chips and quiet broad faces | Stable uneven bevels exist; exposure refinement pending | Inspect ends/crowns/arches; bounded valid topology |
-| Related stone depth differences and occasional proud stones | Independent depth offsets exist | Deterministic spatial variation; sealed curved joints |
-| Related color patches, pale/ochre/peach outliers and localized stains | Per-stone color exists | Surface captures, custom-material preservation, stable regeneration |
-| Rough crowns, varied cap lengths and less mechanical battlements | Top styles and mild cap wear exist | Bounded seated silhouettes at low/standard heights and all tiers |
+| Related stone depth differences and occasional proud stones | Continuous wall-local depth field implemented and coverage checked; visual refinement remains | Deterministic spatial variation; sealed curved joints |
+| Related color patches, pale/ochre/peach outliers and localized stains | Stronger spatial patches preserve individual colors; localized stains pending | Surface captures, custom-material preservation, stable regeneration |
+| Rough crowns, varied cap lengths and less mechanical battlements | Small battlements use fewer full-sized stones; crown wear refined; cap/end art pending | Bounded seated silhouettes at low/standard heights and all tiers |
 | Bonded open ends, corners and T-junctions | End dressings exist; shared junction resolution pending | Derived junction plans, no buried dressings/overlap, undo and local rebuild |
-| Radial arch stones, blended shoulders, supported narrow piers | Fitted openings exist | Curved/mixed-profile passage and collision checks |
+| Radial arch stones, blended shoulders, supported narrow piers | Fitted openings exist; apex contour and reveal/coarse coverage fixed; adaptive shoulders/piers pending | Curved/mixed-profile passage and collision checks |
 | Interior face, thickness and coping quality | Two-sided geometry exists | Inner/outer captures on tight curves and closed loops |
 | Larger shaped ivy leaves, branches, overlap, orientation, stone attachment and shadows | Folded heart/lobed leaves, faceted stems, petioles and placement-based attachment implemented; joint-guided routes, corner/crown strands pending | Actual close-up renders, opening/ground clearances, batched stable geometry |
 | Grass tufts, flowers, pebbles, moss and embedded ground contact | Sparse batched terrain-following contact dressing implemented; meadow integration/ruin masks pending | World/garden captures, bounded terrain-following decoration |
@@ -30,7 +30,7 @@ edit invalidation, undo, persistence, collision and near/coarse identity.
 | Finished masonry visible during localized drag, exact affected curve/opening/trim preview | Parked draft improvements exist | Pointer captures and bounded preview work at 60 FPS target |
 | Layered soft stone taps/scrapes with gesture-based variation | Quiet synthesized events exist | Listening artifact plus mute/rate-limit/action checks |
 | Inviting garden/courtyard/castle presets, minimal contextual controls | Draw/Line/Circle and matching exist | First-minute courtyard+opening+reshape+undo without numeric input |
-| Regression, persistence, collision and performance acceptance | Current pass: 2,952 tests and build pass; hardware WebGPU visuals pass; 3.71% hitches exceed 2% gate | Full relevant QA, settled before/after metrics, explicit gate verdict |
+| Regression, persistence, collision and performance acceptance | Latest pass: 2,980 tests and build pass; hardware WebGPU captures inspected; 4.02% hitches exceed 2% gate | Full relevant QA, settled before/after metrics, explicit gate verdict |
 
 ## Delivery order
 
@@ -43,6 +43,28 @@ edit invalidation, undo, persistence, collision and near/coarse identity.
 This order does not narrow the objective. Unfinished rows remain required.
 
 ## Progress
+
+- Garden comparison scenes and reusable capture verifier are implemented:
+  [Garden reference scenes](../../qa/wall-garden-reference-scenes-2026-10-02.md).
+  They reuse production wall, meadow blade and contact-detail geometry and
+  provide fixed close-up, curved enclosure and arched courtyard compositions.
+  All 36 capture cases pass; repeat PNGs and poses match exactly, with stable
+  meadow/stone counts and opening anchors across wall tiers. This QA milestone
+  does not complete the remaining art, world rendering, direct editing or
+  performance requirements.
+
+- Latest bond/detail milestone and refreshed recommendations:
+  [Wall bond and close-up review](../../qa/wall-bond-detail-review-2026-10-02.md).
+  Paired course bands, coherent depth offsets, stronger color patches and smaller
+  full-stone battlements are implemented. Arch apex sampling, reveal recess and
+  coarse silhouette fixes pass the full suite. Remaining long band seams,
+  selective wear/stains, meadow fixtures, junctions and direct gestures stay open.
+- Fresh near captures: `tmp/wall-bond-verified-near/`. Frozen sequential corridor
+  reports: `tmp/wall-bond-perf-{before,after}.json`. Candidate: 64.78 FPS,
+  p95 31.55 ms, 4.02% hitches, 1,384 ms construction build work; complete frames,
+  settled streaming, 96 resident modules, queue 0 and collision ready 9/9.
+  Baseline: 64.61 FPS, p95 31.9 ms, 4.15% hitches, 1,507 ms build work. One module
+  ends in a different detail band. The hitch gate and full objective remain open.
 
 - Initial inspection: current tree clean; previous stone/crown/LOD work is committed.
 - At initial inspection, growth emitted five-vertex diamond leaves and one flat strip per stem;

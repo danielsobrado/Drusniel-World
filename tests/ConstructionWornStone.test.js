@@ -83,7 +83,7 @@ test('edge midpoint subdivision preserves the rounded outline and stable wear sa
   }
 });
 
-test('distance corner samples retain wear identity within the rounding radius', () => {
+test('distance corner samples preserve the solved footprint and corner wear identity', () => {
   const ring = [[-0.25, -0.2], [0.25, -0.2], [0.28, 0.2], [-0.22, 0.2]];
   const radii = [0.025, 0.032, 0.021, 0.035];
   const near = createRoundedOutline(ring, 0.03, 1, radii, 2);
@@ -92,9 +92,15 @@ test('distance corner samples retain wear identity within the rounding radius', 
   for (let corner = 0; corner < 4; corner += 1) {
     assert.equal(coarse.wearIndex(corner), near.wearIndex(corner * 3));
     const x = coarse.pointX(corner, 0), y = coarse.pointY(corner, 0);
+    assert.ok(Math.hypot(x - ring[corner][0], y - ring[corner][1]) < 1e-12);
+    // Tangent length is r*tan(turn/2), which exceeds r at an acute corner.
+    const first = corner * 3, last = first + 1;
+    const cosine = near.normalX(first) * near.normalX(last)
+      + near.normalY(first) * near.normalY(last);
+    const tangentLength = radii[corner] * Math.sqrt((1 - cosine) / (1 + cosine));
     for (let endpoint = 0; endpoint < 2; endpoint += 1) {
       const index = corner * 3 + endpoint;
-      assert.ok(Math.hypot(x - near.pointX(index, 0), y - near.pointY(index, 0)) <= radii[corner] + 1e-9);
+      assert.ok(Math.abs(Math.hypot(x - near.pointX(index, 0), y - near.pointY(index, 0)) - tangentLength) < 1e-9);
     }
   }
 });

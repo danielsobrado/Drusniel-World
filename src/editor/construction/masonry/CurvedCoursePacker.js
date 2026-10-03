@@ -25,7 +25,8 @@ import { layoutMerlon } from './MerlonOrnament.js';
 import { fitOpeningContour, openingVoidPolygon } from './OpeningContour.js';
 import { CONSTRUCTION_SUPPORT_ROLE } from './ConstructionSupportRoles.js';
 import { DEFAULT_COPING } from './ConstructionStyleCatalog.js';
-import { createWallCourseTable } from './WallCourseTable.js';
+import { createWallCourseTable, groupWallCourseBands } from './WallCourseTable.js';
+import { surfaceValueAt } from './SurfaceValueField.js';
 import {
   createRuinDamageField,
   isProtectedFooting,
@@ -381,12 +382,12 @@ export function packCurvedWall({
   // Course grid, with a taller footing course when the style has one. Sized
   // from wall-wide values only, so modules either side of a seam agree.
   const footing = style.footing ?? null;
-  const courseTable = createWallCourseTable({
+  const courseTable = groupWallCourseBands(createWallCourseTable({
     courseHeight,
     footing,
     wallHeight: heightScale,
     bodyHeight: bodyMax,
-  });
+  }), { courseHeight, coursesPerBand: style.coursesPerBand ?? 1 });
   const courses = courseTable.count;
   const footingTargetWidth = footing
     ? Math.max(
@@ -665,9 +666,10 @@ export function packCurvedWall({
           style.depthScaleMax ?? 0.985,
           hashLane(shapeSeed, index, 3),
         );
-        const faceOffset = (hashLane(shapeSeed, index, 2) - 0.5)
-          * 2
-          * (style.faceOffsetAmplitude ?? 0.009);
+        const coherence = style.faceOffsetCoherence ?? 0;
+        const depthPatch = coherence > 0 ? surfaceValueAt(seed, leafCenter, face.anchorY, 1.4, 1.1, 0x4b7a90cd) : 0.5;
+        const faceOffset = (lerp(hashLane(shapeSeed, index, 2), depthPatch, coherence) - 0.5)
+          * 2 * (style.faceOffsetAmplitude ?? 0.009);
 
         stones.push(Object.freeze({
           category: 'field',
@@ -824,7 +826,7 @@ export function packCurvedWall({
       const inset = 0.01 + hashLane(shapeSeed, index, 0) * 0.012;
       // Vary the exposed crown, keeping each cap's bed at the solved body top.
       // Downward-only wear preserves the authored wall-height envelope.
-      const crownDrop = copingHeight * (coping.crownVariation ?? 0) * hashLane(shapeSeed, index, 16);
+      const crownDrop = copingHeight * (coping.crownVariation ?? 0) * hashLane(shapeSeed, index, 1);
       emitUnit('coping', s, topHeightAt(s) - (copingHeight + crownDrop) / 2, index, {
         packedWidth: stone.width,
         width: Math.max(0.12, stone.width - inset),
@@ -856,6 +858,7 @@ export function packCurvedWall({
         thickness,
         seed,
         index: merlonIndex,
+        courseHeight: style.merlonCourseHeight,
       });
       for (let unitIndex = 0; unitIndex < ornament.units.length; unitIndex += 1) {
         const unit = ornament.units[unitIndex];

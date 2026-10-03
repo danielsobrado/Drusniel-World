@@ -22,6 +22,17 @@ const COARSE = PROFILE.lod.coarse;
 /** A leaning lattice-style face: tilted head joints and a sloped bed. */
 const LEANING_QUAD = [[-0.46, -0.21], [0.43, -0.235], [0.47, 0.22], [-0.42, 0.24]];
 
+test('four-corner distance bevel retains the solved footprint on a sloping bed', () => {
+  const ring = normalizeConvexQuad(LEANING_QUAD);
+  const outline = createRoundedOutline(ring, 0.045, 0);
+  assert.equal(outline.pointCount, 4);
+  for (let i = 0; i < ring.length; i += 1) {
+    assert.ok(Math.abs(outline.pointX(i, 0) - ring[i][0]) < 1e-12);
+    assert.ok(Math.abs(outline.pointY(i, 0) - ring[i][1]) < 1e-12);
+    assert.ok(Math.abs(Math.hypot(outline.normalX(i), outline.normalY(i)) - 1) < 1e-12);
+  }
+});
+
 function shader() {
   return createRoundedStoneShader({
     albedo: [0.78, 0.74, 0.68],

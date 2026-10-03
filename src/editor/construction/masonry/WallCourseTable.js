@@ -62,6 +62,28 @@ export function createWallCourseTable({
 }
 
 /**
+ * Group ordinary courses into larger cells whose individual splits interrupt
+ * the internal bed lines. Footings keep their own band. The grid extends past
+ * the crown, so neighboring modules with different tops still share boundaries.
+ */
+export function groupWallCourseBands(table, { courseHeight, coursesPerBand = 1 }) {
+  if (coursesPerBand === 1) return table;
+  const hasFooting = table.footingHeight > 0;
+  const bandHeight = courseHeight * coursesPerBand;
+  const baseAt = (band) => band <= 0 ? 0 : hasFooting
+    ? table.footingHeight + (band - 1) * bandHeight
+    : band * bandHeight;
+  const heightOf = (band) => hasFooting && band === 0 ? table.footingHeight : bandHeight;
+  return Object.freeze({
+    footingHeight: table.footingHeight,
+    count: (hasFooting ? 1 : 0) + Math.ceil((table.count - (hasFooting ? 1 : 0)) / coursesPerBand),
+    baseAt,
+    heightOf,
+    centerAt: (band) => baseAt(band) + heightOf(band) / 2,
+  });
+}
+
+/**
  * The fitted grid ends this far above the body top, so the top course still
  * overshoots and the lattice clamps it flush to the capstones. Ending exactly at
  * the body would leave that course its ordinary half-bed-joint inset — a gap

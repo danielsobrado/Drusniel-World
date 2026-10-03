@@ -14,9 +14,16 @@ import { cameraPosition, float, interleavedGradientNoise, oneMinus, screenCoordi
  */
 export function applyHandoff(material, { base, fadeIn, fadeOut }) {
   const distance = base.xz.sub(cameraPosition.xz).length();
-  let coverage = float(1);
-  if (fadeIn) coverage = coverage.mul(smoothstep(fadeIn.x, fadeIn.y, distance));
-  if (fadeOut) coverage = coverage.mul(oneMinus(smoothstep(fadeOut.x, fadeOut.y, distance)));
-  material.maskNode = interleavedGradientNoise(screenCoordinate.xy).lessThan(coverage);
+  const noise = interleavedGradientNoise(screenCoordinate.xy);
+  // The arriving layer keeps the pixels the departing layer has released.
+  // Testing both against `noise < coverage` leaves half the pixels empty at
+  // the midpoint and draws both layers over the other half.
+  const incoming = fadeIn
+    ? noise.greaterThanEqual(oneMinus(smoothstep(fadeIn.x, fadeIn.y, distance)))
+    : float(1).greaterThan(0);
+  const outgoing = fadeOut
+    ? noise.lessThan(oneMinus(smoothstep(fadeOut.x, fadeOut.y, distance)))
+    : float(1).greaterThan(0);
+  material.maskNode = incoming.and(outgoing);
   return material;
 }

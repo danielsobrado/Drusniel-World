@@ -21,6 +21,9 @@ const HASH_X = 0x8da6b343;
 const HASH_Y = 0xd8163841;
 const HASH_MIX_A = 0x2c1b3c6d;
 const HASH_MIX_B = 0x297a2d39;
+export const WIND_NOISE_LATTICE_PERIOD = 1024;
+// The power-of-two period lets both CPU and GPU wrap integer corners exactly.
+const PERIOD_MASK = WIND_NOISE_LATTICE_PERIOD - 1;
 
 /** Lattice hash in [0, 1). */
 export function latticeHashCpu(cellX, cellY) {
@@ -32,13 +35,14 @@ export function latticeHashCpu(cellX, cellY) {
   return Math.fround(h >>> 0) / TWO_POW_32;
 }
 
-function gradientDotCpu(cellX, cellY, localX, localY, offsetX, offsetY) {
-  const angle = latticeHashCpu(cellX + offsetX, cellY + offsetY) * TWO_PI;
+function gradientDotCpu(cellX, cellY, localX, localY, offsetX, offsetY, periodic) {
+  const x = periodic ? ((cellX + offsetX) & PERIOD_MASK) : cellX + offsetX;
+  const y = periodic ? ((cellY + offsetY) & PERIOD_MASK) : cellY + offsetY;
+  const angle = latticeHashCpu(x, y) * TWO_PI;
   return Math.cos(angle) * (localX - offsetX) + Math.sin(angle) * (localY - offsetY);
 }
 
-/** Gradient noise in roughly [0, 1], centred on 0.5. */
-export function gradientNoise2dCpu(x, y) {
+function sampleGradientNoise2dCpu(x, y, periodic) {
   const cellX = Math.floor(x);
   const cellY = Math.floor(y);
   const localX = x - cellX;
@@ -46,11 +50,21 @@ export function gradientNoise2dCpu(x, y) {
   const fadeX = localX * localX * (3 - 2 * localX);
   const fadeY = localY * localY * (3 - 2 * localY);
   return (
-    (gradientDotCpu(cellX, cellY, localX, localY, 0, 0) * (1 - fadeX)
-      + gradientDotCpu(cellX, cellY, localX, localY, 1, 0) * fadeX) * (1 - fadeY)
-    + (gradientDotCpu(cellX, cellY, localX, localY, 0, 1) * (1 - fadeX)
-      + gradientDotCpu(cellX, cellY, localX, localY, 1, 1) * fadeX) * fadeY
+    (gradientDotCpu(cellX, cellY, localX, localY, 0, 0, periodic) * (1 - fadeX)
+      + gradientDotCpu(cellX, cellY, localX, localY, 1, 0, periodic) * fadeX) * (1 - fadeY)
+    + (gradientDotCpu(cellX, cellY, localX, localY, 0, 1, periodic) * (1 - fadeX)
+      + gradientDotCpu(cellX, cellY, localX, localY, 1, 1, periodic) * fadeX) * fadeY
   ) + 0.5;
+}
+
+/** Gradient noise in roughly [0, 1], centred on 0.5. */
+export function gradientNoise2dCpu(x, y) {
+  return sampleGradientNoise2dCpu(x, y, false);
+}
+
+/** Matching gradients at both ends make coordinate wrapping seamless. */
+export function periodicGradientNoise2dCpu(x, y) {
+  return sampleGradientNoise2dCpu(x, y, true);
 }
 
 /** The lattice hash as its 32 raw bits, for a caller that wants more than one value per cell. */
@@ -68,18 +82,29 @@ export function latticeHashNode(cellX, cellY) {
 
 // Keep the return type explicit: nested warps otherwise expand this expression
 // repeatedly during type inference.
-export const gradientNoise2dNode = Fn(([point]) => {
-  const cell = floor(point).toVar();
-  const local = fract(point).toVar();
-  const fade = local.mul(local).mul(float(3).sub(local.mul(2)));
-  const cellX = uint(cell.x);
-  const cellY = uint(cell.y);
-  const gradientDot = (offsetX, offsetY) => {
-    const angle = latticeHashNode(cellX.add(uint(offsetX)), cellY.add(uint(offsetY))).mul(TWO_PI);
-    const delta = local.sub(vec2(offsetX, offsetY));
-    return cos(angle).mul(delta.x).add(sin(angle).mul(delta.y));
-  };
-  const x0 = mix(gradientDot(0, 0), gradientDot(1, 0), fade.x);
-  const x1 = mix(gradientDot(0, 1), gradientDot(1, 1), fade.x);
-  return mix(x0, x1, fade.y).add(0.5);
-}, 'float');
+function createGradientNoise2dNode(periodic) {
+  return Fn(([point]) => {
+    const cell = floor(point).toVar();
+    const local = fract(point).toVar();
+    const fade = local.mul(local).mul(float(3).sub(local.mul(2)));
+    const cellX = uint(cell.x);
+    const cellY = uint(cell.y);
+    const gradientDot = (offsetX, offsetY) => {
+      let x = cellX.add(uint(offsetX));
+      let y = cellY.add(uint(offsetY));
+      if (periodic) {
+        x = x.bitAnd(uint(PERIOD_MASK));
+        y = y.bitAnd(uint(PERIOD_MASK));
+      }
+      const angle = latticeHashNode(x, y).mul(TWO_PI);
+      const delta = local.sub(vec2(offsetX, offsetY));
+      return cos(angle).mul(delta.x).add(sin(angle).mul(delta.y));
+    };
+    const x0 = mix(gradientDot(0, 0), gradientDot(1, 0), fade.x);
+    const x1 = mix(gradientDot(0, 1), gradientDot(1, 1), fade.x);
+    return mix(x0, x1, fade.y).add(0.5);
+  }, 'float');
+}
+
+export const gradientNoise2dNode = createGradientNoise2dNode(false);
+export const periodicGradientNoise2dNode = createGradientNoise2dNode(true);

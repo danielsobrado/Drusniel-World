@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { gradientNoise2dCpu } from '../src/editor/weather/wind/windNoise.js';
+import {
+  gradientNoise2dCpu,
+  periodicGradientNoise2dCpu,
+  WIND_NOISE_LATTICE_PERIOD,
+} from '../src/editor/weather/wind/windNoise.js';
 import {
   DEFAULT_WIND_FIELD,
   resolveWindFieldConfig,
@@ -25,6 +29,24 @@ test('noise stays near [0, 1] and is deterministic', () => {
     assert.equal(value, gradientNoise2dCpu(i * 0.137, i * 0.291));
   }
   assert.ok(min > -0.3 && max < 1.3, `range ${min}..${max}`);
+});
+
+test('periodic noise joins smoothly on both axes at every lattice wrap', () => {
+  const period = WIND_NOISE_LATTICE_PERIOD;
+  for (const boundary of [-period, 0, period, 2 * period]) {
+    for (const coordinate of [-31.83, -0.71, 0.39, 47.26, period - 0.42]) {
+      const beforeX = periodicGradientNoise2dCpu(boundary - 0.0001, coordinate);
+      const afterX = periodicGradientNoise2dCpu(boundary + 0.0001, coordinate);
+      const beforeY = periodicGradientNoise2dCpu(coordinate, boundary - 0.0001);
+      const afterY = periodicGradientNoise2dCpu(coordinate, boundary + 0.0001);
+      assert.ok(Math.abs(afterX - beforeX) < 0.001, `x seam at ${boundary}, ${coordinate}`);
+      assert.ok(Math.abs(afterY - beforeY) < 0.001, `y seam at ${coordinate}, ${boundary}`);
+      assert.ok(Math.abs(periodicGradientNoise2dCpu(coordinate, 0.37)
+        - periodicGradientNoise2dCpu(coordinate + period, 0.37)) < 1e-10);
+      assert.ok(Math.abs(periodicGradientNoise2dCpu(0.37, coordinate)
+        - periodicGradientNoise2dCpu(0.37, coordinate + period)) < 1e-10);
+    }
+  }
 });
 
 test('strength stays inside the configured envelope, scaled by intensity', () => {
@@ -74,6 +96,27 @@ test('planet-scale coordinates and long sessions keep a smooth field', () => {
     const a = sample(x, z, time);
     const b = sample(x + 1, z, time);
     assert.ok(Math.abs(a.strength - b.strength) < 0.08, `${a.strength} vs ${b.strength}`);
+  }
+});
+
+test('gust strength and direction stay continuous across advected lattice wrap boundaries', () => {
+  for (const time of [0, 8, 60]) {
+    const boundaries = [0,
+      time * params.direction.speed / params.direction.scale,
+      time * params.large.speed / params.large.scale,
+      time * params.warp.speed / params.warp.scale,
+    ];
+    for (const x of boundaries) {
+      for (let z = -50; z <= -1; z += 1.25) {
+        const left = sample(x - 0.001, z, time);
+        const right = sample(x + 0.001, z, time);
+        const vectorDelta = Math.hypot(
+          left.directionX * left.strength - right.directionX * right.strength,
+          left.directionZ * left.strength - right.directionZ * right.strength,
+        );
+        assert.ok(vectorDelta < 0.005, `wind jumps ${vectorDelta} at (${x}, ${z}), time ${time}`);
+      }
+    }
   }
 });
 

@@ -17,16 +17,19 @@
  *
  * Adapted for a planet-scale world: every noise lookup is wrapped to a lattice
  * period, so neither canonical coordinates in the thousands of kilometres nor a
- * long-running clock cost float32 precision. The seam this leaves repeats every
- * `LATTICE_PERIOD` cells of each layer — hundreds of metres to tens of kilometres
- * — and is a line where gust strength changes a little faster than elsewhere.
+ * long-running clock cost float32 precision. Lattice gradients are periodic too,
+ * so gust strength and direction stay continuous across the wrap boundaries.
  */
 
 import { cos, float, mod, sin, smoothstep, vec2 } from 'three/tsl';
-import { gradientNoise2dCpu, gradientNoise2dNode } from './windNoise.js';
+import {
+  periodicGradientNoise2dCpu,
+  periodicGradientNoise2dNode,
+  WIND_NOISE_LATTICE_PERIOD,
+} from './windNoise.js';
 
 const DEG_TO_RAD = Math.PI / 180;
-const LATTICE_PERIOD = 1024;
+const LATTICE_PERIOD = WIND_NOISE_LATTICE_PERIOD;
 /** Decorrelates the cross-wind warp lookup from the along-wind one. */
 const WARP_LOOKUP_OFFSET = Object.freeze([37.41, -19.73]);
 
@@ -66,7 +69,7 @@ function wrapCpu(value) {
 }
 
 function noiseCpu(x, y) {
-  return gradientNoise2dCpu(wrapCpu(x), wrapCpu(y));
+  return periodicGradientNoise2dCpu(wrapCpu(x), wrapCpu(y));
 }
 
 function smoothstepCpu(edge0, edge1, value) {
@@ -145,7 +148,7 @@ export function sampleWindFieldCpu({ x, z, time, directionDegrees, intensity = 1
 // ---------------------------------------------------------------- TSL
 
 function noiseNode(point) {
-  return gradientNoise2dNode(mod(point, LATTICE_PERIOD));
+  return periodicGradientNoise2dNode(mod(point, LATTICE_PERIOD));
 }
 
 function layerNode(positionXZ, timeNode, prevailing, layer, warpOffset) {

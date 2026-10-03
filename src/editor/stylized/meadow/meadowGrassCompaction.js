@@ -1,3 +1,5 @@
+import { createMeadowWindVariationWriter } from './meadowWindVariation.js';
+
 /**
  * One tile's stems, filtered to where grass grows, ported from grass-test's
  * `compactGrassGeometry`: the tile walks its band's stable stem sequence once,
@@ -41,6 +43,7 @@ export function createCompaction({ template, centerX, centerZ, sample, output: r
   output.count = 0;
   const ground = { height: 0, strength: 1, shape: 0, path: 0 };
   const cards = Boolean(template.userData.meadow?.cards);
+  const writeWind = createMeadowWindVariationWriter(centerX, centerZ, template.userData.meadow.tileSize);
   let cursor = 0;
   const total = template.instanceCount;
   return {
@@ -58,7 +61,9 @@ export function createCompaction({ template, centerX, centerZ, sample, output: r
         const localX = source.position[p];
         const localZ = source.position[p + 2];
         const rank = source.data[p + 1];
-        if (!sample(centerX + localX, centerZ + localZ, rank, ground)) continue;
+        const worldX = centerX + localX;
+        const worldZ = centerZ + localZ;
+        if (!sample(worldX, worldZ, rank, ground)) continue;
         const o = output.count;
         output.position[o * 4] = localX;
         output.position[o * 4 + 1] = ground.height;
@@ -71,8 +76,7 @@ export function createCompaction({ template, centerX, centerZ, sample, output: r
           ? ground.shape * 4 + source.data[p]
           : ground.shape + Math.min(ground.path, 0.999);
         output.data[o * 4 + 1] = rank;
-        output.data[o * 4 + 2] = source.data[p + 2];
-        output.data[o * 4 + 3] = source.data[p + 3];
+        writeWind(output.data, o * 4 + 2, worldX, worldZ);
         output.count = o + 1;
       }
       return cursor < total;
